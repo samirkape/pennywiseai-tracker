@@ -95,7 +95,10 @@ data class TransactionEntity(
     val groupId: Long? = null,
 
     @ColumnInfo(name = "profile_id", defaultValue = "NULL")
-    val profileId: Long? = null
+    val profileId: Long? = null,
+
+    @ColumnInfo(name = "tags", defaultValue = "")
+    val tags: String = ""
 )
 
 enum class BudgetImpactType {

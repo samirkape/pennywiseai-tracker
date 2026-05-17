@@ -53,11 +53,20 @@ class TransactionDetailViewModel @Inject constructor(
     private val _transaction = MutableStateFlow<TransactionEntity?>(null)
     val transaction: StateFlow<TransactionEntity?> = _transaction.asStateFlow()
 
-    private val _customCategories = MutableStateFlow<List<String>>(emptyList())
-    val customCategories: StateFlow<List<String>> = _customCategories.asStateFlow()
+    private val _pendingTags = MutableStateFlow<List<String>>(emptyList())
+    val pendingTags: StateFlow<List<String>> = _pendingTags.asStateFlow()
 
-    private val _pendingCustomCategories = MutableStateFlow<List<String>>(emptyList())
-    val pendingCustomCategories: StateFlow<List<String>> = _pendingCustomCategories.asStateFlow()
+    private val _allUsedTags = MutableStateFlow<List<String>>(emptyList())
+    private val _tagQuery = MutableStateFlow("")
+
+    val tagSuggestions: StateFlow<List<String>> = combine(
+        _allUsedTags,
+        _tagQuery,
+        _pendingTags,
+    ) { all, query, pending ->
+        val filtered = if (query.isBlank()) all else all.filter { it.contains(query.trim(), ignoreCase = true) }
+        filtered.filter { it !in pending }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _primaryCurrency = MutableStateFlow("INR")
     val primaryCurrency: StateFlow<String> = _primaryCurrency.asStateFlow()
@@ -128,24 +137,6 @@ class TransactionDetailViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
-    // Maps each category name to the budget group name it belongs to.
-    // Used in the edit form to show which budget bucket a transaction counts against.
-    val categoryToBudgetMap: StateFlow<Map<String, String>> = budgetGroupRepository.getActiveGroups()
-        .map { groups ->
-            buildMap {
-                groups.forEach { bwc ->
-                    bwc.categories.forEach { cat ->
-                        put(cat.categoryName, bwc.budget.name)
-                    }
-                }
-            }
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyMap()
-        )
-
     // Transaction group state
     val availableGroups: StateFlow<List<TransactionGroupEntity>> = transactionGroupRepository.getAllGroups()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -208,27 +199,15 @@ class TransactionDetailViewModel @Inject constructor(
     private val _merchantSuggestionCategories = MutableStateFlow<List<String>>(emptyList())
 
     val categorySuggestions: StateFlow<CategorySuggestionsState> = combine(
-        combine(
-            _merchantSuggestionCategories,
-            todayCategories,
-            _transaction,
-            _editableTransaction,
-            _pendingCustomCategories,
-        ) { merchantCats, todayCats, transaction, editable, pending ->
-            CategorySuggestionInputs(merchantCats, todayCats, transaction, editable, pending)
-        },
+        _merchantSuggestionCategories,
+        todayCategories,
+        _editableTransaction,
+        _transaction,
         _isEditMode,
-    ) { inputs, isEdit ->
+    ) { merchantCats, todayCats, editable, transaction, isEdit ->
         if (!isEdit) return@combine CategorySuggestionsState()
-        val txn = inputs.editable ?: inputs.transaction ?: return@combine CategorySuggestionsState()
-        val pending = inputs.pending
-        val merchantCats = inputs.merchantCategories
-        val todayCats = inputs.todayCategories
-        val selected = if (pending.isNotEmpty()) {
-            pending.toSet()
-        } else {
-            setOf(txn.category)
-        }
+        val txn = editable ?: transaction ?: return@combine CategorySuggestionsState()
+        val selected = setOf(txn.category)
         val merchantFiltered = merchantCats.filter { it !in selected }
         if (merchantFiltered.isNotEmpty()) {
             CategorySuggestionsState(
@@ -316,15 +295,6 @@ class TransactionDetailViewModel @Inject constructor(
                 _budgetImpactType.value = it.budgetImpactType
                 _budgetCategory.value = it.budgetCategory
                 loadAccountProfileId(it)
-                loadCustomCategories(transactionId)
-            }
-        }
-    }
-
-    private fun loadCustomCategories(transactionId: Long) {
-        viewModelScope.launch {
-            transactionRepository.getCustomCategoriesForTransaction(transactionId).collect { cats ->
-                _customCategories.value = cats
             }
         }
     }
@@ -400,7 +370,14 @@ class TransactionDetailViewModel @Inject constructor(
         _errorMessage.value = null
         _pendingReceiptUris.value = emptyList()
         _removedReceiptIds.value = emptySet()
-        _pendingCustomCategories.value = _customCategories.value.toList()
+        _pendingTags.value = _transaction.value?.tags
+            ?.split(",")
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+        _tagQuery.value = ""
+        viewModelScope.launch {
+            _allUsedTags.value = transactionRepository.getAllUsedTags()
+        }
 
         // Restore split state from original splits
         if (_hasSplits.value) {
@@ -474,7 +451,9 @@ class TransactionDetailViewModel @Inject constructor(
         _existingTransactionCount.value = 0
         _pendingReceiptUris.value = emptyList()
         _removedReceiptIds.value = emptySet()
-        _pendingCustomCategories.value = emptyList()
+        _pendingTags.value = emptyList()
+        _tagQuery.value = ""
+        _allUsedTags.value = emptyList()
         _merchantSuggestionCategories.value = emptyList()
         _originalMerchantNameOnEdit.value = null
         _suggestedMerchantRename.value = null
@@ -486,32 +465,19 @@ class TransactionDetailViewModel @Inject constructor(
         _showSplitEditor.value = _hasSplits.value
     }
 
-    fun addPendingCustomCategory(categoryName: String) {
-        if (!_pendingCustomCategories.value.contains(categoryName)) {
-            _pendingCustomCategories.value = _pendingCustomCategories.value + categoryName
-            // Keep primary category in sync with first selected
-            if (_pendingCustomCategories.value.size == 1) {
-                _editableTransaction.update { it?.copy(category = categoryName) }
-            }
+    fun updateTagQuery(query: String) {
+        _tagQuery.value = query
+    }
+
+    fun addPendingTag(tag: String) {
+        val trimmed = tag.trim()
+        if (trimmed.isNotBlank() && !_pendingTags.value.contains(trimmed)) {
+            _pendingTags.value = _pendingTags.value + trimmed
         }
     }
 
-    fun removePendingCustomCategory(categoryName: String) {
-        val updated = _pendingCustomCategories.value - categoryName
-        _pendingCustomCategories.value = updated
-        // If removing the primary category, update it to the next available one
-        val primary = _editableTransaction.value?.category
-        if (primary == categoryName) {
-            val newPrimary = updated.firstOrNull() ?: "Others"
-            _editableTransaction.update { it?.copy(category = newPrimary) }
-        }
-    }
-
-    fun createAndSelectCategory(name: String, color: String, isIncome: Boolean) {
-        viewModelScope.launch {
-            categoryRepository.createCategory(name, color, isIncome)
-            addPendingCustomCategory(name)
-        }
+    fun removePendingTag(tag: String) {
+        _pendingTags.value = _pendingTags.value - tag
     }
 
     fun toggleApplyToAllFromMerchant() {
@@ -777,17 +743,13 @@ class TransactionDetailViewModel @Inject constructor(
                     transactionRepository.insertReceipts(toSave.id, newPaths)
                 }
 
-                // Normalize merchant name before saving
+                // Normalize merchant name and persist tags
                 val normalizedTransaction = toSave.copy(
-                    merchantName = normalizeMerchantName(toSave.merchantName)
+                    merchantName = normalizeMerchantName(toSave.merchantName),
+                    tags = _pendingTags.value.joinToString(",")
                 )
 
                 transactionRepository.updateTransaction(normalizedTransaction)
-
-                // Save custom categories
-                val categoriesToSave = _pendingCustomCategories.value
-                    .ifEmpty { listOf(normalizedTransaction.category) }
-                transactionRepository.setCustomCategories(normalizedTransaction.id, categoriesToSave)
 
                 // Update account balance if account was changed or added
                 val originalTxn = _transaction.value
@@ -878,7 +840,7 @@ class TransactionDetailViewModel @Inject constructor(
                 _pendingReceiptUris.value = emptyList()
                 _removedReceiptIds.value = emptySet()
                 loadReceiptUris(normalizedTransaction)
-                _pendingCustomCategories.value = emptyList()
+                _pendingTags.value = emptyList()
                 _saveSuccess.value = true
                 _isEditMode.value = false
                 _editableTransaction.value = null
@@ -1126,11 +1088,4 @@ data class CategorySuggestionsState(
     val merchantName: String = ""
 )
 
-private data class CategorySuggestionInputs(
-    val merchantCategories: List<String>,
-    val todayCategories: List<String>,
-    val transaction: TransactionEntity?,
-    val editable: TransactionEntity?,
-    val pending: List<String>,
-)
 

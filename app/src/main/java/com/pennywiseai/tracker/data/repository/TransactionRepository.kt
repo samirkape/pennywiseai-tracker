@@ -1,10 +1,8 @@
 package com.pennywiseai.tracker.data.repository
 
-import com.pennywiseai.tracker.data.database.dao.TransactionCategoryDao
 import com.pennywiseai.tracker.data.database.dao.TransactionDao
 import com.pennywiseai.tracker.data.database.dao.TransactionReceiptDao
 import com.pennywiseai.tracker.data.database.dao.TransactionSplitDao
-import com.pennywiseai.tracker.data.database.entity.TransactionCategoryEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionReceiptEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionSplitEntity
@@ -24,7 +22,6 @@ import kotlin.math.min
 class TransactionRepository @Inject constructor(
     private val transactionDao: TransactionDao,
     private val transactionSplitDao: TransactionSplitDao,
-    private val transactionCategoryDao: TransactionCategoryDao,
     private val transactionReceiptDao: TransactionReceiptDao
 ) {
     fun getAllTransactions(): Flow<List<TransactionEntity>> = 
@@ -107,14 +104,9 @@ class TransactionRepository @Inject constructor(
             merchantName = merchantName,
             excludeTransactionId = excludeTransactionId
         )
-        val fromTags = transactionCategoryDao.getTagCategoriesForMerchant(
-            merchantName = merchantName,
-            excludeTransactionId = excludeTransactionId
-        )
         return buildList {
             merchantMappingCategory?.let { add(it) }
             addAll(fromTransactions)
-            addAll(fromTags)
         }.distinct()
     }
 
@@ -200,6 +192,15 @@ class TransactionRepository @Inject constructor(
 
     suspend fun getDistinctMerchantNames(): List<String> {
         return transactionDao.getDistinctMerchantNames()
+    }
+
+    suspend fun getAllUsedTags(): List<String> {
+        return transactionDao.getDistinctTagStrings()
+            .flatMap { it.split(",") }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
     }
     
     // Additional methods for Home screen
@@ -432,40 +433,6 @@ class TransactionRepository @Inject constructor(
      */
     suspend fun insertSplit(split: TransactionSplitEntity): Long =
         transactionSplitDao.insertSplit(split)
-
-    // ========== Custom Category Methods ==========
-
-    fun getCustomCategoriesForTransaction(transactionId: Long): Flow<List<String>> =
-        transactionCategoryDao.getCategoriesForTransaction(transactionId)
-
-    suspend fun getCustomCategoriesSync(transactionId: Long): List<String> =
-        transactionCategoryDao.getCategoriesForTransactionSync(transactionId)
-
-    suspend fun addCustomCategory(transactionId: Long, categoryName: String) {
-        transactionCategoryDao.addCategory(
-            TransactionCategoryEntity(transactionId = transactionId, categoryName = categoryName)
-        )
-    }
-
-    suspend fun removeCustomCategory(transactionId: Long, categoryName: String) {
-        transactionCategoryDao.removeCategory(transactionId, categoryName)
-    }
-
-    suspend fun setCustomCategories(transactionId: Long, categoryNames: List<String>) {
-        transactionCategoryDao.clearCategoriesForTransaction(transactionId)
-        categoryNames.forEach { name ->
-            transactionCategoryDao.addCategory(
-                TransactionCategoryEntity(transactionId = transactionId, categoryName = name)
-            )
-        }
-    }
-
-    suspend fun getCategoriesForTransactions(ids: List<Long>): List<TransactionCategoryEntity> {
-        if (ids.isEmpty()) return emptyList()
-        return ids.chunked(900).flatMap { chunk ->
-            transactionCategoryDao.getCategoriesForTransactions(chunk)
-        }
-    }
 
     /**
      * Updates a split.

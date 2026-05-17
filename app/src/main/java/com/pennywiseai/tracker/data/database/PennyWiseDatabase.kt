@@ -27,7 +27,6 @@ import com.pennywiseai.tracker.data.database.dao.RuleApplicationDao
 import com.pennywiseai.tracker.data.database.dao.RuleDao
 import com.pennywiseai.tracker.data.database.dao.SubscriptionDao
 import com.pennywiseai.tracker.data.database.dao.SalaryMonthOverrideDao
-import com.pennywiseai.tracker.data.database.dao.TransactionCategoryDao
 import com.pennywiseai.tracker.data.database.dao.TransactionDao
 import com.pennywiseai.tracker.data.database.dao.TransactionReceiptDao
 import com.pennywiseai.tracker.data.database.dao.TransactionSplitDao
@@ -51,7 +50,6 @@ import com.pennywiseai.tracker.data.database.entity.RuleApplicationEntity
 import com.pennywiseai.tracker.data.database.entity.RuleEntity
 import com.pennywiseai.tracker.data.database.entity.SubscriptionEntity
 import com.pennywiseai.tracker.data.database.entity.SalaryMonthOverrideEntity
-import com.pennywiseai.tracker.data.database.entity.TransactionCategoryEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionReceiptEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionSplitEntity
@@ -68,8 +66,8 @@ import com.pennywiseai.tracker.data.database.entity.UnrecognizedSmsEntity
  * @property autoMigrations List of automatic migrations between versions.
  */
 @Database(
-    entities = [TransactionEntity::class, SubscriptionEntity::class, ChatMessage::class, MerchantMappingEntity::class, MerchantAliasEntity::class, CategoryEntity::class, AccountBalanceEntity::class, UnrecognizedSmsEntity::class, CardEntity::class, RuleEntity::class, RuleApplicationEntity::class, ExchangeRateEntity::class, BudgetEntity::class, BudgetCategoryEntity::class, BudgetMonthSnapshotEntity::class, BudgetCategoryMonthSnapshotEntity::class, TransactionSplitEntity::class, BankNotificationEntity::class, LoanEntity::class, TransactionGroupEntity::class, ProfileEntity::class, TransactionCategoryEntity::class, SalaryMonthOverrideEntity::class, TransactionReceiptEntity::class],
-    version = 52,
+    entities = [TransactionEntity::class, SubscriptionEntity::class, ChatMessage::class, MerchantMappingEntity::class, MerchantAliasEntity::class, CategoryEntity::class, AccountBalanceEntity::class, UnrecognizedSmsEntity::class, CardEntity::class, RuleEntity::class, RuleApplicationEntity::class, ExchangeRateEntity::class, BudgetEntity::class, BudgetCategoryEntity::class, BudgetMonthSnapshotEntity::class, BudgetCategoryMonthSnapshotEntity::class, TransactionSplitEntity::class, BankNotificationEntity::class, LoanEntity::class, TransactionGroupEntity::class, ProfileEntity::class, SalaryMonthOverrideEntity::class, TransactionReceiptEntity::class],
+    version = 53,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -118,6 +116,7 @@ import com.pennywiseai.tracker.data.database.entity.UnrecognizedSmsEntity
         // 49→50 is a manual migration registered in DatabaseModule (add transaction_receipts table)
         // 50→51 is a manual migration registered in DatabaseModule (add merchant_aliases table)
         // 51→52 is a manual migration registered in DatabaseModule (add tags column to transaction_splits)
+        // 52→53 is a manual migration registered in DatabaseModule (add tags to transactions, drop transaction_categories)
     ]
 )
 @TypeConverters(Converters::class)
@@ -141,7 +140,6 @@ abstract class PennyWiseDatabase : RoomDatabase() {
     abstract fun transactionGroupDao(): TransactionGroupDao
     abstract fun budgetSnapshotDao(): BudgetSnapshotDao
     abstract fun profileDao(): ProfileDao
-    abstract fun transactionCategoryDao(): TransactionCategoryDao
     abstract fun salaryMonthOverrideDao(): SalaryMonthOverrideDao
     abstract fun transactionReceiptDao(): TransactionReceiptDao
 
@@ -178,7 +176,8 @@ abstract class PennyWiseDatabase : RoomDatabase() {
                         MIGRATION_48_49,
                         MIGRATION_49_50,
                         MIGRATION_50_51,
-                        MIGRATION_51_52
+                        MIGRATION_51_52,
+                        MIGRATION_52_53
                     )
                     .build()
                 INSTANCE = instance
@@ -530,6 +529,30 @@ abstract class PennyWiseDatabase : RoomDatabase() {
         val MIGRATION_51_52 = object : Migration(51, 52) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `transaction_splits` ADD COLUMN `tags` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        val MIGRATION_52_53 = object : Migration(52, 53) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Add tags column to transactions
+                db.execSQL("ALTER TABLE `transactions` ADD COLUMN `tags` TEXT NOT NULL DEFAULT ''")
+                // Migrate existing secondary category labels (non-primary) to tags
+                db.execSQL("""
+                    UPDATE `transactions`
+                    SET `tags` = (
+                        SELECT GROUP_CONCAT(tc.category_name, ',')
+                        FROM `transaction_categories` tc
+                        WHERE tc.transaction_id = `transactions`.id
+                          AND tc.category_name != `transactions`.category
+                    )
+                    WHERE EXISTS (
+                        SELECT 1 FROM `transaction_categories` tc
+                        WHERE tc.transaction_id = `transactions`.id
+                          AND tc.category_name != `transactions`.category
+                    )
+                """.trimIndent())
+                // Drop the old junction table
+                db.execSQL("DROP TABLE IF EXISTS `transaction_categories`")
             }
         }
 

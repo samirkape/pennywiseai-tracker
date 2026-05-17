@@ -140,10 +140,6 @@ fun TransactionDetailScreen(
     val showSplitEditor by viewModel.showSplitEditor.collectAsStateWithLifecycle()
     val hasSplits by viewModel.hasSplits.collectAsStateWithLifecycle()
 
-    // Custom categories state
-    val customCategories by viewModel.customCategories.collectAsStateWithLifecycle()
-    val pendingCustomCategories by viewModel.pendingCustomCategories.collectAsStateWithLifecycle()
-
     // Loan state
     val loan by viewModel.loan.collectAsStateWithLifecycle()
     val showMarkAsLoanSheet by viewModel.showMarkAsLoanSheet.collectAsStateWithLifecycle()
@@ -516,7 +512,6 @@ private fun TransactionReceipt(
     onNavigateToLoanDetail: (Long) -> Unit,
     accountProfileId: Long? = null
 ) {
-    val customCategories by viewModel.customCategories.collectAsStateWithLifecycle()
     val currentGroup by viewModel.currentGroup.collectAsStateWithLifecycle()
     val isDark = isSystemInDarkTheme()
     val typeColor = when (transaction.transactionType) {
@@ -739,7 +734,7 @@ private fun TransactionReceipt(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
             // Category (budget) and optional tags
-            val tagCategories = customCategories.filter { it != transaction.category }
+            val tagCategories = transaction.tags.split(",").filter { it.isNotBlank() }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             Row(
                 modifier = Modifier
@@ -1741,13 +1736,13 @@ private fun CategoryMultiSelect(
     viewModel: TransactionDetailViewModel
 ) {
     val categories by viewModel.categories.collectAsStateWithLifecycle(initialValue = emptyList())
-    val pendingCustomCategories by viewModel.pendingCustomCategories.collectAsStateWithLifecycle()
     val categorySuggestions by viewModel.categorySuggestions.collectAsStateWithLifecycle()
-    var dropdownExpanded by remember { mutableStateOf(false) }
-    var showCreateDialog by remember { mutableStateOf(false) }
+    val pendingTags by viewModel.pendingTags.collectAsStateWithLifecycle()
+    val tagSuggestions by viewModel.tagSuggestions.collectAsStateWithLifecycle()
+    var categoryDropdownExpanded by remember { mutableStateOf(false) }
+    var tagInput by remember { mutableStateOf("") }
 
-    val selectedCategories = pendingCustomCategories.ifEmpty { listOf(primaryCategory) }
-    val unselectedCategories = categories.filter { it.name !in selectedCategories }
+    val catEntity = categories.find { it.name == primaryCategory }
     val suggestedCategories = categorySuggestions.categories
 
     Column(
@@ -1760,16 +1755,12 @@ private fun CategoryMultiSelect(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(Spacing.xs)
     ) {
+        // ── Category ──
         Text(
-            text = "Category & tags",
+            text = "Category",
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.primary
-        )
-        Text(
-            text = "One category counts toward budgets. Additional selections are tags for search and insights.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         if (suggestedCategories.isNotEmpty() && categorySuggestions.source != null) {
             val suggestionHeader = when (categorySuggestions.source) {
@@ -1790,15 +1781,15 @@ private fun CategoryMultiSelect(
                 verticalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
                 suggestedCategories.forEach { catName ->
-                    val catEntity = categories.find { it.name == catName }
+                    val suggestedEntity = categories.find { it.name == catName }
                     FilterChip(
                         selected = false,
-                        onClick = { viewModel.addPendingCustomCategory(catName) },
+                        onClick = { viewModel.updateCategory(catName) },
                         label = {
                             Text(stringResource(R.string.txn_edit_suggested_chip, catName))
                         },
-                        leadingIcon = if (catEntity != null) {
-                            { CategoryDot(color = catEntity.color, modifier = Modifier.padding(start = 4.dp)) }
+                        leadingIcon = if (suggestedEntity != null) {
+                            { CategoryDot(color = suggestedEntity.color, modifier = Modifier.padding(start = 4.dp)) }
                         } else null,
                         trailingIcon = null
                     )
@@ -1809,161 +1800,141 @@ private fun CategoryMultiSelect(
             horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
             verticalArrangement = Arrangement.spacedBy(Spacing.xs)
         ) {
-            selectedCategories.forEach { catName ->
-                val catEntity = categories.find { it.name == catName }
-                val isPrimary = catName == primaryCategory
-                FilterChip(
-                    selected = true,
-                    onClick = {
-                        if (selectedCategories.size > 1 && !isPrimary) {
-                            viewModel.removePendingCustomCategory(catName)
-                        }
-                    },
-                    label = {
-                        Text(if (isPrimary) "$catName (budget)" else catName)
-                    },
-                    leadingIcon = if (catEntity != null) {
-                        { CategoryDot(color = catEntity.color, modifier = Modifier.padding(start = 4.dp)) }
-                    } else null,
-                    trailingIcon = if (selectedCategories.size > 1) {
-                        { Icon(Icons.Default.Close, contentDescription = "Remove", modifier = Modifier.size(Dimensions.Icon.small)) }
-                    } else null
-                )
-            }
-
+            FilterChip(
+                selected = true,
+                onClick = {},
+                label = { Text(primaryCategory) },
+                leadingIcon = if (catEntity != null) {
+                    { CategoryDot(color = catEntity.color, modifier = Modifier.padding(start = 4.dp)) }
+                } else null,
+                trailingIcon = null
+            )
             Box {
                 FilterChip(
                     selected = false,
-                    onClick = { dropdownExpanded = true },
-                    label = { Text("+ Add") },
+                    onClick = { categoryDropdownExpanded = true },
+                    label = { Text("Change") },
                     leadingIcon = null,
                     trailingIcon = null
                 )
                 DropdownMenu(
-                    expanded = dropdownExpanded,
-                    onDismissRequest = { dropdownExpanded = false }
+                    expanded = categoryDropdownExpanded,
+                    onDismissRequest = { categoryDropdownExpanded = false }
                 ) {
-                    unselectedCategories.forEach { category ->
+                    categories.filter { it.name != primaryCategory }.forEach { category ->
                         DropdownMenuItem(
                             text = { CategoryChip(category = category) },
                             onClick = {
-                                viewModel.addPendingCustomCategory(category.name)
-                                dropdownExpanded = false
+                                viewModel.updateCategory(category.name)
+                                categoryDropdownExpanded = false
                             },
                             contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
                         )
                     }
-                    if (unselectedCategories.isNotEmpty()) {
-                        HorizontalDivider()
-                    }
-                    DropdownMenuItem(
-                        text = {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.Add,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(Dimensions.Icon.small),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    "Create new category",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        },
-                        onClick = {
-                            dropdownExpanded = false
-                            showCreateDialog = true
-                        },
-                        contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                }
+            }
+        }
+
+        // ── Tags ──
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = Spacing.xs),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+        )
+        Text(
+            text = "Tags",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = "Free-form labels for search and organization. Don't affect budgets.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (pendingTags.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                pendingTags.forEach { tag ->
+                    FilterChip(
+                        selected = true,
+                        onClick = { viewModel.removePendingTag(tag) },
+                        label = { Text(tag) },
+                        leadingIcon = null,
+                        trailingIcon = {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Remove tag",
+                                modifier = Modifier.size(Dimensions.Icon.small)
+                            )
+                        }
                     )
                 }
             }
         }
-
-        // Budget category: primary field on the transaction; only one category counts in budgets.
-        if (selectedCategories.size > 1) {
-            val categoryToBudgetMap by viewModel.categoryToBudgetMap.collectAsStateWithLifecycle()
-
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = Spacing.xs),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-            )
-
-            val effectiveBucket = primaryCategory
-            val effectiveBudget = categoryToBudgetMap[effectiveBucket] ?: ""
-
-            var bucketDropdownExpanded by remember { mutableStateOf(false) }
-
-            ExposedDropdownMenuBox(
-                expanded = bucketDropdownExpanded,
-                onExpandedChange = { bucketDropdownExpanded = it }
+        // Suggestions (filtered by current tagInput, excluding already-added tags)
+        if (tagSuggestions.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
-                OutlinedTextField(
-                    value = effectiveBucket,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = {
-                        Text(
-                            if (effectiveBudget.isNotEmpty()) "Budget category · $effectiveBudget"
-                            else "Budget category"
+                tagSuggestions.take(10).forEach { suggestion ->
+                    SuggestionChip(
+                        onClick = {
+                            viewModel.addPendingTag(suggestion)
+                            tagInput = ""
+                            viewModel.updateTagQuery("")
+                        },
+                        label = { Text(suggestion, style = MaterialTheme.typography.bodySmall) },
+                        border = null,
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
                         )
-                    },
-                    supportingText = {
-                        Text("Full amount counts here only. Other selections are tags.")
-                    },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = bucketDropdownExpanded) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
-                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
-                )
-                ExposedDropdownMenu(
-                    expanded = bucketDropdownExpanded,
-                    onDismissRequest = { bucketDropdownExpanded = false }
-                ) {
-                    selectedCategories.forEach { catName ->
-                        val budgetName = categoryToBudgetMap[catName] ?: ""
-                        DropdownMenuItem(
-                            text = {
-                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text(catName, style = MaterialTheme.typography.bodyMedium)
-                                    if (budgetName.isNotEmpty()) {
-                                        Text(
-                                            budgetName,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            },
-                            onClick = {
-                                viewModel.updateCategory(catName)
-                                bucketDropdownExpanded = false
-                            },
-                            trailingIcon = if (catName == effectiveBucket) {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(Dimensions.Icon.small)) }
-                            } else null
-                        )
-                    }
+                    )
                 }
             }
         }
-    }
-
-    if (showCreateDialog) {
-        CategoryEditDialog(
-            category = null,
-            onDismiss = { showCreateDialog = false },
-            onSave = { name, color, isIncome ->
-                viewModel.createAndSelectCategory(name, color, isIncome)
-                showCreateDialog = false
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+        ) {
+            OutlinedTextField(
+                value = tagInput,
+                onValueChange = {
+                    tagInput = it
+                    viewModel.updateTagQuery(it)
+                },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Add tag…", style = MaterialTheme.typography.bodyMedium) },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium,
+                keyboardOptions = KeyboardOptions.Default.copy(
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onDone = {
+                        if (tagInput.isNotBlank()) {
+                            viewModel.addPendingTag(tagInput)
+                            tagInput = ""
+                            viewModel.updateTagQuery("")
+                        }
+                    }
+                )
+            )
+            TextButton(
+                onClick = {
+                    if (tagInput.isNotBlank()) {
+                        viewModel.addPendingTag(tagInput)
+                        tagInput = ""
+                        viewModel.updateTagQuery("")
+                    }
+                }
+            ) {
+                Text("Add")
             }
-        )
+        }
     }
 }
 

@@ -105,7 +105,10 @@ interface TransactionDao {
 
     @Query("SELECT DISTINCT merchant_name FROM transactions WHERE is_deleted = 0 ORDER BY merchant_name ASC")
     suspend fun getDistinctMerchantNames(): List<String>
-    
+
+    @Query("SELECT tags FROM transactions WHERE is_deleted = 0 AND tags != '' ORDER BY updated_at DESC")
+    suspend fun getDistinctTagStrings(): List<String>
+
     @Query("""
         SELECT SUM(amount) FROM transactions
         WHERE is_deleted = 0

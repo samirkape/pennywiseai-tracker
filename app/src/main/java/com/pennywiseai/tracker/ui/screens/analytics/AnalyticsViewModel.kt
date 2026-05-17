@@ -385,13 +385,13 @@ class AnalyticsViewModel @Inject constructor(
                     }
                 }
 
-                // Junction rows are tags only (filter/insights). Category breakdown above uses
-                // getAmountByCategory() (primary + splits) and must not sum junction tags.
-                val filteredIds = categoryFilteredWithSplits.map { it.transaction.id }
-                val junctionRows = transactionRepository.getCategoriesForTransactions(filteredIds)
-                val categoriesByTx: Map<Long, List<String>> = junctionRows
-                    .groupBy { it.transactionId }
-                    .mapValues { (_, rows) -> rows.map { it.categoryName } }
+                // Tags on transactions (for filter/insights only — not budget accounting).
+                val categoriesByTx: Map<Long, List<String>> = categoryFilteredWithSplits
+                    .filter { it.transaction.tags.isNotBlank() }
+                    .associate { twSplits ->
+                        twSplits.transaction.id to twSplits.transaction.tags
+                            .split(",").filter { it.isNotBlank() }
+                    }
 
                 // Insight 1: Category co-occurrence pairs
                 val pairCounts = mutableMapOf<Pair<String, String>, Int>()

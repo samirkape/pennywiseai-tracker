@@ -16,7 +16,6 @@ import com.pennywiseai.tracker.data.database.dao.CategoryDao
 import com.pennywiseai.tracker.data.database.dao.ChatDao
 import com.pennywiseai.tracker.data.database.dao.ExchangeRateDao
 import com.pennywiseai.tracker.data.database.dao.LoanDao
-import com.pennywiseai.tracker.data.database.dao.TransactionCategoryDao
 import com.pennywiseai.tracker.data.database.dao.TransactionGroupDao
 import com.pennywiseai.tracker.data.database.dao.MerchantAliasDao
 import com.pennywiseai.tracker.data.database.dao.MerchantMappingDao
@@ -76,7 +75,8 @@ object DatabaseModule {
                 PennyWiseDatabase.MIGRATION_48_49,
                 PennyWiseDatabase.MIGRATION_49_50,
                 PennyWiseDatabase.MIGRATION_50_51,
-                PennyWiseDatabase.MIGRATION_51_52
+                PennyWiseDatabase.MIGRATION_51_52,
+                PennyWiseDatabase.MIGRATION_52_53
             )
 
             // Enable auto-migrations
@@ -283,12 +283,6 @@ object DatabaseModule {
     @Singleton
     fun provideProfileDao(database: PennyWiseDatabase): ProfileDao {
         return database.profileDao()
-    }
-
-    @Provides
-    @Singleton
-    fun provideTransactionCategoryDao(database: PennyWiseDatabase): TransactionCategoryDao {
-        return database.transactionCategoryDao()
     }
 
     @Provides
