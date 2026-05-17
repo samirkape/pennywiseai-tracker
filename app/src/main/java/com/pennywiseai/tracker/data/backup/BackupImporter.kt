@@ -133,6 +133,10 @@ class BackupImporter @Inject constructor(
                 backup.database.merchantMappings.forEach { mapping ->
                     database.merchantMappingDao().insertMapping(mapping)
                 }
+
+                backup.database.merchantAliases.forEach { alias ->
+                    database.merchantAliasDao().insertAlias(alias)
+                }
                 
                 backup.database.unrecognizedSms.forEach { sms ->
                     database.unrecognizedSmsDao().insert(sms)
@@ -164,7 +168,10 @@ class BackupImporter @Inject constructor(
                 backup.database.bankNotifications.forEach { notification ->
                     database.bankNotificationDao().insertOrReplace(notification)
                 }
-                
+                backup.database.salaryMonthOverrides.forEach { override ->
+                    database.salaryMonthOverrideDao().upsert(override)
+                }
+
                 // Import preferences
                 importPreferences(backup.preferences)
                 
@@ -239,6 +246,7 @@ class BackupImporter @Inject constructor(
                 importAccountBalancesWithMerge(backup.database.accountBalances)
                 importSubscriptionsWithMerge(backup.database.subscriptions)
                 importMerchantMappingsWithMerge(backup.database.merchantMappings)
+                importMerchantAliasesWithMerge(backup.database.merchantAliases)
                 
                 // Import new entities with correct ID mapping for splits and applications
                 // Rules and budgets: skip if exists locally (merge semantics - don't overwrite local changes)
@@ -287,7 +295,13 @@ class BackupImporter @Inject constructor(
                 backup.database.bankNotifications.forEach { notification ->
                     database.bankNotificationDao().insertOrReplace(notification)
                 }
-                
+                // Salary-month overrides upsert by YearMonth — backup wins (covers
+                // the common restore-to-new-device case without losing recent edits
+                // since overrides are user intent, not derived data).
+                backup.database.salaryMonthOverrides.forEach { override ->
+                    database.salaryMonthOverrideDao().upsert(override)
+                }
+
                 // Import preferences (merge with existing)
                 importPreferences(backup.preferences)
                 
@@ -351,6 +365,12 @@ class BackupImporter @Inject constructor(
     private suspend fun importMerchantMappingsWithMerge(mappings: List<MerchantMappingEntity>) {
         mappings.forEach { mapping ->
             database.merchantMappingDao().insertMapping(mapping)
+        }
+    }
+
+    private suspend fun importMerchantAliasesWithMerge(aliases: List<MerchantAliasEntity>) {
+        aliases.forEach { alias ->
+            database.merchantAliasDao().insertAlias(alias)
         }
     }
     

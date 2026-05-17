@@ -124,23 +124,36 @@ fun MainScreen(
         ) {
             composable("home") {
                 val homeViewModel: com.pennywiseai.tracker.presentation.home.HomeViewModel = hiltViewModel()
+                val homeUiState by homeViewModel.uiState.collectAsState()
+                val transactionsPeriod = com.pennywiseai.tracker.presentation.common.defaultTimePeriodNavParam(
+                    homeUiState.useFinancialMonth
+                )
                 HomeScreen(
                     viewModel = homeViewModel,
                     navController = rootNavController ?: navController,
-                    coverStyle = themeState.coverStyle,
                     blurEffects = themeState.blurEffectsEnabled,
+                    onNavigateToPayPeriodSettings = {
+                        rootNavController?.navigate(
+                            com.pennywiseai.tracker.navigation.PayPeriodSettings
+                        ) { launchSingleTop = true }
+                    },
                     onNavigateToSettings = {
                         navController.navigate("settings") {
                             launchSingleTop = true
                         }
                     },
-                    onNavigateToTransactions = {
-                        navController.navigate("transactions") {
+                    onNavigateToTransactions = { period ->
+                        navController.navigate("transactions?period=$period") {
                             launchSingleTop = true
                         }
                     },
-                    onNavigateToTransactionsWithSearch = {
-                        navController.navigate("transactions?focusSearch=true") {
+                    onNavigateToAnalytics = {
+                        navController.navigate("analytics") {
+                            launchSingleTop = true
+                        }
+                    },
+                    onNavigateToTransactionsWithSearch = { period ->
+                        navController.navigate("transactions?period=$period&focusSearch=true") {
                             launchSingleTop = true
                         }
                     },
@@ -150,9 +163,13 @@ fun MainScreen(
                         }
                     },
                     onNavigateToBudgets = {
-                        rootNavController?.navigate(
-                            com.pennywiseai.tracker.navigation.BudgetGroups
-                        ) { launchSingleTop = true }
+                        navController.navigate("budgets") {
+                            popUpTo(navController.graph.startDestinationId) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
                     },
                     onNavigateToLoans = {
                         rootNavController?.navigate(
@@ -185,10 +202,9 @@ fun MainScreen(
                         ) { launchSingleTop = true }
                     },
                     onTransactionTypeClick = { type ->
-                        val route = if (type != null) {
-                            "transactions?type=$type"
-                        } else {
-                            "transactions"
+                        val route = buildString {
+                            append("transactions?period=$transactionsPeriod")
+                            type?.let { append("&type=$it") }
                         }
                         navController.navigate(route) {
                             launchSingleTop = true
@@ -201,7 +217,7 @@ fun MainScreen(
             }
 
             composable(
-                route = "transactions?category={category}&merchant={merchant}&period={period}&currency={currency}&focusSearch={focusSearch}&type={type}",
+                route = "transactions?category={category}&merchant={merchant}&period={period}&currency={currency}&focusSearch={focusSearch}&type={type}&categories={categories}",
                 arguments = listOf(
                     navArgument("category") {
                         type = NavType.StringType
@@ -231,6 +247,11 @@ fun MainScreen(
                         type = NavType.StringType
                         nullable = true
                         defaultValue = null
+                    },
+                    navArgument("categories") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
                     }
                 )
             ) { backStackEntry ->
@@ -240,6 +261,7 @@ fun MainScreen(
                 val currency = backStackEntry.arguments?.getString("currency")
                 val focusSearch = backStackEntry.arguments?.getBoolean("focusSearch") ?: false
                 val transactionType = backStackEntry.arguments?.getString("type")
+                val categories = backStackEntry.arguments?.getString("categories")
 
                 TransactionsScreen(
                     modifier = Modifier.imePadding(),
@@ -249,6 +271,7 @@ fun MainScreen(
                     initialCurrency = currency,
                     focusSearch = focusSearch,
                     initialTransactionType = transactionType,
+                    initialCategories = categories,
                     onNavigateBack = {
                         navController.safePopBackStack()
                     },
@@ -300,7 +323,23 @@ fun MainScreen(
                             launchSingleTop = true
                         }
                     },
-                    onNavigateToTransactions = { category, merchant, period, currency ->
+                    onNavigateToTransaction = { transactionId ->
+                        rootNavController?.navigate(
+                            com.pennywiseai.tracker.navigation.TransactionDetail(transactionId)
+                        ) { launchSingleTop = true }
+                    },
+                    onNavigateToTransactionsMultiCategory = { categories, period, currency ->
+                        val route = buildString {
+                            append("transactions")
+                            val params = mutableListOf("categories=$categories")
+                            period?.let { params.add("period=$it") }
+                            currency?.let { params.add("currency=$it") }
+                            append("?")
+                            append(params.joinToString("&"))
+                        }
+                        navController.navigate(route) { launchSingleTop = true }
+                    },
+                    onNavigateToTransactions = { category, merchant, period, currency, transactionType ->
                         val route = buildString {
                             append("transactions")
                             val params = mutableListOf<String>()
@@ -317,6 +356,9 @@ fun MainScreen(
                             }
                             currency?.let {
                                 params.add("currency=$it")
+                            }
+                            transactionType?.let {
+                                params.add("type=$it")
                             }
                             if (params.isNotEmpty()) {
                                 append("?")
@@ -335,17 +377,47 @@ fun MainScreen(
                             launchSingleTop = true
                             restoreState = true
                         }
+                    },
+                    onNavigateToBehavioralStats = {
+                        navController.navigate("behavioral_stats") {
+                            launchSingleTop = true
+                        }
                     }
                 )
             }
 
-            composable("chat") {
-                com.pennywiseai.tracker.ui.screens.chat.ChatScreen(
-                    modifier = Modifier.imePadding(),
-                    onNavigateToSettings = {
-                        navController.navigate("settings") {
+            composable("budgets") {
+                com.pennywiseai.tracker.presentation.budgetgroups.BudgetGroupsScreen(
+                    onNavigateBack = {
+                        navController.navigate("home") {
+                            popUpTo(navController.graph.startDestinationId) {
+                                saveState = true
+                            }
                             launchSingleTop = true
+                            restoreState = true
                         }
+                    },
+                    onNavigateToGroupEdit = { groupId ->
+                        rootNavController?.navigate(
+                            com.pennywiseai.tracker.navigation.BudgetGroupEdit(groupId)
+                        ) { launchSingleTop = true }
+                    },
+                    onNavigateToCategory = { category, yearMonth, currency ->
+                        rootNavController?.navigate(
+                            com.pennywiseai.tracker.navigation.TransactionsWithFilter(
+                                category = category,
+                                period = yearMonth,
+                                currency = currency
+                            )
+                        ) { launchSingleTop = true }
+                    }
+                )
+            }
+
+            composable("behavioral_stats") {
+                com.pennywiseai.tracker.ui.screens.behavioral.BehavioralStatsScreen(
+                    onNavigateBack = {
+                        navController.safePopBackStack()
                     }
                 )
             }
@@ -371,20 +443,19 @@ fun MainScreen(
                             launchSingleTop = true
                         }
                     },
-                    onNavigateToFaq = {
-                        navController.navigate("faq") {
-                            launchSingleTop = true
-                        }
-                    },
                     onNavigateToRules = {
                         rootNavController?.navigate(
                             com.pennywiseai.tracker.navigation.Rules
                         ) { launchSingleTop = true }
                     },
                     onNavigateToBudgets = {
-                        rootNavController?.navigate(
-                            com.pennywiseai.tracker.navigation.BudgetGroups
-                        ) { launchSingleTop = true }
+                        navController.navigate("budgets") {
+                            popUpTo(navController.graph.startDestinationId) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
                     },
                     onNavigateToLoans = {
                         rootNavController?.navigate(
@@ -409,6 +480,11 @@ fun MainScreen(
                     onNavigateToTransactionGroups = {
                         rootNavController?.navigate(
                             com.pennywiseai.tracker.navigation.TransactionGroups
+                        ) { launchSingleTop = true }
+                    },
+                    onNavigateToPayPeriodSettings = {
+                        rootNavController?.navigate(
+                            com.pennywiseai.tracker.navigation.PayPeriodSettings
                         ) { launchSingleTop = true }
                     }
                 )
@@ -478,7 +554,7 @@ fun MainScreen(
         }
 
         // Bottom navigation OVERLAID on content
-        if (baseRoute in listOf("home", "analytics", "chat")) {
+        if (baseRoute in listOf("home", "budgets", "analytics", "settings")) {
             PennyWiseBottomNavigation(
                 navController = navController,
                 currentDestination = navBackStackEntry?.destination,

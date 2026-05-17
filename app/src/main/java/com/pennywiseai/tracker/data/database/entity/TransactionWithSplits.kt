@@ -1,5 +1,6 @@
 package com.pennywiseai.tracker.data.database.entity
 
+import android.util.Log
 import androidx.room.Embedded
 import androidx.room.Relation
 import java.math.BigDecimal
@@ -25,9 +26,18 @@ data class TransactionWithSplits(
     fun getAmountByCategory(): Map<String, BigDecimal> {
         return if (hasSplits) {
             // Group by category and sum amounts (in case of duplicates)
-            splits.groupBy { it.category }
+            val result = splits.groupBy { it.category }
                 .mapValues { (_, splitList) -> splitList.sumOf { it.amount } }
+            val splitsTotal = result.values.fold(BigDecimal.ZERO) { a, b -> a + b }
+            val diff = (transaction.amount - splitsTotal).abs()
+            if (diff > BigDecimal("0.01")) {
+                Log.w("BudgetBucket", "SPLIT_MISMATCH id=${transaction.id} merchant='${transaction.merchantName}' txAmt=${transaction.amount} splitsTotal=$splitsTotal diff=$diff categories=$result")
+            } else {
+                Log.d("BudgetBucket", "  getAmountByCategory[splits] id=${transaction.id} merchant='${transaction.merchantName}' txAmt=${transaction.amount} → $result")
+            }
+            result
         } else {
+            Log.d("BudgetBucket", "  getAmountByCategory[primary] id=${transaction.id} merchant='${transaction.merchantName}' txAmt=${transaction.amount} cat='${transaction.category}'")
             mapOf(transaction.category to transaction.amount)
         }
     }

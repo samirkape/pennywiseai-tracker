@@ -208,7 +208,7 @@ private fun LargerTopAppBar(
             }
         },
         collapsedHeight = TopAppBarDefaults.LargeAppBarCollapsedHeight,
-        expandedHeight = if (isHomeScreen) 150.dp else 110.dp,
+        expandedHeight = if (isHomeScreen) TopAppBarDefaults.LargeAppBarCollapsedHeight else 110.dp,
         windowInsets = WindowInsets(0.dp),
         scrollBehavior = scrollBehaviorLarge,
         modifier = Modifier
@@ -228,13 +228,19 @@ private fun LargerTopAppBar(
                     }
                 ) else Modifier
             )
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        themeColors.background,
-                        Color.Transparent
+            .then(
+                if (isHomeScreen) {
+                    Modifier.background(themeColors.background)
+                } else {
+                    Modifier.background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                themeColors.background,
+                                Color.Transparent
+                            )
+                        )
                     )
-                )
+                }
             )
             .windowInsetsPadding(WindowInsets.statusBars)
             .alpha(1f - collapsedFraction)
@@ -346,7 +352,7 @@ private fun RegularTopAppBar(
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = userName.ifBlank { "PennyWise" },
+                            text = userName.ifBlank { "SpendTracker PRO" },
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Start,

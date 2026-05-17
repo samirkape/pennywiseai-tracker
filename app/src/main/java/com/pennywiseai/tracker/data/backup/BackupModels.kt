@@ -123,6 +123,9 @@ data class DatabaseSnapshot(
     
     @SerializedName("merchant_mappings")
     val merchantMappings: List<MerchantMappingEntity>,
+
+    @SerializedName("merchant_aliases")
+    val merchantAliases: List<MerchantAliasEntity> = emptyList(),
     
     @SerializedName("unrecognized_sms")
     val unrecognizedSms: List<UnrecognizedSmsEntity>,
@@ -149,7 +152,10 @@ data class DatabaseSnapshot(
     val transactionSplits: List<TransactionSplitEntity> = emptyList(),
     
     @SerializedName("bank_notifications")
-    val bankNotifications: List<BankNotificationEntity> = emptyList()
+    val bankNotifications: List<BankNotificationEntity> = emptyList(),
+
+    @SerializedName("salary_month_overrides")
+    val salaryMonthOverrides: List<SalaryMonthOverrideEntity> = emptyList()
 )
 
 /**

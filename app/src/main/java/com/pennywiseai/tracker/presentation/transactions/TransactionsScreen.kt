@@ -46,6 +46,7 @@ import com.pennywiseai.tracker.data.database.entity.CategoryEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.presentation.common.TimePeriod
 import com.pennywiseai.tracker.presentation.common.TransactionTypeFilter
+import com.pennywiseai.tracker.presentation.common.defaultTimePeriod
 import com.pennywiseai.tracker.data.database.entity.ProfileEntity
 import com.pennywiseai.tracker.ui.components.profileIcon
 import com.pennywiseai.tracker.ui.components.*
@@ -82,6 +83,7 @@ fun TransactionsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedPeriod by viewModel.selectedPeriod.collectAsState()
+    val useFinancialMonth by viewModel.useFinancialMonth.collectAsState()
     val categoryFilter by viewModel.categoryFilter.collectAsState()
     val categoriesFilter by viewModel.categoriesFilter.collectAsState()
     val transactionTypeFilter by viewModel.transactionTypeFilter.collectAsState()
@@ -97,9 +99,11 @@ fun TransactionsScreen(
     val customDateRange by viewModel.customDateRange.collectAsState()
     val isUnifiedMode by viewModel.isUnifiedMode.collectAsState()
     val convertedAmounts by viewModel.convertedAmounts.collectAsState()
+    val categoryDisplayAmounts by viewModel.categoryDisplayAmounts.collectAsState()
     val selectedProfileId by viewModel.selectedProfileId.collectAsState()
     val profiles by viewModel.profiles.collectAsState()
     val profileAccountKeys by viewModel.profileAccountKeys.collectAsState()
+    val includeExcluded by viewModel.includeExcluded.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -118,26 +122,49 @@ fun TransactionsScreen(
     val activeFilterCount = listOf(
         transactionTypeFilter != TransactionTypeFilter.ALL,
         categoryFilter != null,
-        selectedProfileId != null
+        selectedProfileId != null,
+        includeExcluded
     ).count { it }
+
+    val defaultPeriod = defaultTimePeriod(useFinancialMonth)
 
     // Check if any filter is active (for showing "Clear all" button)
     val hasAnyActiveFilter = searchQuery.isNotEmpty() ||
-        selectedPeriod != TimePeriod.THIS_MONTH ||
+        selectedPeriod != defaultPeriod ||
         categoryFilter != null ||
         categoriesFilter != null ||
         transactionTypeFilter != TransactionTypeFilter.ALL ||
         selectedProfileId != null ||
         selectedCurrency != null ||
-        customDateRange != null
+        customDateRange != null ||
+        includeExcluded
 
     // Remember scroll position across navigation
     val listState = rememberSaveable(saver = LazyListState.Saver) {
         LazyListState()
     }
 
-    // Cache expensive operations
-    val timePeriods = remember { TimePeriod.values().toList() }
+    // Cache expensive operations — include CALENDAR_MONTH only when pay-month mode is enabled
+    val timePeriods = remember(useFinancialMonth) {
+        if (useFinancialMonth) {
+            listOf(
+                TimePeriod.THIS_MONTH,
+                TimePeriod.CALENDAR_MONTH,
+                TimePeriod.LAST_MONTH,
+                TimePeriod.CURRENT_FY,
+                TimePeriod.ALL,
+                TimePeriod.CUSTOM
+            )
+        } else {
+            listOf(
+                TimePeriod.THIS_MONTH,
+                TimePeriod.LAST_MONTH,
+                TimePeriod.CURRENT_FY,
+                TimePeriod.ALL,
+                TimePeriod.CUSTOM
+            )
+        }
+    }
     val customRangeLabel = remember(customDateRange) {
         DateRangeUtils.formatDateRange(customDateRange)
     }
@@ -156,13 +183,14 @@ fun TransactionsScreen(
     var processedNavParams by rememberSaveable { mutableStateOf(false) }
 
     // Apply navigation filters only ONCE when actually navigating (not when returning from detail)
-    LaunchedEffect(initialCategory, initialMerchant, initialPeriod, initialCurrency) {
-        if (!processedNavParams && (initialCategory != null || initialMerchant != null || initialPeriod != null || initialCurrency != null)) {
+    LaunchedEffect(initialCategory, initialMerchant, initialPeriod, initialCurrency, initialTransactionType) {
+        if (!processedNavParams && (initialCategory != null || initialMerchant != null || initialPeriod != null || initialCurrency != null || initialTransactionType != null)) {
             viewModel.applyNavigationFilters(
                 initialCategory,
                 initialMerchant,
                 initialPeriod,
-                initialCurrency
+                initialCurrency,
+                initialTransactionType
             )
             processedNavParams = true
         }
@@ -178,6 +206,9 @@ fun TransactionsScreen(
                 categories = initialCategories,
                 transactionType = initialTransactionType
             )
+        } else if (initialCategories != null && initialStartDateEpochDay == null) {
+            // Multi-category navigation from analytics (no date range)
+            viewModel.applyMultiCategoryFilter(initialCategories, initialPeriod)
         }
     }
     
@@ -567,9 +598,42 @@ fun TransactionsScreen(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(Spacing.xs))
+
+            // Include excluded transactions toggle
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = Dimensions.Padding.content),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                item {
+                    FilterChip(
+                        selected = includeExcluded,
+                        onClick = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            viewModel.setIncludeExcluded(!includeExcluded)
+                        },
+                        label = { Text("Include excluded") },
+                        leadingIcon = if (includeExcluded) {
+                            {
+                                Icon(
+                                    Icons.Default.Visibility,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(Dimensions.Icon.small)
+                                )
+                            }
+                        } else null,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.errorContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    )
+                }
+            }
             }
         }
-        
+
         // Totals Card - Only show when there are transactions (hide 0/0/0 state)
         if (uiState.transactions.isNotEmpty() || uiState.isLoading) {
             TransactionTotalsCard(
@@ -577,6 +641,7 @@ fun TransactionsScreen(
                 expenses = filteredTotals.expenses,
                 netBalance = filteredTotals.netBalance,
                 currency = selectedCurrency,
+                transactionCount = filteredTotals.transactionCount,
                 availableCurrencies = availableCurrencies,
                 onCurrencySelected = { viewModel.selectCurrency(it) },
                 isUnifiedMode = isUnifiedMode,
@@ -627,6 +692,15 @@ fun TransactionsScreen(
                                 size = Dimensions.Icon.small
                             )
                         },
+                        trailingIcon = if (categoryFilter == category) {
+                            {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Clear category filter",
+                                    modifier = Modifier.size(Dimensions.Icon.small)
+                                )
+                            }
+                        } else null,
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                             selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
@@ -674,37 +748,6 @@ fun TransactionsScreen(
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs),
                     flingBehavior = rememberOverscrollFlingBehavior { listState }
                 ) {
-                    // Show info banner when viewing budget transactions
-                    if (categoriesFilter != null) {
-                        item {
-                            Surface(
-                                color = MaterialTheme.colorScheme.secondaryContainer,
-                                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = Spacing.sm)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(Spacing.sm),
-                                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Info,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(Dimensions.Icon.small),
-                                        tint = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                    Text(
-                                        text = "Totals may differ from budget due to split transactions",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                }
-                            }
-                        }
-                    }
-
                     // Iterate through date groups in order
                     listOf(
                         DateGroup.TODAY,
@@ -731,8 +774,11 @@ fun TransactionsScreen(
                                     showDate = dateGroup == DateGroup.EARLIER,
                                     convertedAmount = convertedAmounts[transaction.id],
                                     displayCurrency = if (isUnifiedMode) selectedCurrency else null,
+                                    categoryDisplayAmount = categoryDisplayAmounts[transaction.id],
                                     profileAccountKeys = profileAccountKeys,
-                                    onClick = { onTransactionClick(transaction.id) }
+                                    onClick = { onTransactionClick(transaction.id) },
+                                    onExcludeToggle = { viewModel.toggleExcludedFromTracking(transaction) },
+                                    onDelete = { viewModel.deleteTransaction(transaction) }
                                 )
                                 if (transaction != transactions.last()) {
                                     HorizontalDivider(

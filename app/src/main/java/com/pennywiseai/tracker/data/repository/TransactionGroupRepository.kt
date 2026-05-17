@@ -4,7 +4,9 @@ import com.pennywiseai.tracker.data.database.dao.TransactionGroupDao
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionGroupEntity
 import kotlinx.coroutines.flow.Flow
+import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,6 +26,18 @@ class TransactionGroupRepository @Inject constructor(
 
     fun searchUngroupedTransactions(query: String): Flow<List<TransactionEntity>> =
         groupDao.searchUngroupedTransactions(query)
+
+    fun getTodayUngroupedTransactions(): Flow<List<TransactionEntity>> {
+        val startOfDay = LocalDate.now().atStartOfDay()
+        val endOfDay = LocalDate.now().atTime(LocalTime.MAX)
+        return groupDao.getTodayUngroupedTransactions(startOfDay, endOfDay)
+    }
+
+    fun getUngroupedTransactionsForDate(date: LocalDate): Flow<List<TransactionEntity>> {
+        val startOfDay = date.atStartOfDay()
+        val endOfDay = date.atTime(LocalTime.MAX)
+        return groupDao.getTodayUngroupedTransactions(startOfDay, endOfDay)
+    }
 
     suspend fun getGroupById(id: Long): TransactionGroupEntity? = groupDao.getGroupById(id)
 

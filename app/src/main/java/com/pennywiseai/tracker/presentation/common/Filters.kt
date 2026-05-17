@@ -3,11 +3,57 @@ package com.pennywiseai.tracker.presentation.common
 import com.pennywiseai.tracker.data.database.entity.AccountBalanceEntity
 import com.pennywiseai.tracker.data.database.entity.ProfileEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
+import com.pennywiseai.tracker.utils.DateRangeUtils
 import java.time.LocalDate
 import java.time.YearMonth
 
+private val YEAR_MONTH_NAV_PATTERN = Regex("\\d{4}-\\d{2}")
+
+/**
+ * Date range for a budget/analytics month key ([YearMonth] or "YYYY-MM" navigation param).
+ * Uses pay-month boundaries when [useFinancialMonth] is true.
+ */
+fun getDateRangeForYearMonth(
+    yearMonth: YearMonth,
+    monthStartDay: Int = 1,
+    useFinancialMonth: Boolean = true,
+    monthStartOverrides: Map<String, Int> = emptyMap(),
+    useFixedBudgetPeriodEnd: Boolean = false,
+    budgetPeriodEndDay: Int = 31,
+): Pair<LocalDate, LocalDate> {
+    if (!useFinancialMonth) {
+        return yearMonth.atDay(1) to yearMonth.atEndOfMonth()
+    }
+    if (useFixedBudgetPeriodEnd) {
+        return DateRangeUtils.customDomPeriodStartingInMonth(
+            yearMonth,
+            monthStartDay,
+            budgetPeriodEndDay,
+        )
+    }
+    return DateRangeUtils.financialMonthRangeFor(
+        yearMonth,
+        monthStartDay,
+        monthStartOverrides,
+    )
+}
+
+fun parseYearMonthNavPeriod(period: String): YearMonth? {
+    if (!period.matches(YEAR_MONTH_NAV_PATTERN)) return null
+    return YearMonth.parse(period)
+}
+
+/** Default period chip when pay-month mode is on vs off. */
+fun defaultTimePeriod(useFinancialMonth: Boolean): TimePeriod =
+    if (useFinancialMonth) TimePeriod.THIS_MONTH else TimePeriod.CALENDAR_MONTH
+
+/** Navigation query value for [defaultTimePeriod]. */
+fun defaultTimePeriodNavParam(useFinancialMonth: Boolean): String =
+    defaultTimePeriod(useFinancialMonth).name
+
 enum class TimePeriod(val label: String) {
-    THIS_MONTH("This Month"),
+    THIS_MONTH("Pay Month"),
+    CALENDAR_MONTH("Calendar Month"),
     LAST_MONTH("Last Month"),
     CURRENT_FY("Current FY"),
     ALL("All Time"),
@@ -18,15 +64,37 @@ enum class TransactionTypeFilter(val label: String) {
     ALL("All"),
     INCOME("Income"),
     EXPENSE("Expense"),
-    CREDIT("Credit"),
+    CREDIT("Credit Card"),
     TRANSFER("Transfer"),
     INVESTMENT("Investment")
 }
 
-fun getDateRangeForPeriod(period: TimePeriod): Pair<LocalDate, LocalDate>? {
+fun getDateRangeForPeriod(
+    period: TimePeriod,
+    monthStartDay: Int = 1,
+    useFinancialMonth: Boolean = true,
+    monthStartOverrides: Map<String, Int> = emptyMap(),
+    useFixedBudgetPeriodEnd: Boolean = false,
+    budgetPeriodEndDay: Int = 31
+): Pair<LocalDate, LocalDate>? {
     val today = LocalDate.now()
     return when (period) {
         TimePeriod.THIS_MONTH -> {
+            if (useFinancialMonth) {
+                val (start, end) = DateRangeUtils.calculateBudgetPeriodRange(
+                    today,
+                    monthStartDay,
+                    useFixedBudgetPeriodEnd,
+                    budgetPeriodEndDay,
+                    monthStartOverrides
+                )
+                start to end
+            } else {
+                val start = YearMonth.now().atDay(1)
+                start to today
+            }
+        }
+        TimePeriod.CALENDAR_MONTH -> {
             val start = YearMonth.now().atDay(1)
             start to today
         }

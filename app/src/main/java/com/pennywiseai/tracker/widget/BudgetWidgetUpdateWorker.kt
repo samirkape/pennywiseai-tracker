@@ -17,6 +17,8 @@ import com.pennywiseai.tracker.data.preferences.UserPreferencesRepository
 import com.pennywiseai.tracker.data.repository.BudgetCategorySpending
 import com.pennywiseai.tracker.data.repository.BudgetGroupRepository
 import com.pennywiseai.tracker.data.repository.BudgetGroupSpending
+import com.pennywiseai.tracker.data.repository.SalaryMonthOverrideRepository
+import com.pennywiseai.tracker.utils.DateRangeUtils
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
@@ -28,7 +30,8 @@ class BudgetWidgetUpdateWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     private val budgetGroupRepository: BudgetGroupRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
-    private val currencyConversionService: CurrencyConversionService
+    private val currencyConversionService: CurrencyConversionService,
+    private val salaryMonthOverrideRepository: SalaryMonthOverrideRepository
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
@@ -64,12 +67,42 @@ class BudgetWidgetUpdateWorker @AssistedInject constructor(
             val baseCurrency = userPreferencesRepository.baseCurrency.first()
             val displayCurrency = userPreferencesRepository.displayCurrency.first()
             val currency = if (isUnifiedMode) displayCurrency else baseCurrency
+            val monthStartDay = userPreferencesRepository.monthStartDay.first()
+            val useFinancialMonth = userPreferencesRepository.useFinancialMonth.first()
+            val useFixedEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
+            val budgetPeriodEndDay = userPreferencesRepository.budgetPeriodEndDay.first()
+            val overrides = salaryMonthOverrideRepository.overridesMap.first()
 
             val today = java.time.LocalDate.now()
+            val yearMonth = java.time.YearMonth.from(today)
+            val (financialStart, financialEnd) = if (useFinancialMonth) {
+                DateRangeUtils.calculateBudgetPeriodRange(
+                    today,
+                    monthStartDay,
+                    useFixedEnd,
+                    budgetPeriodEndDay,
+                    overrides
+                )
+            } else {
+                yearMonth.atDay(1) to yearMonth.atEndOfMonth()
+            }
+            val prevEnd = financialStart.minusDays(1)
+            val (prevFinancialStart, prevFinancialEnd) = if (useFinancialMonth) {
+                DateRangeUtils.calculateBudgetPeriodRange(
+                    prevEnd,
+                    monthStartDay,
+                    useFixedEnd,
+                    budgetPeriodEndDay,
+                    overrides
+                )
+            } else {
+                val prevYM = yearMonth.minusMonths(1)
+                prevYM.atDay(1) to prevYM.atEndOfMonth()
+            }
 
             val summary = if (isUnifiedMode) {
                 val raw = budgetGroupRepository.getGroupSpendingAllCurrencies(
-                    today.year, today.monthValue
+                    financialStart, financialEnd
                 ).first()
 
                 // Convert raw to summary with currency conversion
@@ -171,13 +204,11 @@ class BudgetWidgetUpdateWorker @AssistedInject constructor(
                 )
             } else {
                 val spending = budgetGroupRepository.getGroupSpending(
-                    today.year, today.monthValue, currency
+                    financialStart, financialEnd, currency
                 ).first()
 
-                // Get previous month spending for delta calculation
-                val prevYearMonth = java.time.YearMonth.of(today.year, today.monthValue).minusMonths(1)
                 val prevSpending = budgetGroupRepository.getGroupSpending(
-                    prevYearMonth.year, prevYearMonth.monthValue, currency
+                    prevFinancialStart, prevFinancialEnd, currency
                 ).first()
 
                 val savingsDelta = spending.netSavings - prevSpending.netSavings

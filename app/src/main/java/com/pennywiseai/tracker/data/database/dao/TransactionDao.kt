@@ -19,6 +19,7 @@ interface TransactionDao {
     @Query("""
         SELECT * FROM transactions
         WHERE is_deleted = 0
+        AND is_excluded_from_tracking = 0
         AND date_time BETWEEN :startDate AND :endDate
         ORDER BY date_time DESC
     """)
@@ -40,6 +41,7 @@ interface TransactionDao {
     @Query("""
         SELECT * FROM transactions
         WHERE is_deleted = 0
+        AND is_excluded_from_tracking = 0
         AND date_time BETWEEN :startDate AND :endDate
         AND currency = :currency
         AND (:transactionType IS NULL OR transaction_type = :transactionType)
@@ -82,6 +84,14 @@ interface TransactionDao {
     fun getAllCategories(): Flow<List<String>>
 
     @Query("""
+        SELECT DISTINCT category FROM transactions
+        WHERE is_deleted = 0
+        AND date_time BETWEEN :startDate AND :endDate
+        ORDER BY category ASC
+    """)
+    fun getCategoriesUsedBetweenDates(startDate: LocalDateTime, endDate: LocalDateTime): Flow<List<String>>
+
+    @Query("""
         SELECT category FROM transactions
         WHERE is_deleted = 0
         GROUP BY category
@@ -92,11 +102,15 @@ interface TransactionDao {
 
     @Query("SELECT DISTINCT merchant_name FROM transactions WHERE is_deleted = 0 ORDER BY merchant_name ASC")
     fun getAllMerchants(): Flow<List<String>>
+
+    @Query("SELECT DISTINCT merchant_name FROM transactions WHERE is_deleted = 0 ORDER BY merchant_name ASC")
+    suspend fun getDistinctMerchantNames(): List<String>
     
     @Query("""
-        SELECT SUM(amount) FROM transactions 
-        WHERE is_deleted = 0 
-        AND transaction_type = :type 
+        SELECT SUM(amount) FROM transactions
+        WHERE is_deleted = 0
+        AND is_excluded_from_tracking = 0
+        AND transaction_type = :type
         AND date_time BETWEEN :startDate AND :endDate
     """)
     suspend fun getTotalAmountByTypeAndPeriod(
@@ -126,14 +140,35 @@ interface TransactionDao {
     @Query("UPDATE transactions SET category = :newCategory WHERE merchant_name = :merchantName")
     suspend fun updateCategoryForMerchant(merchantName: String, newCategory: String)
 
+    @Query("UPDATE transactions SET merchant_name = :newMerchantName WHERE merchant_name = :oldMerchantName")
+    suspend fun updateMerchantNameForMerchant(oldMerchantName: String, newMerchantName: String)
+
     @Query("SELECT COUNT(*) FROM transactions WHERE merchant_name = :merchantName AND id != :excludeId")
     suspend fun getTransactionCountForMerchant(merchantName: String, excludeId: Long): Int
+
+    @Query("""
+        SELECT category FROM transactions
+        WHERE is_deleted = 0
+        AND merchant_name = :merchantName
+        AND id != :excludeTransactionId
+        GROUP BY category
+        ORDER BY COUNT(*) DESC, MAX(date_time) DESC
+        LIMIT :limit
+    """)
+    suspend fun getCategoriesForMerchant(
+        merchantName: String,
+        excludeTransactionId: Long,
+        limit: Int = 8
+    ): List<String>
 
     @Query("SELECT DISTINCT currency FROM transactions WHERE is_deleted = 0 ORDER BY currency")
     fun getAllCurrencies(): Flow<List<String>>
 
     @Query("SELECT DISTINCT currency FROM transactions WHERE is_deleted = 0 AND date_time BETWEEN :startDate AND :endDate ORDER BY currency")
     fun getCurrenciesForPeriod(startDate: LocalDateTime, endDate: LocalDateTime): Flow<List<String>>
+
+    @Query("UPDATE transactions SET is_excluded_from_tracking = :excluded, updated_at = :now WHERE id = :transactionId")
+    suspend fun updateExcludedFromTracking(transactionId: Long, excluded: Boolean, now: LocalDateTime = LocalDateTime.now())
 
     // Soft delete methods - also clear hash so it doesn't block new inserts with same details
     @Query("UPDATE transactions SET is_deleted = 1, transaction_hash = 'DELETED_' || id || '_' || transaction_hash WHERE id = :transactionId")
@@ -147,9 +182,10 @@ interface TransactionDao {
     suspend fun getTransactionByHash(transactionHash: String): TransactionEntity?
     
     @Query("""
-        SELECT * FROM transactions 
-        WHERE is_deleted = 0 
-        AND date_time BETWEEN :startDate AND :endDate 
+        SELECT * FROM transactions
+        WHERE is_deleted = 0
+        AND is_excluded_from_tracking = 0
+        AND date_time BETWEEN :startDate AND :endDate
         ORDER BY date_time DESC
     """)
     suspend fun getTransactionsBetweenDatesList(

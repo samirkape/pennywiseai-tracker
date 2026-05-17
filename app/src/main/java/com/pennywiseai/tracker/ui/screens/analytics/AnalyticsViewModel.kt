@@ -5,10 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.pennywiseai.tracker.data.currency.CurrencyConversionService
 import com.pennywiseai.tracker.data.database.entity.TransactionWithSplits
 import com.pennywiseai.tracker.data.preferences.UserPreferencesRepository
+import com.pennywiseai.tracker.data.repository.SalaryMonthOverrideRepository
 import com.pennywiseai.tracker.data.repository.TransactionRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.pennywiseai.tracker.presentation.common.TimePeriod
 import com.pennywiseai.tracker.presentation.common.TransactionTypeFilter
+import com.pennywiseai.tracker.presentation.common.defaultTimePeriod
 import com.pennywiseai.tracker.presentation.common.getDateRangeForPeriod
 import com.pennywiseai.tracker.utils.CurrencyUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -29,6 +31,7 @@ class AnalyticsViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val currencyConversionService: CurrencyConversionService,
+    private val salaryMonthOverrideRepository: SalaryMonthOverrideRepository,
     private val savedStateHandle: androidx.lifecycle.SavedStateHandle
 ) : ViewModel() {
     
@@ -47,10 +50,19 @@ class AnalyticsViewModel @Inject constructor(
     private val _isUnifiedMode = MutableStateFlow(false)
     val isUnifiedMode: StateFlow<Boolean> = _isUnifiedMode.asStateFlow()
 
+    val useFinancialMonth: StateFlow<Boolean> = userPreferencesRepository.useFinancialMonth
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     private val _selectedChartType = MutableStateFlow(ChartType.LINE)
     val selectedChartType: StateFlow<ChartType> = _selectedChartType.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            _selectedPeriod.value = defaultTimePeriod(
+                userPreferencesRepository.useFinancialMonth.first()
+            )
+        }
+
         viewModelScope.launch {
             userPreferencesRepository.getAnalyticsChartType().collect { saved ->
                 if (saved != null) {
@@ -102,29 +114,79 @@ class AnalyticsViewModel @Inject constructor(
     // Reactive UI state that automatically updates when any filter changes
     // Uses flatMapLatest to cancel previous data loads when filters change (prevents race conditions)
     val uiState: StateFlow<AnalyticsUiState> = combine(
-        _selectedPeriod,
-        customDateRange,
-        _transactionTypeFilter,
-        _selectedCurrency,
-        combine(_isUnifiedMode, _categoryFilter) { a, b -> a to b }
-    ) { period, customRange, typeFilter, currency, (isUnified, catFilter) ->
-        FilterState(period, customRange, typeFilter, currency, isUnified, catFilter)
+        combine(
+            _selectedPeriod,
+            customDateRange,
+            _transactionTypeFilter,
+            _selectedCurrency,
+        ) { period, customRange, typeFilter, currency ->
+            listOf(period, customRange, typeFilter, currency)
+        },
+        combine(
+            _isUnifiedMode,
+            _categoryFilter,
+        ) { isUnified, catFilter ->
+            listOf(isUnified, catFilter)
+        },
+        combine(
+            userPreferencesRepository.monthStartDay,
+            userPreferencesRepository.useFinancialMonth,
+            userPreferencesRepository.useFixedBudgetPeriodEnd,
+            userPreferencesRepository.budgetPeriodEndDay,
+            salaryMonthOverrideRepository.overridesMap,
+        ) { monthStartDay, useFinancialMonth, useFixedEnd, endDom, overrides ->
+            listOf(monthStartDay, useFinancialMonth, useFixedEnd, endDom, overrides)
+        },
+    ) { periodPack, filterPack, prefsPack ->
+        @Suppress("UNCHECKED_CAST")
+        val pl = periodPack as List<Any?>
+        @Suppress("UNCHECKED_CAST")
+        val fl = filterPack as List<Any?>
+        @Suppress("UNCHECKED_CAST")
+        val pr = prefsPack as List<Any?>
+        FilterState(
+            period = pl[0] as TimePeriod,
+            customRange = pl[1] as Pair<LocalDate, LocalDate>?,
+            typeFilter = pl[2] as TransactionTypeFilter,
+            currency = pl[3] as String,
+            isUnifiedMode = fl[0] as Boolean,
+            categoryFilter = fl[1] as String?,
+            monthStartDay = pr[0] as Int,
+            useFinancialMonth = pr[1] as Boolean,
+            monthStartOverrides = pr[4] as Map<String, Int>,
+            useFixedBudgetPeriodEnd = pr[2] as Boolean,
+            budgetPeriodEndDay = pr[3] as Int,
+        )
     }.flatMapLatest { filterState ->
         // Determine date range based on selected period
         val dateRange = if (filterState.period == TimePeriod.CUSTOM) {
             val customRange = filterState.customRange
             // Guard against invalid state: CUSTOM period must have a date range
             if (customRange == null) {
+                val fallbackPeriod = defaultTimePeriod(filterState.useFinancialMonth)
                 android.util.Log.e("AnalyticsViewModel",
-                    "CUSTOM period selected but no date range set - falling back to THIS_MONTH")
-                // Auto-correct the invalid state
-                _selectedPeriod.value = TimePeriod.THIS_MONTH
-                getDateRangeForPeriod(TimePeriod.THIS_MONTH)
+                    "CUSTOM period selected but no date range set - falling back to $fallbackPeriod")
+                _selectedPeriod.value = fallbackPeriod
+                getDateRangeForPeriod(
+                    fallbackPeriod,
+                    filterState.monthStartDay,
+                    filterState.useFinancialMonth,
+                    filterState.monthStartOverrides,
+                    filterState.useFixedBudgetPeriodEnd,
+                    filterState.budgetPeriodEndDay
+                )
             } else {
                 customRange
             }
         } else {
-            getDateRangeForPeriod(filterState.period)
+            getDateRangeForPeriod(
+                filterState.period,
+                filterState.monthStartDay,
+                filterState.useFinancialMonth,
+                filterState.monthStartOverrides,
+                filterState.useFixedBudgetPeriodEnd,
+                filterState.budgetPeriodEndDay
+            )
         }
 
         if (dateRange == null) {
@@ -150,37 +212,42 @@ class AnalyticsViewModel @Inject constructor(
                 }
 
                 // Use database-level filtering for better performance
-                // Convert TransactionTypeFilter to TransactionType for database query
-                val dbTransactionType = when (filterState.typeFilter) {
-                    TransactionTypeFilter.ALL -> null // null means no type filter at DB level
-                    TransactionTypeFilter.INCOME -> com.pennywiseai.tracker.data.database.entity.TransactionType.INCOME
-                    TransactionTypeFilter.EXPENSE -> com.pennywiseai.tracker.data.database.entity.TransactionType.EXPENSE
-                    TransactionTypeFilter.CREDIT -> com.pennywiseai.tracker.data.database.entity.TransactionType.CREDIT
-                    TransactionTypeFilter.TRANSFER -> com.pennywiseai.tracker.data.database.entity.TransactionType.TRANSFER
-                    TransactionTypeFilter.INVESTMENT -> com.pennywiseai.tracker.data.database.entity.TransactionType.INVESTMENT
-                }
-
                 // Load transactions with splits for proper category breakdown
                 if (filterState.isUnifiedMode) {
                     // Unified mode: load ALL currencies
                     transactionRepository.getTransactionsWithSplitsFiltered(
                         startDate = dateRange.first,
                         endDate = dateRange.second
-                    ).map { txs -> Triple(txs, dbTransactionType, true) }
+                    ).map { txs -> Triple(txs, filterState.typeFilter, true) }
                 } else {
                     transactionRepository.getTransactionsWithSplitsFiltered(
                         startDate = dateRange.first,
                         endDate = dateRange.second,
                         currency = filterState.currency
-                    ).map { txs -> Triple(txs, dbTransactionType, false) }
+                    ).map { txs -> Triple(txs, filterState.typeFilter, false) }
                 }
             }.mapLatest { (allTransactionsWithSplits, transactionTypeFilter, isUnified) ->
                 // Filter by transaction type in memory (splits are already loaded)
                 // Exclude loan repayments — they are fixed obligations, not discretionary spending
-                val filteredTransactionsWithSplits = (if (transactionTypeFilter != null) {
-                    allTransactionsWithSplits.filter { it.transaction.transactionType == transactionTypeFilter }
-                } else {
-                    allTransactionsWithSplits
+                // EXPENSE filter includes CREDIT card transactions — both represent money spent
+                val filteredTransactionsWithSplits = (when (transactionTypeFilter) {
+                    TransactionTypeFilter.ALL -> allTransactionsWithSplits
+                    TransactionTypeFilter.EXPENSE -> allTransactionsWithSplits.filter {
+                        it.transaction.transactionType == com.pennywiseai.tracker.data.database.entity.TransactionType.EXPENSE ||
+                        it.transaction.transactionType == com.pennywiseai.tracker.data.database.entity.TransactionType.CREDIT
+                    }
+                    TransactionTypeFilter.INCOME -> allTransactionsWithSplits.filter {
+                        it.transaction.transactionType == com.pennywiseai.tracker.data.database.entity.TransactionType.INCOME
+                    }
+                    TransactionTypeFilter.CREDIT -> allTransactionsWithSplits.filter {
+                        it.transaction.transactionType == com.pennywiseai.tracker.data.database.entity.TransactionType.CREDIT
+                    }
+                    TransactionTypeFilter.TRANSFER -> allTransactionsWithSplits.filter {
+                        it.transaction.transactionType == com.pennywiseai.tracker.data.database.entity.TransactionType.TRANSFER
+                    }
+                    TransactionTypeFilter.INVESTMENT -> allTransactionsWithSplits.filter {
+                        it.transaction.transactionType == com.pennywiseai.tracker.data.database.entity.TransactionType.INVESTMENT
+                    }
                 }).filter { it.transaction.loanId == null }
 
                 // Compute available categories BEFORE applying category filter
@@ -275,6 +342,92 @@ class AnalyticsViewModel @Inject constructor(
                 // Get top category info
                 val topCategory = categoryBreakdown.firstOrNull()
 
+                // ---- Insight 3: Category trends over time (from splits data) ----
+                val categoryTrends: Map<String, List<BalancePoint>> = run {
+                    val monthsBetween = ChronoUnit.MONTHS.between(
+                        dateRange.first.withDayOfMonth(1),
+                        dateRange.second.withDayOfMonth(1)
+                    )
+                    if (monthsBetween < 1) {
+                        emptyMap()
+                    } else {
+                        val topCatNames = categoryAmounts.entries
+                            .sortedByDescending { it.value }
+                            .take(5)
+                            .map { it.key }
+
+                        val monthMap = mutableMapOf<YearMonth, MutableMap<String, BigDecimal>>()
+                        for (txWithSplits in categoryFilteredWithSplits) {
+                            val ym = YearMonth.from(txWithSplits.transaction.dateTime)
+                            val perMonth = monthMap.getOrPut(ym) { mutableMapOf() }
+                            txWithSplits.getAmountByCategory().forEach { (cat, amt) ->
+                                val catName = cat.ifEmpty { "Others" }
+                                if (catName in topCatNames) {
+                                    val converted = if (isUnified) {
+                                        currencyConversionService.convertAmount(amt, txWithSplits.transaction.currency, displayCurrency)
+                                    } else amt
+                                    perMonth[catName] = (perMonth[catName] ?: BigDecimal.ZERO) + converted
+                                }
+                            }
+                        }
+
+                        topCatNames.associateWith { catName ->
+                            monthMap.entries
+                                .sortedBy { it.key }
+                                .map { (ym, catAmts) ->
+                                    BalancePoint(
+                                        timestamp = ym.atDay(1).atStartOfDay(),
+                                        balance = catAmts[catName] ?: BigDecimal.ZERO,
+                                        currency = displayCurrency
+                                    )
+                                }
+                        }.filter { (_, points) -> points.any { it.balance > BigDecimal.ZERO } }
+                    }
+                }
+
+                // Junction rows are tags only (filter/insights). Category breakdown above uses
+                // getAmountByCategory() (primary + splits) and must not sum junction tags.
+                val filteredIds = categoryFilteredWithSplits.map { it.transaction.id }
+                val junctionRows = transactionRepository.getCategoriesForTransactions(filteredIds)
+                val categoriesByTx: Map<Long, List<String>> = junctionRows
+                    .groupBy { it.transactionId }
+                    .mapValues { (_, rows) -> rows.map { it.categoryName } }
+
+                // Insight 1: Category co-occurrence pairs
+                val pairCounts = mutableMapOf<Pair<String, String>, Int>()
+                for ((_, cats) in categoriesByTx) {
+                    if (cats.size < 2) continue
+                    val sorted = cats.sorted()
+                    for (i in sorted.indices) {
+                        for (j in i + 1 until sorted.size) {
+                            val pair = sorted[i] to sorted[j]
+                            pairCounts[pair] = (pairCounts[pair] ?: 0) + 1
+                        }
+                    }
+                }
+                val categoryOverlaps = pairCounts
+                    .map { (pair, count) -> CategoryOverlapData(pair.first, pair.second, count) }
+                    .sortedByDescending { it.coOccurrenceCount }
+                    .take(10)
+
+                // Insight 2: Transactions with 2+ junction-table categories
+                val multiCategoryTransactions = categoriesByTx
+                    .filter { (_, cats) -> cats.size >= 2 }
+                    .mapNotNull { (txId, cats) ->
+                        categoryFilteredWithSplits.find { it.transaction.id == txId }?.let { twSplits ->
+                            MultiCategoryTransactionData(
+                                transactionId = txId,
+                                merchantName = twSplits.transaction.merchantName,
+                                amount = twSplits.transaction.amount,
+                                dateTime = twSplits.transaction.dateTime,
+                                categories = cats,
+                                currency = twSplits.transaction.currency
+                            )
+                        }
+                    }
+                    .sortedByDescending { it.dateTime }
+                    .take(20)
+
                 AnalyticsUiState(
                     totalSpending = totalSpending,
                     categoryBreakdown = categoryBreakdown,
@@ -286,7 +439,10 @@ class AnalyticsViewModel @Inject constructor(
                     currency = displayCurrency,
                     isLoading = false,
                     spendingTrend = calculateSpendingTrend(filteredTransactions, dateRange.first, dateRange.second),
-                    availableCategories = allCategoryNames
+                    availableCategories = allCategoryNames,
+                    categoryTrends = categoryTrends,
+                    categoryOverlaps = categoryOverlaps,
+                    multiCategoryTransactions = multiCategoryTransactions
                 )
             }
         }
@@ -297,6 +453,9 @@ class AnalyticsViewModel @Inject constructor(
     )
 
     fun selectPeriod(period: TimePeriod) {
+        if (period != TimePeriod.CUSTOM) {
+            savedStateHandle["customDateRange"] = null
+        }
         _selectedPeriod.value = period
     }
 
@@ -346,9 +505,12 @@ class AnalyticsViewModel @Inject constructor(
      */
     fun clearCustomDateRange() {
         savedStateHandle["customDateRange"] = null
-        // Always reset to a valid period to prevent CUSTOM with null dates
         if (_selectedPeriod.value == TimePeriod.CUSTOM) {
-            _selectedPeriod.value = TimePeriod.THIS_MONTH
+            viewModelScope.launch {
+                _selectedPeriod.value = defaultTimePeriod(
+                    userPreferencesRepository.useFinancialMonth.first()
+                )
+            }
         }
     }
 
@@ -421,7 +583,12 @@ private data class FilterState(
     val typeFilter: TransactionTypeFilter,
     val currency: String,
     val isUnifiedMode: Boolean = false,
-    val categoryFilter: String? = null
+    val categoryFilter: String? = null,
+    val monthStartDay: Int = 1,
+    val useFinancialMonth: Boolean = true,
+    val monthStartOverrides: Map<String, Int> = emptyMap(),
+    val useFixedBudgetPeriodEnd: Boolean = false,
+    val budgetPeriodEndDay: Int = 31
 )
 
 data class AnalyticsUiState(
@@ -435,7 +602,10 @@ data class AnalyticsUiState(
     val currency: String = "",
     val isLoading: Boolean = true,
     val spendingTrend: List<BalancePoint> = emptyList(),
-    val availableCategories: List<String> = emptyList()
+    val availableCategories: List<String> = emptyList(),
+    val categoryTrends: Map<String, List<BalancePoint>> = emptyMap(),
+    val categoryOverlaps: List<CategoryOverlapData> = emptyList(),
+    val multiCategoryTransactions: List<MultiCategoryTransactionData> = emptyList()
 )
 
 data class CategoryData(
@@ -450,5 +620,20 @@ data class MerchantData(
     val amount: BigDecimal,
     val transactionCount: Int,
     val isSubscription: Boolean
+)
+
+data class CategoryOverlapData(
+    val categoryA: String,
+    val categoryB: String,
+    val coOccurrenceCount: Int
+)
+
+data class MultiCategoryTransactionData(
+    val transactionId: Long,
+    val merchantName: String,
+    val amount: BigDecimal,
+    val dateTime: java.time.LocalDateTime,
+    val categories: List<String>,
+    val currency: String
 )
 

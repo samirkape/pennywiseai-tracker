@@ -47,10 +47,23 @@ import com.pennywiseai.tracker.ui.icons.CategoryMapping
 import com.pennywiseai.tracker.ui.theme.*
 import com.pennywiseai.tracker.utils.CurrencyFormatter
 import com.pennywiseai.tracker.utils.DateRangeUtils
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.unit.sp
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
+import ir.ehsannarmani.compose_charts.LineChart
+import ir.ehsannarmani.compose_charts.models.AnimationMode
+import ir.ehsannarmani.compose_charts.models.DotProperties
+import ir.ehsannarmani.compose_charts.models.DrawStyle
+import ir.ehsannarmani.compose_charts.models.GridProperties
+import ir.ehsannarmani.compose_charts.models.LabelHelperProperties
+import ir.ehsannarmani.compose_charts.models.LabelProperties
+import ir.ehsannarmani.compose_charts.models.Line
 import java.math.BigDecimal
+import java.time.format.DateTimeFormatter
 
 private enum class CategoryViewType { CHART, LIST }
 
@@ -59,8 +72,11 @@ private enum class CategoryViewType { CHART, LIST }
 fun AnalyticsScreen(
     viewModel: AnalyticsViewModel = hiltViewModel(),
     onNavigateToChat: () -> Unit = {},
-    onNavigateToTransactions: (category: String?, merchant: String?, period: String?, currency: String?) -> Unit = { _, _, _, _ -> },
-    onNavigateToHome: () -> Unit = {}
+    onNavigateToTransactions: (category: String?, merchant: String?, period: String?, currency: String?, transactionType: String?) -> Unit = { _, _, _, _, _ -> },
+    onNavigateToTransactionsMultiCategory: (categories: String, period: String?, currency: String?) -> Unit = { _, _, _ -> },
+    onNavigateToTransaction: (Long) -> Unit = {},
+    onNavigateToHome: () -> Unit = {},
+    onNavigateToBehavioralStats: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val selectedPeriod by viewModel.selectedPeriod.collectAsStateWithLifecycle()
@@ -69,6 +85,7 @@ fun AnalyticsScreen(
     val availableCurrencies by viewModel.availableCurrencies.collectAsStateWithLifecycle()
     val customDateRange by viewModel.customDateRange.collectAsStateWithLifecycle()
     val isUnifiedMode by viewModel.isUnifiedMode.collectAsStateWithLifecycle()
+    val useFinancialMonth by viewModel.useFinancialMonth.collectAsStateWithLifecycle()
     val chartType by viewModel.selectedChartType.collectAsStateWithLifecycle()
     val categoryFilter by viewModel.categoryFilter.collectAsStateWithLifecycle()
     // Use rememberSaveable to preserve UI state across navigation
@@ -85,8 +102,27 @@ fun AnalyticsScreen(
     // Calculate active filter count
     val activeFilterCount = if (transactionTypeFilter != TransactionTypeFilter.EXPENSE) 1 else 0
 
-    // Cache expensive operations
-    val timePeriods = remember { TimePeriod.values().toList() }
+    // Cache expensive operations — include CALENDAR_MONTH only when financial month is enabled
+    val timePeriods = remember(useFinancialMonth) {
+        if (useFinancialMonth) {
+            listOf(
+                TimePeriod.THIS_MONTH,
+                TimePeriod.CALENDAR_MONTH,
+                TimePeriod.LAST_MONTH,
+                TimePeriod.CURRENT_FY,
+                TimePeriod.ALL,
+                TimePeriod.CUSTOM
+            )
+        } else {
+            listOf(
+                TimePeriod.THIS_MONTH,
+                TimePeriod.LAST_MONTH,
+                TimePeriod.CURRENT_FY,
+                TimePeriod.ALL,
+                TimePeriod.CUSTOM
+            )
+        }
+    }
     val customRangeLabel = remember(customDateRange) {
         DateRangeUtils.formatDateRange(customDateRange)
     }
@@ -104,7 +140,16 @@ fun AnalyticsScreen(
                 scrollBehaviorSmall = scrollBehaviorSmall,
                 scrollBehaviorLarge = scrollBehaviorLarge,
                 title = "Analytics",
-                hazeState = hazeState
+                hazeState = hazeState,
+                hasActionButton = true,
+                actionContent = {
+                    IconButton(onClick = onNavigateToBehavioralStats) {
+                        Icon(
+                            imageVector = Icons.Default.Insights,
+                            contentDescription = "Behavioral Stats"
+                        )
+                    }
+                }
             )
         }
     ) { paddingValues ->
@@ -148,10 +193,10 @@ fun AnalyticsScreen(
                         },
                         label = {
                             Text(
-                                if (period == TimePeriod.CUSTOM && customRangeLabel != null) {
-                                    customRangeLabel
-                                } else {
-                                    period.label
+                                when {
+                                    period == TimePeriod.CUSTOM && customRangeLabel != null -> customRangeLabel
+                                    period == TimePeriod.THIS_MONTH && useFinancialMonth -> "Pay Month"
+                                    else -> period.label
                                 }
                             )
                         },
@@ -268,6 +313,15 @@ fun AnalyticsScreen(
                                     size = Dimensions.Icon.small
                                 )
                             },
+                                trailingIcon = if (categoryFilter == category) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Clear category filter",
+                                        modifier = Modifier.size(Dimensions.Icon.small)
+                                    )
+                                }
+                            } else null,
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                                 selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
@@ -288,7 +342,10 @@ fun AnalyticsScreen(
                     topCategory = uiState.topCategory,
                     topCategoryPercentage = uiState.topCategoryPercentage,
                     currency = uiState.currency,
-                    isLoading = uiState.isLoading
+                    isLoading = uiState.isLoading,
+                    onClick = {
+                        onNavigateToTransactions(categoryFilter, null, selectedPeriod.name, selectedCurrency, transactionTypeFilter.name)
+                    }
                 )
             }
         }
@@ -465,19 +522,54 @@ fun AnalyticsScreen(
                                 categories = uiState.categoryBreakdown,
                                 currency = selectedCurrency,
                                 onCategoryClick = { category ->
-                                    onNavigateToTransactions(category.name, null, selectedPeriod.name, selectedCurrency)
+                                    onNavigateToTransactions(category.name, null, selectedPeriod.name, selectedCurrency, transactionTypeFilter.name)
                                 }
                             )
                             CategoryViewType.LIST -> CategoryBreakdownCard(
                                 categories = uiState.categoryBreakdown,
                                 currency = selectedCurrency,
                                 onCategoryClick = { category ->
-                                    onNavigateToTransactions(category.name, null, selectedPeriod.name, selectedCurrency)
+                                    onNavigateToTransactions(category.name, null, selectedPeriod.name, selectedCurrency, transactionTypeFilter.name)
                                 }
                             )
                         }
                     }
                 }
+            }
+        }
+
+        // Category Trends (multi-month only)
+        if (uiState.categoryTrends.isNotEmpty() && uiState.categoryTrends.values.any { it.size >= 2 }) {
+            item {
+                CategoryTrendsSection(
+                    trends = uiState.categoryTrends,
+                    currency = selectedCurrency
+                )
+            }
+        }
+
+        // Category Co-occurrence
+        if (uiState.categoryOverlaps.isNotEmpty()) {
+            item {
+                CategoryOverlapCard(
+                    overlaps = uiState.categoryOverlaps,
+                    onOverlapClick = { overlap ->
+                        val encoded = listOf(overlap.categoryA, overlap.categoryB)
+                            .joinToString(",") { java.net.URLEncoder.encode(it, "UTF-8") }
+                        onNavigateToTransactionsMultiCategory(encoded, selectedPeriod.name, selectedCurrency)
+                    }
+                )
+            }
+        }
+
+        // Multi-category transactions
+        if (uiState.multiCategoryTransactions.isNotEmpty()) {
+            item {
+                MultiCategoryTransactionsCard(
+                    transactions = uiState.multiCategoryTransactions,
+                    currency = selectedCurrency,
+                    onTransactionClick = onNavigateToTransaction
+                )
             }
         }
 
@@ -500,7 +592,7 @@ fun AnalyticsScreen(
                         merchant = merchant,
                         currency = selectedCurrency,
                         onClick = {
-                            onNavigateToTransactions(null, merchant.name, selectedPeriod.name, selectedCurrency)
+                            onNavigateToTransactions(null, merchant.name, selectedPeriod.name, selectedCurrency, transactionTypeFilter.name)
                         }
                     )
                 }
@@ -613,6 +705,219 @@ private fun EmptyAnalyticsState(
             actionLabel = "Scan SMS",
             onAction = onScanSmsClick
         )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CategoryTrendsSection(
+    trends: Map<String, List<com.pennywiseai.tracker.ui.components.BalancePoint>>,
+    currency: String,
+    modifier: Modifier = Modifier
+) {
+    val categoryColors = remember(trends) {
+        trends.keys.associateWith { name ->
+            CategoryMapping.categories[name]?.color
+                ?: CategoryMapping.categories["Others"]!!.color
+        }
+    }
+
+    val sortedMonths = remember(trends) {
+        trends.values.firstOrNull()
+            ?.sortedBy { it.timestamp }
+            ?.map { it.timestamp.format(DateTimeFormatter.ofPattern("MMM yy")) }
+            ?: emptyList()
+    }
+
+    val lines = remember(trends) {
+        trends.map { (catName, points) ->
+            Line(
+                label = catName,
+                values = points.sortedBy { it.timestamp }.map { it.balance.toDouble() },
+                color = SolidColor(categoryColors[catName] ?: Color.Gray),
+                drawStyle = DrawStyle.Stroke(width = 2.dp),
+                dotProperties = DotProperties(enabled = true, radius = 3.dp)
+            )
+        }
+    }
+
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+        SectionHeaderV2(title = "Category Trends")
+        PennyWiseCard(modifier = Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                LineChart(
+                    data = lines,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    animationMode = AnimationMode.Together(delayBuilder = { it * 100L }),
+                    gridProperties = GridProperties(enabled = false),
+                    labelProperties = LabelProperties(
+                        enabled = true,
+                        labels = sortedMonths,
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ),
+                    labelHelperProperties = LabelHelperProperties(enabled = false)
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    trends.keys.forEach { catName ->
+                        val color = categoryColors[catName] ?: Color.Gray
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(color)
+                            )
+                            Text(
+                                text = catName,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryOverlapCard(
+    overlaps: List<CategoryOverlapData>,
+    modifier: Modifier = Modifier,
+    onOverlapClick: (CategoryOverlapData) -> Unit = {}
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+        SectionHeaderV2(title = "Category Co-occurrence")
+        PennyWiseCard(modifier = Modifier.fillMaxWidth()) {
+            ExpandableList(items = overlaps, visibleItemCount = 5) { overlap ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onOverlapClick(overlap) }
+                        .padding(vertical = Spacing.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                ) {
+                    Box(modifier = Modifier.size(40.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background((CategoryMapping.categories[overlap.categoryA]?.color ?: Color.Gray).copy(alpha = 0.15f))
+                                .align(Alignment.TopStart),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CategoryIcon(category = overlap.categoryA, size = 16.dp)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background((CategoryMapping.categories[overlap.categoryB]?.color ?: Color.Gray).copy(alpha = 0.15f))
+                                .align(Alignment.BottomEnd),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CategoryIcon(category = overlap.categoryB, size = 14.dp)
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "${overlap.categoryA} + ${overlap.categoryB}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = "${overlap.coOccurrenceCount} transactions together",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.tertiaryContainer)
+                            .padding(horizontal = Spacing.sm, vertical = Spacing.xs)
+                    ) {
+                        Text(
+                            text = "${overlap.coOccurrenceCount}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MultiCategoryTransactionsCard(
+    transactions: List<MultiCategoryTransactionData>,
+    currency: String,
+    modifier: Modifier = Modifier,
+    onTransactionClick: (Long) -> Unit = {}
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+        SectionHeaderV2(title = "Multi-Tagged Transactions")
+        PennyWiseCard(modifier = Modifier.fillMaxWidth()) {
+            ExpandableList(items = transactions, visibleItemCount = 3) { tx ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onTransactionClick(tx.transactionId) }
+                        .padding(vertical = Spacing.xs),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    ) {
+                        BrandIcon(merchantName = tx.merchantName, size = 40.dp, showBackground = true)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = tx.merchantName,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = tx.dateTime.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            text = CurrencyFormatter.formatCurrency(tx.amount, tx.currency.ifEmpty { currency }),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                        items(tx.categories) { cat ->
+                            SuggestionChip(
+                                onClick = {},
+                                label = { Text(cat, style = MaterialTheme.typography.labelSmall) },
+                                icon = { CategoryIcon(category = cat, size = 12.dp) },
+                                border = null,
+                                colors = SuggestionChipDefaults.suggestionChipColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

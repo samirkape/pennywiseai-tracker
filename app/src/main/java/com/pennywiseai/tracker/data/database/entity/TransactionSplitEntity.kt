@@ -31,6 +31,9 @@ data class TransactionSplitEntity(
 
     val amount: BigDecimal,
 
+    /** Comma-separated additional tags for personal labeling (does not affect budget accounting). */
+    val tags: String = "",
+
     @ColumnInfo(name = "created_at")
     val createdAt: LocalDateTime = LocalDateTime.now()
 )

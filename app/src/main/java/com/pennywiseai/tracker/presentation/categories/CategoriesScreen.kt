@@ -1,6 +1,5 @@
 package com.pennywiseai.tracker.presentation.categories
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -160,65 +159,15 @@ fun CategoriesScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SwipeableCategoryItem(
     category: CategoryEntity,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { dismissValue ->
-            when (dismissValue) {
-                SwipeToDismissBoxValue.EndToStart -> {
-                    if (!category.isSystem) {
-                        onDelete()
-                        true
-                    } else {
-                        false // Don't allow swipe for system categories
-                    }
-                }
-                else -> false
-            }
-        }
-    )
-    
-    SwipeToDismissBox(
-        state = dismissState,
-        backgroundContent = {
-            if (!category.isSystem) {
-                val color by animateColorAsState(
-                    when (dismissState.targetValue) {
-                        SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.error
-                        else -> Color.Transparent
-                    },
-                    label = "background color"
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(color)
-                        .padding(horizontal = Dimensions.Padding.content),
-                    contentAlignment = Alignment.CenterEnd
-                ) {
-                    if (dismissState.targetValue == SwipeToDismissBoxValue.EndToStart) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete",
-                            tint = MaterialTheme.colorScheme.onError
-                        )
-                    }
-                }
-            }
-        },
-        content = {
-            CategoryItem(
-                category = category,
-                onClick = if (!category.isSystem) onEdit else null
-            )
-        },
-        enableDismissFromStartToEnd = false,
-        enableDismissFromEndToStart = !category.isSystem
+    CategoryItem(
+        category = category,
+        onClick = if (!category.isSystem) onEdit else null
     )
 }
 

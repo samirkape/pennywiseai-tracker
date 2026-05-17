@@ -1,10 +1,10 @@
 package com.pennywiseai.tracker.presentation.navigation
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Analytics
-import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed class BottomNavItem(
@@ -17,16 +17,22 @@ sealed class BottomNavItem(
         title = "Home",
         icon = Icons.Default.Home
     )
-    
+
+    data object Budgets : BottomNavItem(
+        route = "budgets",
+        title = "Budgets",
+        icon = Icons.Default.AccountBalanceWallet
+    )
+
     data object Analytics : BottomNavItem(
         route = "analytics",
         title = "Analytics",
         icon = Icons.Default.Analytics
     )
-    
-    data object Chat : BottomNavItem(
-        route = "chat",
-        title = "Chat",
-        icon = Icons.AutoMirrored.Filled.Chat
+
+    data object Settings : BottomNavItem(
+        route = "settings",
+        title = "Settings",
+        icon = Icons.Default.Settings
     )
 }

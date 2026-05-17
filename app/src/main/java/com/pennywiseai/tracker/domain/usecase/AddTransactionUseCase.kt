@@ -30,10 +30,10 @@ class AddTransactionUseCase @Inject constructor(
         bankName: String? = null,
         accountLast4: String? = null,
         currency: String = "INR",
-        receiptPath: String? = null,
+        receiptPaths: List<String> = emptyList(),
         budgetCategory: String? = null,
         budgetImpactType: BudgetImpactType? = null
-    ) {
+    ): Long {
         // Generate a unique hash for manual transactions
         val transactionHash = generateManualTransactionHash(
             amount = amount,
@@ -59,13 +59,18 @@ class AddTransactionUseCase @Inject constructor(
             currency = currency,
             createdAt = LocalDateTime.now(),
             updatedAt = LocalDateTime.now(),
-            receiptPath = receiptPath,
+            receiptPath = null,
             budgetCategory = budgetCategory,
             budgetImpactType = budgetImpactType
         )
 
         // Insert the transaction
         val transactionId = transactionRepository.insertTransaction(transaction)
+
+        // Insert receipt images into the new receipts table
+        if (transactionId != -1L && receiptPaths.isNotEmpty()) {
+            transactionRepository.insertReceipts(transactionId, receiptPaths)
+        }
 
         // Update account balance if account was selected
         if (transactionId != -1L && bankName != null && accountLast4 != null) {
@@ -82,7 +87,7 @@ class AddTransactionUseCase @Inject constructor(
         // If marked as recurring, create a subscription
         if (isRecurring && transactionId != -1L) {
             val nextPaymentDate = date.toLocalDate().plusMonths(1) // Default to monthly
-            
+
             val subscription = SubscriptionEntity(
                 merchantName = merchant,
                 amount = amount,
@@ -94,9 +99,11 @@ class AddTransactionUseCase @Inject constructor(
                 createdAt = LocalDateTime.now(),
                 updatedAt = LocalDateTime.now()
             )
-            
+
             subscriptionRepository.insertSubscription(subscription)
         }
+
+        return transactionId
     }
     
     private suspend fun updateAccountBalance(

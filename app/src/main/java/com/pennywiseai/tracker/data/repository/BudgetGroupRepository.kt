@@ -253,9 +253,10 @@ class BudgetGroupRepository @Inject constructor(
             combine(
                 budgetDao.getActiveBudgetsWithCategories(),
                 transactionSplitDao.getTransactionsWithSplitsFiltered(startDate, endDate, currency)
-            ) { groups, allTransactions ->
-                buildSummary(groups, allTransactions, daysElapsed, daysRemaining, currency, daysInMonth)
-            }
+            ) { groups, allTransactions -> groups to allTransactions }
+                .map { (groups, allTransactions) ->
+                    buildSummary(groups, allTransactions, daysElapsed, daysRemaining, currency, daysInMonth)
+                }
         } else {
             flow {
                 val groups = getGroupsForMonth(year, month)
@@ -288,22 +289,8 @@ class BudgetGroupRepository @Inject constructor(
                 budgetDao.getActiveBudgetsWithCategories(),
                 transactionSplitDao.getTransactionsWithSplitsAllCurrencies(startDate, endDate),
                 transactionSplitDao.getTransactionsWithSplitsAllCurrencies(prevStartDate, prevEndDate)
-            ) { groups, allTransactions, prevTransactions ->
-                BudgetGroupSpendingRaw(
-                    budgetsWithCategories = groups,
-                    allTransactions = allTransactions,
-                    prevTransactions = prevTransactions,
-                    daysElapsed = daysElapsed,
-                    daysRemaining = daysRemaining
-                )
-            }
-        } else {
-            flow {
-                val groups = getGroupsForMonth(year, month)
-                combine(
-                    transactionSplitDao.getTransactionsWithSplitsAllCurrencies(startDate, endDate),
-                    transactionSplitDao.getTransactionsWithSplitsAllCurrencies(prevStartDate, prevEndDate)
-                ) { allTransactions, prevTransactions ->
+            ) { groups, allTransactions, prevTransactions -> Triple(groups, allTransactions, prevTransactions) }
+                .map { (groups, allTransactions, prevTransactions) ->
                     BudgetGroupSpendingRaw(
                         budgetsWithCategories = groups,
                         allTransactions = allTransactions,
@@ -311,7 +298,107 @@ class BudgetGroupRepository @Inject constructor(
                         daysElapsed = daysElapsed,
                         daysRemaining = daysRemaining
                     )
-                }.collect { emit(it) }
+                }
+        } else {
+            flow {
+                val groups = getGroupsForMonth(year, month)
+                combine(
+                    transactionSplitDao.getTransactionsWithSplitsAllCurrencies(startDate, endDate),
+                    transactionSplitDao.getTransactionsWithSplitsAllCurrencies(prevStartDate, prevEndDate)
+                ) { allTransactions, prevTransactions -> allTransactions to prevTransactions }
+                    .map { (allTransactions, prevTransactions) ->
+                        BudgetGroupSpendingRaw(
+                            budgetsWithCategories = groups,
+                            allTransactions = allTransactions,
+                            prevTransactions = prevTransactions,
+                            daysElapsed = daysElapsed,
+                            daysRemaining = daysRemaining
+                        )
+                    }.collect { emit(it) }
+            }
+        }
+    }
+
+    /**
+     * Returns budget spending for an arbitrary financial period defined by [financialStart]/[financialEnd].
+     * Used by HomeViewModel to respect the user's custom month start day setting.
+     */
+    fun getGroupSpending(financialStart: LocalDate, financialEnd: LocalDate, currency: String): Flow<BudgetOverallSummary> {
+        val today = LocalDate.now()
+        val isCurrentPeriod = !today.isBefore(financialStart) && !today.isAfter(financialEnd)
+        val startDateTime = financialStart.atStartOfDay()
+        val endDateTime = financialEnd.atTime(23, 59, 59)
+        val daysInPeriod = (ChronoUnit.DAYS.between(financialStart, financialEnd) + 1).toInt()
+        val daysElapsed = if (isCurrentPeriod) (ChronoUnit.DAYS.between(financialStart, today).toInt() + 1) else daysInPeriod
+        val daysRemaining = if (isCurrentPeriod) (ChronoUnit.DAYS.between(today, financialEnd).toInt() + 1).coerceAtLeast(0) else 0
+
+        return if (isCurrentPeriod) {
+            combine(
+                budgetDao.getActiveBudgetsWithCategories(),
+                transactionSplitDao.getTransactionsWithSplitsFiltered(startDateTime, endDateTime, currency)
+            ) { groups, allTransactions -> groups to allTransactions }
+                .map { (groups, allTransactions) ->
+                    buildSummary(groups, allTransactions, daysElapsed, daysRemaining, currency, daysInPeriod)
+                }
+        } else {
+            flow {
+                val groups = getGroupsForMonth(financialStart.year, financialStart.monthValue)
+                transactionSplitDao.getTransactionsWithSplitsFiltered(startDateTime, endDateTime, currency)
+                    .collect { allTransactions ->
+                        emit(buildSummary(groups, allTransactions, daysElapsed, daysRemaining, currency, daysInPeriod))
+                    }
+            }
+        }
+    }
+
+    /**
+     * Returns raw budget spending for an arbitrary financial period defined by [financialStart]/[financialEnd].
+     * Used by HomeViewModel to respect the user's custom month start day setting.
+     */
+    fun getGroupSpendingAllCurrencies(financialStart: LocalDate, financialEnd: LocalDate): Flow<BudgetGroupSpendingRaw> {
+        val today = LocalDate.now()
+        val isCurrentPeriod = !today.isBefore(financialStart) && !today.isAfter(financialEnd)
+        val startDateTime = financialStart.atStartOfDay()
+        val endDateTime = financialEnd.atTime(23, 59, 59)
+        val daysInPeriod = (ChronoUnit.DAYS.between(financialStart, financialEnd) + 1).toInt()
+        val daysElapsed = if (isCurrentPeriod) (ChronoUnit.DAYS.between(financialStart, today).toInt() + 1) else daysInPeriod
+        val daysRemaining = if (isCurrentPeriod) (ChronoUnit.DAYS.between(today, financialEnd).toInt() + 1).coerceAtLeast(0) else 0
+        val prevEnd = financialStart.minusDays(1)
+        val prevStart = prevEnd.minusDays((daysInPeriod - 1).toLong())
+        val prevStartDateTime = prevStart.atStartOfDay()
+        val prevEndDateTime = prevEnd.atTime(23, 59, 59)
+
+        return if (isCurrentPeriod) {
+            combine(
+                budgetDao.getActiveBudgetsWithCategories(),
+                transactionSplitDao.getTransactionsWithSplitsAllCurrencies(startDateTime, endDateTime),
+                transactionSplitDao.getTransactionsWithSplitsAllCurrencies(prevStartDateTime, prevEndDateTime)
+            ) { groups, allTransactions, prevTransactions -> Triple(groups, allTransactions, prevTransactions) }
+                .map { (groups, allTransactions, prevTransactions) ->
+                    BudgetGroupSpendingRaw(
+                        budgetsWithCategories = groups,
+                        allTransactions = allTransactions,
+                        prevTransactions = prevTransactions,
+                        daysElapsed = daysElapsed,
+                        daysRemaining = daysRemaining
+                    )
+                }
+        } else {
+            flow {
+                val groups = getGroupsForMonth(financialStart.year, financialStart.monthValue)
+                combine(
+                    transactionSplitDao.getTransactionsWithSplitsAllCurrencies(startDateTime, endDateTime),
+                    transactionSplitDao.getTransactionsWithSplitsAllCurrencies(prevStartDateTime, prevEndDateTime)
+                ) { allTransactions, prevTransactions -> allTransactions to prevTransactions }
+                    .map { (allTransactions, prevTransactions) ->
+                        BudgetGroupSpendingRaw(
+                            budgetsWithCategories = groups,
+                            allTransactions = allTransactions,
+                            prevTransactions = prevTransactions,
+                            daysElapsed = daysElapsed,
+                            daysRemaining = daysRemaining
+                        )
+                    }.collect { emit(it) }
             }
         }
     }
@@ -331,12 +418,13 @@ class BudgetGroupRepository @Inject constructor(
             acc + tx.transaction.amount
         }
 
-        // Build category → amount map from all transactions (not just expenses)
+        // Build category → amount map from primary category or split lines only.
+        // transaction_categories junction rows are tags (filter/insights) and must not add amounts.
         val categoryAmounts = mutableMapOf<String, BigDecimal>()
         allTransactions.forEach { txWithSplits ->
-            if (txWithSplits.transaction.transactionType != TransactionType.INCOME &&
-                txWithSplits.transaction.transactionType != TransactionType.TRANSFER &&
-                txWithSplits.transaction.transactionType != TransactionType.INVESTMENT) {
+            val tx = txWithSplits.transaction
+            if (tx.transactionType != TransactionType.INCOME &&
+                tx.transactionType != TransactionType.TRANSFER) {
                 txWithSplits.getAmountByCategory().forEach { (category, amount) ->
                     val categoryName = category.ifEmpty { "Others" }
                     categoryAmounts[categoryName] = (categoryAmounts[categoryName] ?: BigDecimal.ZERO) + amount
@@ -378,7 +466,6 @@ class BudgetGroupRepository @Inject constructor(
                 val tx = txWithSplits.transaction
                 if (tx.transactionType != TransactionType.INCOME &&
                     tx.transactionType != TransactionType.TRANSFER &&
-                    tx.transactionType != TransactionType.INVESTMENT &&
                     tx.loanId == null
                 ) {
                     val day = tx.dateTime.dayOfMonth.coerceIn(1, daysInMonth)
@@ -524,6 +611,9 @@ class BudgetGroupRepository @Inject constructor(
     }
 
     suspend fun createSmartDefaults(baseCurrency: String) {
+        // Guard: do nothing if budget groups already exist
+        if (budgetDao.getActiveGroupCount() > 0) return
+
         // Default amounts based on typical monthly spending
         // Users can customize these after creation
         val isINR = baseCurrency.uppercase() == "INR" || baseCurrency == "₹"

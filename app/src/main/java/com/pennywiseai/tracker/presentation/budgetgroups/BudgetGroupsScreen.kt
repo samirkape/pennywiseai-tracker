@@ -57,7 +57,6 @@ import ir.ehsannarmani.compose_charts.models.*
 import kotlinx.coroutines.delay
 import java.math.BigDecimal
 import java.time.YearMonth
-import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -126,13 +125,21 @@ fun BudgetGroupsScreen(
                 uiState = uiState,
                 onPreviousMonth = { viewModel.selectPreviousMonth() },
                 onNextMonth = { viewModel.selectNextMonth() },
+                onToggleMonthMode = { viewModel.toggleMonthViewMode() },
                 onGroupClick = { groupId -> onNavigateToGroupEdit(groupId) },
                 onDeleteGroup = { groupId -> viewModel.deleteGroup(groupId) },
                 onMoveGroupUp = { groupId -> viewModel.moveGroupUp(groupId) },
                 onMoveGroupDown = { groupId -> viewModel.moveGroupDown(groupId) },
                 onCategoryClick = { category ->
-                    val yearMonth = "%04d-%02d".format(uiState.selectedYear, uiState.selectedMonth)
-                    onNavigateToCategory(category, yearMonth, uiState.currency)
+                    val now = java.time.YearMonth.now()
+                    val isCurrentMonth =
+                        uiState.selectedYear == now.year && uiState.selectedMonth == now.monthValue
+                    val period = if (uiState.useFinancialMonth && isCurrentMonth) {
+                        com.pennywiseai.tracker.presentation.common.TimePeriod.THIS_MONTH.name
+                    } else {
+                        "%04d-%02d".format(uiState.selectedYear, uiState.selectedMonth)
+                    }
+                    onNavigateToCategory(category, period, uiState.currency)
                 }
             )
         }
@@ -207,6 +214,7 @@ private fun BudgetGroupsContent(
     uiState: BudgetGroupsUiState,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
+    onToggleMonthMode: () -> Unit,
     onGroupClick: (Long) -> Unit,
     onDeleteGroup: (Long) -> Unit,
     onMoveGroupUp: (Long) -> Unit,
@@ -257,12 +265,30 @@ private fun BudgetGroupsContent(
                 )
             ) {
                 MonthSelector(
-                    year = uiState.selectedYear,
-                    month = uiState.selectedMonth,
+                    periodLabel = uiState.periodLabel,
                     isCurrentMonth = isCurrentMonth,
+                    useFinancialMonth = uiState.useFinancialMonth,
                     onPrevious = onPreviousMonth,
-                    onNext = onNextMonth
+                    onNext = onNextMonth,
+                    onToggleMode = onToggleMonthMode
                 )
+            }
+        }
+
+        // Hero Summary Tile
+        item {
+            val visible = remember { mutableStateOf(hasAnimated) }
+            LaunchedEffect(Unit) {
+                if (!hasAnimated) { delay(50); visible.value = true }
+            }
+            AnimatedVisibility(
+                visible = visible.value,
+                enter = fadeIn(tween(300)) + slideInVertically(
+                    initialOffsetY = { slideOffsetPx },
+                    animationSpec = tween(300)
+                )
+            ) {
+                BudgetHeroTile(summary = summary, currency = uiState.currency)
             }
         }
 
@@ -329,60 +355,83 @@ private fun BudgetGroupsContent(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MonthSelector(
-    year: Int,
-    month: Int,
+    periodLabel: String,
     isCurrentMonth: Boolean,
+    useFinancialMonth: Boolean,
     onPrevious: () -> Unit,
-    onNext: () -> Unit
+    onNext: () -> Unit,
+    onToggleMode: () -> Unit
 ) {
-    val yearMonth = YearMonth.of(year, month)
-    val formatter = DateTimeFormatter.ofPattern("MMMM yyyy")
-
-    Row(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
-        FilledTonalIconButton(
-            onClick = onPrevious,
-            modifier = Modifier.size(36.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.Default.ChevronLeft,
-                contentDescription = "Previous month",
-                modifier = Modifier.size(Dimensions.Icon.medium)
-            )
+            FilledTonalIconButton(
+                onClick = onPrevious,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    Icons.Default.ChevronLeft,
+                    contentDescription = "Previous month",
+                    modifier = Modifier.size(Dimensions.Icon.medium)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(Spacing.md))
+
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.secondaryContainer
+            ) {
+                Text(
+                    text = periodLabel,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(Spacing.md))
+
+            FilledTonalIconButton(
+                onClick = onNext,
+                enabled = !isCurrentMonth,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = "Next month",
+                    modifier = Modifier.size(Dimensions.Icon.medium)
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.width(Spacing.md))
-
-        Surface(
-            shape = RoundedCornerShape(50),
-            color = MaterialTheme.colorScheme.secondaryContainer
-        ) {
-            Text(
-                text = yearMonth.format(formatter),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm)
-            )
-        }
-
-        Spacer(modifier = Modifier.width(Spacing.md))
-
-        FilledTonalIconButton(
-            onClick = onNext,
-            enabled = !isCurrentMonth,
-            modifier = Modifier.size(36.dp)
-        ) {
-            Icon(
-                Icons.Default.ChevronRight,
-                contentDescription = "Next month",
-                modifier = Modifier.size(Dimensions.Icon.medium)
-            )
+        // Mode toggle — only relevant for current month
+        if (isCurrentMonth) {
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.height(32.dp)) {
+                SegmentedButton(
+                    selected = useFinancialMonth,
+                    onClick = { if (!useFinancialMonth) onToggleMode() },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                    label = { Text("Pay Period", style = MaterialTheme.typography.labelSmall) }
+                )
+                SegmentedButton(
+                    selected = !useFinancialMonth,
+                    onClick = { if (useFinancialMonth) onToggleMode() },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                    label = { Text("Calendar", style = MaterialTheme.typography.labelSmall) }
+                )
+            }
         }
     }
 }
@@ -737,6 +786,181 @@ private fun BudgetCard(
                             }
                         }
                     }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BudgetHeroTile(
+    summary: BudgetOverallSummary,
+    currency: String,
+    modifier: Modifier = Modifier
+) {
+    val overBudgetCount = summary.groups.count { it.remaining < BigDecimal.ZERO && it.totalBudget > BigDecimal.ZERO }
+    val hasLimitBudgets = summary.totalLimitBudget > BigDecimal.ZERO
+    val overallPct = if (hasLimitBudgets) {
+        (summary.totalLimitSpent.toFloat() / summary.totalLimitBudget.toFloat() * 100f).coerceAtLeast(0f)
+    } else 0f
+    val isOverall = summary.totalLimitSpent > summary.totalLimitBudget
+
+    val statusColor: Color = when {
+        overallPct >= 90f -> MaterialTheme.colorScheme.error
+        overallPct >= 70f -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.primary
+    }
+
+    var animatedProgress by remember { mutableFloatStateOf(0f) }
+    val animatedProgressState by animateFloatAsState(
+        targetValue = animatedProgress,
+        animationSpec = tween(durationMillis = 900),
+        label = "heroProgressAnimation"
+    )
+    LaunchedEffect(overallPct) {
+        animatedProgress = (overallPct / 100f).coerceIn(0f, 1f)
+    }
+
+    PennyWiseCardV2(
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            // Header row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Overall Budget",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (hasLimitBudgets) {
+                    Text(
+                        text = "${overallPct.toInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier
+                            .background(color = statusColor, shape = RoundedCornerShape(50))
+                            .padding(horizontal = Spacing.sm, vertical = 2.dp)
+                    )
+                }
+            }
+
+            // Primary hero number
+            if (hasLimitBudgets) {
+                val remainingAbs = (summary.totalLimitBudget - summary.totalLimitSpent).abs()
+                Text(
+                    text = if (isOverall) {
+                        "${CurrencyFormatter.formatCurrency(remainingAbs, currency)} over budget"
+                    } else {
+                        "${CurrencyFormatter.formatCurrency(summary.totalLimitBudget - summary.totalLimitSpent, currency)} remaining"
+                    },
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    color = statusColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                // Overall progress bar
+                val barShape = RoundedCornerShape(50)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(barShape)
+                        .background(statusColor.copy(alpha = 0.15f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(fraction = animatedProgressState)
+                            .fillMaxHeight()
+                            .clip(barShape)
+                            .background(statusColor)
+                    )
+                }
+
+                // Spent of total
+                Text(
+                    text = "Spent ${CurrencyFormatter.formatCurrency(summary.totalLimitSpent, currency)} of ${CurrencyFormatter.formatCurrency(summary.totalLimitBudget, currency)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // Metrics row: savings rate · daily allowance · days left
+            val hasSavings = summary.savingsRate > 0f || summary.netSavings > BigDecimal.ZERO
+            if (hasSavings || summary.daysRemaining > 0 || summary.dailyAllowance > BigDecimal.ZERO) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+                ) {
+                    if (hasSavings) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Net Saved",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = CurrencyFormatter.formatCurrency(summary.netSavings, currency),
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "${summary.savingsRate.toInt()}% saved",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    if (summary.dailyAllowance > BigDecimal.ZERO) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Daily Budget",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = CurrencyFormatter.formatCurrency(summary.dailyAllowance, currency),
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "${summary.daysRemaining} days left",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    if (overBudgetCount > 0) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Breached",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "$overBudgetCount",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                text = if (overBudgetCount == 1) "budget over" else "budgets over",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }

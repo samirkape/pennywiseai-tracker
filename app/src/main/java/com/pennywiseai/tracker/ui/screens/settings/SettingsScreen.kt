@@ -1,7 +1,6 @@
 package com.pennywiseai.tracker.ui.screens.settings
 
 import android.content.Intent
-import android.net.Uri
 import android.provider.Settings
 import android.util.Log
 import androidx.compose.animation.*
@@ -16,8 +15,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import com.pennywiseai.tracker.ui.effects.overScrollVertical
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Help
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -30,12 +27,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.pennywiseai.tracker.core.Constants
+import com.pennywiseai.tracker.R
+import com.pennywiseai.tracker.utils.DateRangeUtils
 import com.pennywiseai.tracker.ui.components.CustomTitleTopAppBar
 import com.pennywiseai.tracker.ui.components.cards.SectionHeaderV2
 import com.pennywiseai.tracker.ui.theme.Dimensions
@@ -60,10 +59,6 @@ import com.pennywiseai.tracker.ui.theme.purple_light
 import com.pennywiseai.tracker.ui.theme.purple_dark
 import com.pennywiseai.tracker.ui.theme.cyan_light
 import com.pennywiseai.tracker.ui.theme.cyan_dark
-import com.pennywiseai.tracker.ui.theme.yellow_light
-import com.pennywiseai.tracker.ui.theme.yellow_dark
-import com.pennywiseai.tracker.ui.theme.grey_light
-import com.pennywiseai.tracker.ui.theme.grey_dark
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import com.pennywiseai.tracker.ui.viewmodel.ThemeViewModel
@@ -79,7 +74,6 @@ fun SettingsScreen(
     onNavigateToCategories: () -> Unit = {},
     onNavigateToUnrecognizedSms: () -> Unit = {},
     onNavigateToManageAccounts: () -> Unit = {},
-    onNavigateToFaq: () -> Unit = {},
     onNavigateToRules: () -> Unit = {},
     onNavigateToBudgets: () -> Unit = {},
     onNavigateToLoans: () -> Unit = {},
@@ -87,20 +81,17 @@ fun SettingsScreen(
     onNavigateToExchangeRates: () -> Unit = {},
     onNavigateToAppearance: () -> Unit = {},
     onNavigateToImportStatement: () -> Unit = {},
+    onNavigateToPayPeriodSettings: () -> Unit = {},
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     appLockViewModel: com.pennywiseai.tracker.ui.viewmodel.AppLockViewModel = hiltViewModel(),
     permissionViewModel: com.pennywiseai.tracker.ui.viewmodel.PermissionViewModel = hiltViewModel()
 ) {
     val themeUiState by themeViewModel.themeUiState.collectAsStateWithLifecycle()
     val appLockUiState by appLockViewModel.uiState.collectAsStateWithLifecycle()
-    val downloadState by settingsViewModel.downloadState.collectAsStateWithLifecycle()
-    val downloadProgress by settingsViewModel.downloadProgress.collectAsStateWithLifecycle()
-    val downloadedMB by settingsViewModel.downloadedMB.collectAsStateWithLifecycle()
-    val totalMB by settingsViewModel.totalMB.collectAsStateWithLifecycle()
-    val isDeveloperModeEnabled by settingsViewModel.isDeveloperModeEnabled.collectAsStateWithLifecycle(initialValue = false)
     val smsScanMonths by settingsViewModel.smsScanMonths.collectAsStateWithLifecycle(initialValue = 3)
     val smsScanAllTime by settingsViewModel.smsScanAllTime.collectAsStateWithLifecycle(initialValue = false)
     val baseCurrency by settingsViewModel.baseCurrency.collectAsStateWithLifecycle(initialValue = "")
+    val monthStartDay by settingsViewModel.monthStartDay.collectAsStateWithLifecycle(initialValue = 1)
     val importExportMessage by settingsViewModel.importExportMessage.collectAsStateWithLifecycle()
     val exportedBackupFile by settingsViewModel.exportedBackupFile.collectAsStateWithLifecycle()
     val unifiedCurrencyMode by settingsViewModel.unifiedCurrencyMode.collectAsStateWithLifecycle(initialValue = false)
@@ -168,7 +159,8 @@ fun SettingsScreen(
                 .overScrollVertical()
                 .verticalScroll(rememberScrollState())
                 .padding(paddingValues)
-                .padding(Dimensions.Padding.content),
+                .padding(Dimensions.Padding.content)
+                .padding(bottom = Dimensions.Component.bottomBarHeight + Spacing.md),
             verticalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
             // ── Personalization ──
@@ -228,7 +220,7 @@ fun SettingsScreen(
                     currentValue = "${CurrencyFormatter.getCurrencySymbol(baseCurrency)} $baseCurrency",
                     expanded = showCurrencyDropdown,
                     onExpandedChange = { showCurrencyDropdown = it },
-                    position = ItemPosition.BOTTOM
+                    position = ItemPosition.MIDDLE
                 ) {
                     availableCurrencies.forEach { currency ->
                         DropdownMenuItem(
@@ -251,6 +243,20 @@ fun SettingsScreen(
                         )
                     }
                 }
+                SettingsNavItem(
+                    icon = Icons.Default.CalendarToday,
+                    iconBgColor = purple_light,
+                    iconTint = purple_dark,
+                    title = stringResource(R.string.pay_period_settings_title),
+                    subtitle = stringResource(R.string.pay_period_settings_subtitle),
+                    onClick = onNavigateToPayPeriodSettings,
+                    position = ItemPosition.BOTTOM,
+                    trailingText = if (monthStartDay == 1 || monthStartDay == DateRangeUtils.LAST_DAY_SENTINEL) {
+                        if (monthStartDay == DateRangeUtils.LAST_DAY_SENTINEL) "Last day" else "1st"
+                    } else {
+                        "${monthStartDay}th"
+                    }
+                )
             }
 
             // ── Security ──
@@ -411,66 +417,10 @@ fun SettingsScreen(
                 )
             }
 
-            // ── AI Features ──
-            SectionHeaderV2(title = "AI Features")
-            SettingsGroup {
-                AiChatSettingsItem(
-                    downloadState = downloadState,
-                    downloadProgress = downloadProgress,
-                    downloadedMB = downloadedMB,
-                    totalMB = totalMB,
-                    onDownload = { settingsViewModel.startModelDownload() },
-                    onCancel = { settingsViewModel.cancelDownload() },
-                    onDelete = { settingsViewModel.deleteModel() }
-                )
-            }
-
-            // ── Developer ──
-            SectionHeaderV2(title = "Developer")
-            SettingsGroup {
-                SettingsSwitchRow(
-                    icon = Icons.Default.Code,
-                    iconBgColor = grey_light,
-                    iconTint = grey_dark,
-                    title = "Developer Mode",
-                    subtitle = "Show technical information in chat",
-                    checked = isDeveloperModeEnabled,
-                    onCheckedChange = { settingsViewModel.toggleDeveloperMode(it) },
-                    position = ItemPosition.SINGLE
-                )
-            }
-
-            // ── Support & Community ──
-            SectionHeaderV2(title = "Support & Community")
-            SettingsGroup {
-                SettingsNavItem(
-                    icon = Icons.AutoMirrored.Filled.Help,
-                    iconBgColor = pink_light,
-                    iconTint = pink_dark,
-                    title = "Help & FAQ",
-                    subtitle = "Frequently asked questions and help",
-                    onClick = onNavigateToFaq,
-                    position = ItemPosition.TOP
-                )
-                SettingsNavItem(
-                    icon = Icons.Default.BugReport,
-                    iconBgColor = blue_light,
-                    iconTint = blue_dark,
-                    title = "Report an Issue",
-                    subtitle = "Submit bug reports on GitHub",
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/sarim2000/pennywiseai-tracker/issues/new/choose"))
-                        context.startActivity(intent)
-                    },
-                    position = ItemPosition.BOTTOM,
-                    trailingIcon = Icons.AutoMirrored.Filled.OpenInNew
-                )
-            }
-
             // App Version
             Spacer(modifier = Modifier.height(Spacing.sm))
             Text(
-                text = "PennyWise v${com.pennywiseai.tracker.BuildConfig.VERSION_NAME}",
+                text = "SpendTracker PRO v${com.pennywiseai.tracker.BuildConfig.VERSION_NAME}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
@@ -622,7 +572,7 @@ fun SettingsScreen(
         val timestamp = java.time.LocalDateTime.now().format(
             java.time.format.DateTimeFormatter.ofPattern("yyyy_MM_dd_HHmmss")
         )
-        val fileName = "PennyWise_Backup_$timestamp.pennywisebackup"
+        val fileName = "SpendTracker_PRO_Backup_$timestamp.pennywisebackup"
 
         AlertDialog(
             onDismissRequest = {
@@ -955,170 +905,6 @@ private fun SettingsDropdownItem(
                     expanded = expanded,
                     onDismissRequest = { onExpandedChange(false) },
                     content = dropdownContent
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun AiChatSettingsItem(
-    downloadState: DownloadState,
-    downloadProgress: Int,
-    downloadedMB: Long,
-    totalMB: Long,
-    onDownload: () -> Unit,
-    onCancel: () -> Unit,
-    onDelete: () -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(Spacing.md),
-            verticalArrangement = Arrangement.spacedBy(Spacing.md)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(yellow_light),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = yellow_dark, modifier = Modifier.size(Dimensions.Icon.medium))
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "AI Chat Assistant",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = when (downloadState) {
-                            DownloadState.NOT_DOWNLOADED -> "Download AI model (${Constants.ModelDownload.MODEL_SIZE_MB} MB)"
-                            DownloadState.DOWNLOADING -> "Downloading AI model..."
-                            DownloadState.PAUSED -> "Download interrupted"
-                            DownloadState.COMPLETED -> "AI model ready for chat"
-                            DownloadState.FAILED -> "Download failed"
-                            DownloadState.ERROR_INSUFFICIENT_SPACE -> "Not enough storage space"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                when (downloadState) {
-                    DownloadState.NOT_DOWNLOADED -> {
-                        Button(onClick = onDownload) {
-                            Icon(Icons.Default.Download, contentDescription = null)
-                            Spacer(modifier = Modifier.width(Spacing.xs))
-                            Text("Download")
-                        }
-                    }
-                    DownloadState.DOWNLOADING -> {
-                        Text(
-                            text = "$downloadProgress%",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    DownloadState.PAUSED -> {
-                        Button(onClick = onDownload) {
-                            Icon(Icons.Default.Download, contentDescription = null)
-                            Spacer(modifier = Modifier.width(Spacing.xs))
-                            Text("Retry")
-                        }
-                    }
-                    DownloadState.COMPLETED -> {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.CheckCircle,
-                                contentDescription = "Downloaded",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(Dimensions.Icon.medium)
-                            )
-                            TextButton(onClick = onDelete) {
-                                Text("Delete")
-                            }
-                        }
-                    }
-                    DownloadState.FAILED -> {
-                        Button(
-                            onClick = onDownload,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.error
-                            )
-                        ) {
-                            Icon(Icons.Default.Refresh, contentDescription = null)
-                            Spacer(modifier = Modifier.width(Spacing.xs))
-                            Text("Retry")
-                        }
-                    }
-                    DownloadState.ERROR_INSUFFICIENT_SPACE -> {
-                        Icon(
-                            Icons.Default.Error,
-                            contentDescription = "Error",
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(Dimensions.Icon.medium)
-                        )
-                    }
-                }
-            }
-
-            // Progress details during download
-            AnimatedVisibility(
-                visible = downloadState == DownloadState.DOWNLOADING,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-                ) {
-                    LinearProgressIndicator(
-                        progress = { downloadProgress / 100f },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text(
-                        text = "$downloadedMB MB / $totalMB MB",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Button(
-                        onClick = onCancel,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Icon(Icons.Default.Cancel, contentDescription = null)
-                        Spacer(modifier = Modifier.width(Spacing.xs))
-                        Text("Cancel Download")
-                    }
-                }
-            }
-
-            // Info about AI features
-            if (downloadState == DownloadState.NOT_DOWNLOADED ||
-                downloadState == DownloadState.ERROR_INSUFFICIENT_SPACE
-            ) {
-                HorizontalDivider()
-                Text(
-                    text = "Chat with AI about your expenses and get financial insights. " +
-                            "All conversations stay private on your device.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

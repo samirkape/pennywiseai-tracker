@@ -58,10 +58,10 @@ class TransactionGroupDetailViewModel @Inject constructor(
         viewModelScope.launch {
             repository.getTransactionsForGroup(groupId).collect { txns ->
                 val expense = txns
-                    .filter { it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT }
+                    .filter { !it.isExcludedFromTracking && (it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT) }
                     .fold(BigDecimal.ZERO) { acc, t -> acc + t.amount }
                 val income = txns
-                    .filter { it.transactionType == TransactionType.INCOME }
+                    .filter { !it.isExcludedFromTracking && it.transactionType == TransactionType.INCOME }
                     .fold(BigDecimal.ZERO) { acc, t -> acc + t.amount }
                 _uiState.value = _uiState.value.copy(
                     linkedTransactions = txns,

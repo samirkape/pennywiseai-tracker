@@ -116,6 +116,15 @@ class UserPreferencesRepository @Inject constructor(
         val PROFILE_BACKGROUND_COLOR = intPreferencesKey("profile_background_color")
         val HAS_COMPLETED_ONBOARDING = booleanPreferencesKey("has_completed_onboarding")
         val MAIN_ACCOUNT_KEY = stringPreferencesKey("main_account_key")
+
+        // Financial Month
+        val MONTH_START_DAY = intPreferencesKey("month_start_day")
+        val USE_FINANCIAL_MONTH = booleanPreferencesKey("use_financial_month")
+        val USE_FIXED_BUDGET_PERIOD_END = booleanPreferencesKey("use_fixed_budget_period_end")
+        val BUDGET_PERIOD_END_DAY = intPreferencesKey("budget_period_end_day")
+
+        // Pay-period suggestion dismissals: set of "YYYY-MM:dayOfMonth"
+        val DISMISSED_SALARY_SUGGESTIONS = stringPreferencesKey("dismissed_salary_suggestions")
     }
 
     val userPreferences: Flow<UserPreferences> = context.dataStore.data
@@ -634,6 +643,100 @@ class UserPreferencesRepository @Inject constructor(
             } else {
                 preferences[PreferencesKeys.MAIN_ACCOUNT_KEY] = accountKey
             }
+        }
+    }
+
+    // Salary day: 0 means "Last day of month" (see DateRangeUtils.LAST_DAY_SENTINEL),
+    // otherwise 1..31. Default 1 = calendar month start.
+    val monthStartDay: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.MONTH_START_DAY] ?: 1
+        }
+
+    suspend fun updateMonthStartDay(day: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.MONTH_START_DAY] = day.coerceIn(0, 31)
+        }
+    }
+
+    // Whether to use financial (pay period) month boundaries instead of calendar month (default: true)
+    val useFinancialMonth: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.USE_FINANCIAL_MONTH] ?: true
+        }
+
+    suspend fun updateUseFinancialMonth(useFinancial: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.USE_FINANCIAL_MONTH] = useFinancial
+        }
+    }
+
+    /**
+     * When true (and [useFinancialMonth] is on), the budget period uses a recurring
+     * [budgetPeriodEndDay] instead of ending the day before the next period start.
+     */
+    val useFixedBudgetPeriodEnd: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.USE_FIXED_BUDGET_PERIOD_END] ?: false
+        }
+
+    suspend fun setUseFixedBudgetPeriodEnd(useFixed: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.USE_FIXED_BUDGET_PERIOD_END] = useFixed
+        }
+    }
+
+    /**
+     * Day-of-month for the end of a fixed pay-month window (1–31 or [DateRangeUtils.LAST_DAY_SENTINEL]).
+     * Only used when [useFixedBudgetPeriodEnd] is true.
+     */
+    val budgetPeriodEndDay: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.BUDGET_PERIOD_END_DAY] ?: 31
+        }
+
+    suspend fun updateBudgetPeriodEndDay(day: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.BUDGET_PERIOD_END_DAY] = day.coerceIn(0, 31)
+        }
+    }
+
+    /**
+     * Atomically applies recurring pay-month DOM anchors and enables fixed end + financial month.
+     * Avoids multiple [edit] calls racing each other and the UI.
+     */
+    suspend fun applyFixedPayMonthDom(startDayOfMonth: Int, endDayOfMonth: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.MONTH_START_DAY] = startDayOfMonth.coerceIn(0, 31)
+            preferences[PreferencesKeys.BUDGET_PERIOD_END_DAY] = endDayOfMonth.coerceIn(0, 31)
+            preferences[PreferencesKeys.USE_FIXED_BUDGET_PERIOD_END] = true
+            preferences[PreferencesKeys.USE_FINANCIAL_MONTH] = true
+        }
+    }
+
+
+    /**
+     * Dismissed pay-period suggestions, stored as a "|"-joined set of
+     * "YYYY-MM:dayOfMonth" tokens so users aren't re-pestered after declining.
+     */
+    val dismissedSalarySuggestions: Flow<Set<String>> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.DISMISSED_SALARY_SUGGESTIONS]
+                ?.split('|')
+                ?.filter { it.isNotBlank() }
+                ?.toSet()
+                ?: emptySet()
+        }
+
+    suspend fun dismissSalarySuggestion(token: String) {
+        context.dataStore.edit { preferences ->
+            val current = preferences[PreferencesKeys.DISMISSED_SALARY_SUGGESTIONS]
+                ?.split('|')
+                ?.filter { it.isNotBlank() }
+                ?.toMutableSet()
+                ?: mutableSetOf()
+            current.add(token)
+            preferences[PreferencesKeys.DISMISSED_SALARY_SUGGESTIONS] = current.joinToString("|")
         }
     }
 }

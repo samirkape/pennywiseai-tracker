@@ -28,7 +28,9 @@ import java.math.BigDecimal
 data class SplitItem(
     val id: Long = 0,
     val category: String,
-    val amount: BigDecimal
+    val amount: BigDecimal,
+    /** Additional personal tags for labeling. Does not affect budget accounting. */
+    val tags: List<String> = emptyList()
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -68,7 +70,6 @@ fun SplitEditor(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
-
                 TextButton(
                     onClick = onRemoveSplits,
                     colors = ButtonDefaults.textButtonColors(
@@ -81,11 +82,13 @@ fun SplitEditor(
 
             // Split rows
             splits.forEachIndexed { index, split ->
+                val isLastSplit = index == splits.size - 1
                 SplitRow(
                     split = split,
                     availableCategories = availableCategories.filter { cat ->
                         cat == split.category || splits.none { it.category == cat }
                     },
+                    availableTags = availableCategories.filter { it != split.category },
                     onCategoryChanged = { newCategory ->
                         val newSplits = splits.toMutableList()
                         newSplits[index] = split.copy(category = newCategory)
@@ -94,6 +97,20 @@ fun SplitEditor(
                     onAmountChanged = { newAmount ->
                         val newSplits = splits.toMutableList()
                         newSplits[index] = split.copy(amount = newAmount)
+                        // Auto-adjust the last split when editing any non-last split
+                        if (!isLastSplit && newSplits.size >= 2) {
+                            val sumExceptLast = newSplits.dropLast(1)
+                                .fold(BigDecimal.ZERO) { acc, s -> acc + s.amount }
+                            val autoAmount = (totalAmount - sumExceptLast)
+                                .coerceAtLeast(BigDecimal.ZERO)
+                            newSplits[newSplits.size - 1] =
+                                newSplits.last().copy(amount = autoAmount)
+                        }
+                        onSplitsChanged(newSplits)
+                    },
+                    onTagsChanged = { newTags ->
+                        val newSplits = splits.toMutableList()
+                        newSplits[index] = split.copy(tags = newTags)
                         onSplitsChanged(newSplits)
                     },
                     onRemove = {
@@ -167,11 +184,8 @@ fun SplitEditor(
                         text = CurrencyFormatter.formatCurrency(splitsTotal, currency),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = if (isBalanced) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.error
-                        }
+                        color = if (isBalanced) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.error
                     )
                     if (!isBalanced) {
                         Text(
@@ -190,48 +204,96 @@ fun SplitEditor(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun SplitRow(
     split: SplitItem,
     availableCategories: List<String>,
+    availableTags: List<String>,
     onCategoryChanged: (String) -> Unit,
     onAmountChanged: (BigDecimal) -> Unit,
+    onTagsChanged: (List<String>) -> Unit,
     onRemove: () -> Unit,
     canRemove: Boolean,
     currency: String,
     modifier: Modifier = Modifier
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var categoryExpanded by remember { mutableStateOf(false) }
+    var tagExpanded by remember { mutableStateOf(false) }
     var amountText by remember(split.amount) {
-        mutableStateOf(if (split.amount == BigDecimal.ZERO) "" else split.amount.stripTrailingZeros().toPlainString())
+        mutableStateOf(
+            if (split.amount == BigDecimal.ZERO) ""
+            else split.amount.stripTrailingZeros().toPlainString()
+        )
     }
 
-    Row(
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             .padding(Spacing.sm),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
     ) {
-        // Category dropdown
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = it },
-            modifier = Modifier.weight(1f)
+        // Category + amount + remove
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            ExposedDropdownMenuBox(
+                expanded = categoryExpanded,
+                onExpandedChange = { categoryExpanded = it },
+                modifier = Modifier.weight(1f)
+            ) {
+                TextField(
+                    value = split.category,
+                    onValueChange = {},
+                    readOnly = true,
+                    singleLine = true,
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent
+                    )
+                )
+                ExposedDropdownMenu(
+                    expanded = categoryExpanded,
+                    onDismissRequest = { categoryExpanded = false }
+                ) {
+                    availableCategories.forEach { category ->
+                        DropdownMenuItem(
+                            text = { Text(category, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            onClick = {
+                                onCategoryChanged(category)
+                                categoryExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
             TextField(
-                value = split.category,
-                onValueChange = {},
-                readOnly = true,
+                value = amountText,
+                onValueChange = { newValue ->
+                    val filtered = newValue.filter { it.isDigit() || it == '.' }
+                    if (filtered.count { it == '.' } <= 1) {
+                        amountText = filtered
+                        onAmountChanged(filtered.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+                    }
+                },
                 singleLine = true,
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth(),
+                modifier = Modifier.width(120.dp),
                 textStyle = MaterialTheme.typography.bodyMedium,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                prefix = {
+                    Text(CurrencyFormatter.getCurrencySymbol(currency), style = MaterialTheme.typography.bodyMedium)
+                },
                 shape = RoundedCornerShape(12.dp),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -241,74 +303,64 @@ private fun SplitRow(
                 )
             )
 
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
+            IconButton(
+                onClick = onRemove,
+                enabled = canRemove,
+                modifier = Modifier.size(Dimensions.Component.minTouchTarget)
             ) {
-                availableCategories.forEach { category ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = category,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        },
-                        onClick = {
-                            onCategoryChanged(category)
-                            expanded = false
-                        }
-                    )
-                }
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Remove split",
+                    tint = if (canRemove) MaterialTheme.colorScheme.error
+                           else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                    modifier = Modifier.size(Dimensions.Icon.medium)
+                )
             }
         }
 
-        // Amount field
-        TextField(
-            value = amountText,
-            onValueChange = { newValue ->
-                val filtered = newValue.filter { it.isDigit() || it == '.' }
-                if (filtered.count { it == '.' } <= 1) {
-                    amountText = filtered
-                    val parsedAmount = filtered.toBigDecimalOrNull() ?: BigDecimal.ZERO
-                    onAmountChanged(parsedAmount)
-                }
-            },
-            singleLine = true,
-            modifier = Modifier.width(120.dp),
-            textStyle = MaterialTheme.typography.bodyMedium,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            prefix = {
-                Text(
-                    text = CurrencyFormatter.getCurrencySymbol(currency),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            },
-            shape = RoundedCornerShape(12.dp),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent
-            )
-        )
-
-        // Remove button
-        IconButton(
-            onClick = onRemove,
-            enabled = canRemove,
-            modifier = Modifier.size(Dimensions.Component.minTouchTarget)
+        // Tags: existing tag chips + "+" chip to add more
+        val tagsNotYetAdded = availableTags.filter { it !in split.tags }
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xs)
         ) {
-            Icon(
-                Icons.Default.Close,
-                contentDescription = "Remove split",
-                tint = if (canRemove) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                },
-                modifier = Modifier.size(Dimensions.Icon.medium)
-            )
+            split.tags.forEach { tag ->
+                SuggestionChip(
+                    onClick = { onTagsChanged(split.tags - tag) },
+                    label = { Text(tag, style = MaterialTheme.typography.labelSmall) },
+                    icon = {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Remove tag",
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                )
+            }
+
+            if (tagsNotYetAdded.isNotEmpty()) {
+                Box {
+                    SuggestionChip(
+                        onClick = { tagExpanded = true },
+                        label = { Text("+ tag", style = MaterialTheme.typography.labelSmall) }
+                    )
+                    DropdownMenu(
+                        expanded = tagExpanded,
+                        onDismissRequest = { tagExpanded = false }
+                    ) {
+                        tagsNotYetAdded.forEach { tag ->
+                            DropdownMenuItem(
+                                text = { Text(tag, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                onClick = {
+                                    onTagsChanged(split.tags + tag)
+                                    tagExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -345,10 +397,16 @@ fun SplitBreakdownCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = split.category,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = split.category, style = MaterialTheme.typography.bodyMedium)
+                        if (split.tags.isNotEmpty()) {
+                            Text(
+                                text = split.tags.joinToString(" · "),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     Text(
                         text = CurrencyFormatter.formatCurrency(split.amount, currency),
                         style = MaterialTheme.typography.bodyMedium,

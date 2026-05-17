@@ -65,6 +65,7 @@ class BackupExporter @Inject constructor(
         val accountBalances = database.accountBalanceDao().getAllBalances().first()
         val subscriptions = database.subscriptionDao().getAllSubscriptions().first()
         val merchantMappings = database.merchantMappingDao().getAllMappings().first()
+        val merchantAliases = database.merchantAliasDao().getAllAliasesList()
         val unrecognizedSms = database.unrecognizedSmsDao().getAllUnrecognizedSms().first()
         val chatMessages = database.chatDao().getAllMessages().first()
         val rules = database.ruleDao().getAllRules().first()
@@ -74,6 +75,7 @@ class BackupExporter @Inject constructor(
         val budgetCategories = database.budgetDao().getAllBudgetCategories().first()
         val transactionSplits = database.transactionSplitDao().getAllSplits().first()
         val bankNotifications = database.bankNotificationDao().getAllNotifications().first()
+        val salaryMonthOverrides = database.salaryMonthOverrideDao().getAllOverrides().first()
         
         // Get preferences from repository
         val prefs = userPreferencesRepository.userPreferences.first()
@@ -117,6 +119,7 @@ class BackupExporter @Inject constructor(
         val exportedTransactionSplits = if (privacy == ExportPrivacy.FULL) transactionSplits else emptyList()
         val exportedBankNotifications = if (privacy == ExportPrivacy.FULL) bankNotifications else emptyList()
         val exportedRuleApplications = if (privacy == ExportPrivacy.FULL) ruleApplications else emptyList()
+        val exportedSalaryMonthOverrides = if (privacy == ExportPrivacy.FULL) salaryMonthOverrides else emptyList()
         
         return PennyWiseBackup(
             metadata = BackupMetadata(
@@ -147,6 +150,7 @@ class BackupExporter @Inject constructor(
                 accountBalances = accountBalances,
                 subscriptions = subscriptions,
                 merchantMappings = merchantMappings,
+                merchantAliases = merchantAliases,
                 unrecognizedSms = if (privacy == ExportPrivacy.FULL) unrecognizedSms else emptyList(),
                 chatMessages = if (privacy == ExportPrivacy.FULL) chatMessages else emptyList(),
                 rules = exportedRules,
@@ -155,7 +159,8 @@ class BackupExporter @Inject constructor(
                 budgets = exportedBudgets,
                 budgetCategories = exportedBudgetCategories,
                 transactionSplits = exportedTransactionSplits,
-                bankNotifications = exportedBankNotifications
+                bankNotifications = exportedBankNotifications,
+                salaryMonthOverrides = exportedSalaryMonthOverrides
             ),
             preferences = PreferencesSnapshot(
                 theme = ThemePreferences(
@@ -194,7 +199,7 @@ class BackupExporter @Inject constructor(
         val timestamp = LocalDateTime.now().format(
             DateTimeFormatter.ofPattern("yyyy_MM_dd_HHmmss")
         )
-        val fileName = "PennyWise_Backup_$timestamp.pennywisebackup"
+        val fileName = "SpendTracker_PRO_Backup_$timestamp.pennywisebackup"
         
         return File(exportDir, fileName)
     }

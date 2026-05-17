@@ -45,6 +45,7 @@ interface TransactionSplitDao {
     @Query("""
         SELECT * FROM transactions
         WHERE is_deleted = 0
+        AND is_excluded_from_tracking = 0
         AND date_time >= :startDate
         AND date_time <= :endDate
         AND currency = :currency
@@ -60,6 +61,7 @@ interface TransactionSplitDao {
     @Query("""
         SELECT * FROM transactions
         WHERE is_deleted = 0
+        AND is_excluded_from_tracking = 0
         AND date_time >= :startDate
         AND date_time <= :endDate
         ORDER BY date_time DESC

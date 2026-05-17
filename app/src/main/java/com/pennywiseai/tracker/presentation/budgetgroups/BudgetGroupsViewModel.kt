@@ -1,6 +1,7 @@
 package com.pennywiseai.tracker.presentation.budgetgroups
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pennywiseai.tracker.data.currency.CurrencyConversionService
@@ -12,6 +13,8 @@ import com.pennywiseai.tracker.data.repository.BudgetGroupRepository
 import com.pennywiseai.tracker.data.repository.BudgetGroupSpending
 import com.pennywiseai.tracker.data.repository.BudgetGroupSpendingRaw
 import com.pennywiseai.tracker.data.repository.BudgetOverallSummary
+import com.pennywiseai.tracker.data.repository.SalaryMonthOverrideRepository
+import com.pennywiseai.tracker.utils.DateRangeUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -37,7 +40,9 @@ data class BudgetGroupsUiState(
     val selectedMonth: Int = LocalDate.now().monthValue,
     val currency: String = "INR",
     val baseCurrency: String = "INR",
-    val isUnifiedMode: Boolean = false
+    val isUnifiedMode: Boolean = false,
+    val useFinancialMonth: Boolean = true,
+    val periodLabel: String = ""
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -46,7 +51,8 @@ class BudgetGroupsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val budgetGroupRepository: BudgetGroupRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
-    private val currencyConversionService: CurrencyConversionService
+    private val currencyConversionService: CurrencyConversionService,
+    private val salaryMonthOverrideRepository: SalaryMonthOverrideRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BudgetGroupsUiState())
@@ -64,18 +70,68 @@ class BudgetGroupsViewModel @Inject constructor(
                 userPreferencesRepository.baseCurrency,
                 userPreferencesRepository.unifiedCurrencyMode,
                 userPreferencesRepository.displayCurrency,
-                _selectedYearMonth
-            ) { baseCurrency, unifiedMode, displayCurrency, yearMonth ->
-                data class Params(val baseCurrency: String, val unifiedMode: Boolean, val displayCurrency: String, val yearMonth: YearMonth)
-                Params(baseCurrency, unifiedMode, displayCurrency, yearMonth)
+                _selectedYearMonth,
+                userPreferencesRepository.useFinancialMonth,
+                userPreferencesRepository.monthStartDay,
+                userPreferencesRepository.useFixedBudgetPeriodEnd,
+                userPreferencesRepository.budgetPeriodEndDay,
+                salaryMonthOverrideRepository.overridesMap
+            ) { args ->
+                val baseCurrency = args[0] as String
+                val unifiedMode = args[1] as Boolean
+                val displayCurrency = args[2] as String
+                val yearMonth = args[3] as YearMonth
+                val useFinancial = args[4] as Boolean
+                val monthStartDay = args[5] as Int
+                val useFixedEnd = args[6] as Boolean
+                val endDom = args[7] as Int
+                @Suppress("UNCHECKED_CAST")
+                val overrides = args[8] as Map<String, Int>
+                data class Params(
+                    val baseCurrency: String,
+                    val unifiedMode: Boolean,
+                    val displayCurrency: String,
+                    val yearMonth: YearMonth,
+                    val useFinancial: Boolean,
+                    val monthStartDay: Int,
+                    val useFixedEnd: Boolean,
+                    val endDom: Int,
+                    val overrides: Map<String, Int>
+                )
+                Params(
+                    baseCurrency,
+                    unifiedMode,
+                    displayCurrency,
+                    yearMonth,
+                    useFinancial,
+                    monthStartDay,
+                    useFixedEnd,
+                    endDom,
+                    overrides
+                )
             }.collect { params ->
                 val currency = if (params.unifiedMode) params.displayCurrency else params.baseCurrency
+                val isCurrentMonth = params.yearMonth == YearMonth.now()
+                val periodLabel = if (params.useFinancial && isCurrentMonth) {
+                    val (start, end) = DateRangeUtils.calculateBudgetPeriodRange(
+                        LocalDate.now(),
+                        params.monthStartDay,
+                        params.useFixedEnd,
+                        params.endDom,
+                        params.overrides
+                    )
+                    DateRangeUtils.formatDateRange(start, end)
+                } else {
+                    params.yearMonth.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy"))
+                }
                 _uiState.value = _uiState.value.copy(
                     currency = currency,
                     baseCurrency = params.baseCurrency,
                     isUnifiedMode = params.unifiedMode,
                     selectedYear = params.yearMonth.year,
-                    selectedMonth = params.yearMonth.monthValue
+                    selectedMonth = params.yearMonth.monthValue,
+                    useFinancialMonth = params.useFinancial,
+                    periodLabel = periodLabel
                 )
             }
         }
@@ -85,16 +141,72 @@ class BudgetGroupsViewModel @Inject constructor(
                 userPreferencesRepository.baseCurrency,
                 userPreferencesRepository.unifiedCurrencyMode,
                 userPreferencesRepository.displayCurrency,
-                _selectedYearMonth
-            ) { baseCurrency, unifiedMode, displayCurrency, yearMonth ->
-                data class SpendingParams(val displayCurrency: String, val baseCurrency: String, val unifiedMode: Boolean, val yearMonth: YearMonth)
-                SpendingParams(if (unifiedMode) displayCurrency else baseCurrency, baseCurrency, unifiedMode, yearMonth)
+                _selectedYearMonth,
+                userPreferencesRepository.monthStartDay,
+                userPreferencesRepository.useFinancialMonth,
+                userPreferencesRepository.useFixedBudgetPeriodEnd,
+                userPreferencesRepository.budgetPeriodEndDay,
+                salaryMonthOverrideRepository.overridesMap
+            ) { args ->
+                val baseCurrency = args[0] as String
+                val unifiedMode = args[1] as Boolean
+                val displayCurrency = args[2] as String
+                val yearMonth = args[3] as YearMonth
+                val monthStartDay = args[4] as Int
+                val useFinancial = args[5] as Boolean
+                val useFixedEnd = args[6] as Boolean
+                val endDom = args[7] as Int
+                @Suppress("UNCHECKED_CAST")
+                val overrides = args[8] as Map<String, Int>
+                data class SpendingParams(
+                    val displayCurrency: String,
+                    val baseCurrency: String,
+                    val unifiedMode: Boolean,
+                    val yearMonth: YearMonth,
+                    val monthStartDay: Int,
+                    val useFinancial: Boolean,
+                    val useFixedEnd: Boolean,
+                    val endDom: Int,
+                    val overrides: Map<String, Int>
+                )
+                SpendingParams(
+                    if (unifiedMode) displayCurrency else baseCurrency,
+                    baseCurrency,
+                    unifiedMode,
+                    yearMonth,
+                    monthStartDay,
+                    useFinancial,
+                    useFixedEnd,
+                    endDom,
+                    overrides
+                )
             }.flatMapLatest { params ->
-                if (params.unifiedMode) {
-                    budgetGroupRepository.getGroupSpendingAllCurrencies(params.yearMonth.year, params.yearMonth.monthValue)
-                        .map { raw -> convertRawToSummary(raw, params.displayCurrency, params.baseCurrency) }
+                val isCurrentMonth = params.yearMonth == YearMonth.now()
+                if (isCurrentMonth && params.useFinancial) {
+                    val (financialStart, financialEnd) = DateRangeUtils.calculateBudgetPeriodRange(
+                        LocalDate.now(),
+                        params.monthStartDay,
+                        params.useFixedEnd,
+                        params.endDom,
+                        params.overrides
+                    )
+                    android.util.Log.d("PWDebug", "=== BudgetGroupsVM date range (financial) ===")
+                    android.util.Log.d("PWDebug", "start=$financialStart end=$financialEnd currency=${params.displayCurrency} monthStartDay=${params.monthStartDay}")
+                    if (params.unifiedMode) {
+                        budgetGroupRepository.getGroupSpendingAllCurrencies(financialStart, financialEnd)
+                            .map { raw -> convertRawToSummary(raw, params.displayCurrency, params.baseCurrency) }
+                    } else {
+                        budgetGroupRepository.getGroupSpending(financialStart, financialEnd, params.displayCurrency)
+                    }
                 } else {
-                    budgetGroupRepository.getGroupSpending(params.yearMonth.year, params.yearMonth.monthValue, params.displayCurrency)
+                    android.util.Log.d("PWDebug", "=== BudgetGroupsVM date range (calendar) ===")
+                    android.util.Log.d("PWDebug", "yearMonth=${params.yearMonth} useFinancial=${params.useFinancial} isCurrentMonth=$isCurrentMonth")
+                    if (params.unifiedMode) {
+                        budgetGroupRepository.getGroupSpendingAllCurrencies(params.yearMonth.year, params.yearMonth.monthValue)
+                            .map { raw -> convertRawToSummary(raw, params.displayCurrency, params.baseCurrency) }
+                    } else {
+                        budgetGroupRepository.getGroupSpending(params.yearMonth.year, params.yearMonth.monthValue, params.displayCurrency)
+                    }
                 }
             }.collect { summary ->
                 _uiState.value = _uiState.value.copy(
@@ -103,6 +215,12 @@ class BudgetGroupsViewModel @Inject constructor(
                     isLoading = false
                 )
             }
+        }
+    }
+
+    fun toggleMonthViewMode() {
+        viewModelScope.launch {
+            userPreferencesRepository.updateUseFinancialMonth(!_uiState.value.useFinancialMonth)
         }
     }
 
@@ -121,11 +239,12 @@ class BudgetGroupsViewModel @Inject constructor(
             )
         }
 
-        // Build category amounts from all non-income transactions, converting currencies
+        // Primary category or split lines only; junction tags do not contribute amounts.
         val categoryAmounts = mutableMapOf<String, BigDecimal>()
         raw.allTransactions.forEach { txWithSplits ->
-            if (txWithSplits.transaction.transactionType != TransactionType.INCOME) {
-                val fromCurrency = txWithSplits.transaction.currency
+            val tx = txWithSplits.transaction
+            if (tx.transactionType != TransactionType.INCOME) {
+                val fromCurrency = tx.currency
                 txWithSplits.getAmountByCategory().forEach { (category, amount) ->
                     val converted = currencyConversionService.convertAmount(amount, fromCurrency, displayCurrency)
                     val categoryName = category.ifEmpty { "Others" }
@@ -181,9 +300,11 @@ class BudgetGroupsViewModel @Inject constructor(
 
         val groupSpendingList = raw.budgetsWithCategories.map { group ->
             val isTrackingAll = group.categories.isEmpty()
+            android.util.Log.d("BudgetBucket", "--- group '${group.budget.name}' [${group.budget.groupType}] trackAll=$isTrackingAll categories=${group.categories.map { it.categoryName }} ---")
             val catSpending = group.categories.map { cat ->
                 val actual = categoryAmounts[cat.categoryName] ?: BigDecimal.ZERO
                 val convertedBudget = currencyConversionService.convertAmount(cat.budgetAmount, baseCurrency, displayCurrency)
+                android.util.Log.d("BudgetBucket", "  cat='${cat.categoryName}' budget=$convertedBudget actual=$actual pct=${if (convertedBudget > BigDecimal.ZERO) (actual.toFloat() / convertedBudget.toFloat() * 100f) else 0f}%")
                 val pctUsed = if (convertedBudget > BigDecimal.ZERO) {
                     (actual.toFloat() / convertedBudget.toFloat() * 100f).coerceAtLeast(0f)
                 } else 0f
@@ -309,11 +430,19 @@ class BudgetGroupsViewModel @Inject constructor(
         }
     }
 
+    private var isCreatingSmartDefaults = false
+
     fun runSmartDefaults() {
+        if (isCreatingSmartDefaults) return
         viewModelScope.launch {
-            val baseCurrency = userPreferencesRepository.baseCurrency.first()
-            budgetGroupRepository.createSmartDefaults(baseCurrency)
-            com.pennywiseai.tracker.widget.BudgetWidgetUpdateWorker.enqueueOneShot(context)
+            isCreatingSmartDefaults = true
+            try {
+                val baseCurrency = userPreferencesRepository.baseCurrency.first()
+                budgetGroupRepository.createSmartDefaults(baseCurrency)
+                com.pennywiseai.tracker.widget.BudgetWidgetUpdateWorker.enqueueOneShot(context)
+            } finally {
+                isCreatingSmartDefaults = false
+            }
         }
     }
 

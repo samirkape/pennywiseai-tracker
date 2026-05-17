@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Pennywise AI Tracker</string>
+    <string name="app_name">SpendTracker PRO</string>
     <string name="widget_name_budget">Budget Overview</string>
     <string name="widget_description_budget">Shows your monthly budget progress, savings, and daily allowance at a glance.</string>
     <string name="widget_loading">Loading widget…</string>
@@ -7,4 +7,56 @@
     <string name="widget_description_recent">View your monthly spend and latest transactions at a glance.</string>
     <string name="widget_name_add_transaction">Add Transaction</string>
     <string name="widget_description_add_transaction">Tap to quickly add a manual transaction without opening the app.</string>
+
+    <!-- Pay period (salary month) feature -->
+    <string name="pay_period_title">Pay period</string>
+    <string name="pay_period_settings_title">Pay period</string>
+    <string name="pay_period_settings_subtitle">Calendar month or custom pay window</string>
+    <string name="pay_period_mode_title">Use pay period</string>
+    <string name="pay_period_mode_subtitle">Track spending from salary day to salary day instead of the calendar month</string>
+    <string name="pay_period_usual_day_title">Usual salary day</string>
+    <string name="pay_period_usual_day_subtitle">Day of the month your salary normally lands</string>
+    <string name="pay_period_this_month_title">This month\'s pay period</string>
+    <string name="pay_period_this_month_subtitle">Adjust if your salary landed on a different day</string>
+    <string name="pay_period_history_title">Month history</string>
+    <string name="pay_period_history_subtitle">Override any past or upcoming month if salary landed on a different day</string>
+    <string name="pay_period_edit">Edit</string>
+    <string name="pay_period_reset">Reset to usual day</string>
+    <string name="pay_period_last_day_of_month">Last day of month</string>
+    <string name="pay_period_pick_exact_date">Pick exact date…</string>
+    <string name="pay_period_current_chip">Current</string>
+    <string name="pay_period_badge_detected">Detected</string>
+    <string name="pay_period_badge_manual">Manual</string>
+    <string name="pay_period_badge_default">Default</string>
+    <string name="pay_period_sheet_title">This month\'s salary date</string>
+    <string name="pay_period_sheet_description">Pick the day your salary landed this month. Spending, budgets, and reports will use this as the start of your pay period.</string>
+    <string name="pay_period_suggestion_title">Salary detected on %1$s</string>
+    <string name="pay_period_suggestion_message">We found a credit that looks like your salary. Use this as the start of this month\'s pay period?</string>
+    <string name="pay_period_suggestion_use">Use this date</string>
+    <string name="pay_period_suggestion_dismiss">Dismiss</string>
+    <string name="pay_period_change_usual_day">Change usual salary day</string>
+    <string name="pay_period_save">Save</string>
+    <string name="pay_period_cancel">Cancel</string>
+    <string name="pay_period_no_pay_period">Calendar month</string>
+    <string name="period_type_title">Budget period</string>
+    <string name="period_type_calendar">Calendar month</string>
+    <string name="period_type_pay_month">Pay month</string>
+    <string name="pay_period_open_settings">Set start and end dates…</string>
+    <string name="budget_period_repeating_hint">The same days of the month repeat every cycle. Pick any month as a reference.</string>
+    <string name="budget_period_start">Period starts</string>
+    <string name="budget_period_end">Period ends</string>
+    <string name="budget_period_save_dates">Save dates</string>
+    <string name="budget_period_implicit_end">Use automatic end (day before next start)</string>
+    <string name="budget_period_current_label">Current window</string>
+    <string name="budget_period_saved">Pay period saved</string>
+    <string name="budget_period_error_range">End date must be on or after start date</string>
+    <string name="budget_period_implicit_saved">Switched to automatic period end</string>
+
+    <!-- Transaction edit: category suggestions -->
+    <string name="txn_edit_suggested_merchant">Suggested for %1$s</string>
+    <string name="txn_edit_suggested_today">Suggested · used today</string>
+    <string name="txn_edit_suggested_chip">%1$s (suggested)</string>
+    <string name="txn_edit_suggested_merchant_rename">Suggested name</string>
+    <string name="txn_edit_suggested_merchant_rename_chip">%1$s</string>
+    <string name="txn_edit_rename_existing">Rename %1$d existing transactions to \"%2$s\"</string>
 </resources>

@@ -14,13 +14,18 @@ import com.pennywiseai.tracker.data.repository.AccountBalanceRepository
 import com.pennywiseai.tracker.data.repository.BudgetGroupRepository
 import com.pennywiseai.tracker.domain.usecase.AddTransactionUseCase
 import com.pennywiseai.tracker.domain.usecase.AddSubscriptionUseCase
+import com.pennywiseai.tracker.data.repository.CategoryRepository
+import com.pennywiseai.tracker.data.repository.TransactionRepository
 import com.pennywiseai.tracker.domain.usecase.GetCategoriesUseCase
 import android.util.Log
+import com.pennywiseai.tracker.data.database.entity.TransactionSplitEntity
+import com.pennywiseai.tracker.ui.components.SplitItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -33,6 +38,8 @@ class AddViewModel @Inject constructor(
     private val addTransactionUseCase: AddTransactionUseCase,
     private val addSubscriptionUseCase: AddSubscriptionUseCase,
     private val getCategoriesUseCase: GetCategoriesUseCase,
+    private val categoryRepository: CategoryRepository,
+    private val transactionRepository: TransactionRepository,
     private val accountBalanceRepository: AccountBalanceRepository,
     private val budgetGroupRepository: BudgetGroupRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
@@ -112,15 +119,32 @@ class AddViewModel @Inject constructor(
         _transactionUiState.update { currentState ->
             currentState.copy(
                 transactionType = type,
+                paymentChannel = if (type != TransactionType.EXPENSE && type != TransactionType.CREDIT) {
+                    PaymentChannel.ACCOUNT
+                } else currentState.paymentChannel,
                 category = when (type) {
                     TransactionType.INCOME -> "Income"
-                    TransactionType.EXPENSE -> "Others"
+                    TransactionType.EXPENSE, TransactionType.CREDIT -> "Others"
                     TransactionType.INVESTMENT -> "Investment"
-                    TransactionType.CREDIT -> "Shopping"
                     else -> currentState.category
                 },
                 budgetImpactType = if (type != TransactionType.INCOME) null else currentState.budgetImpactType,
-                budgetCategory = if (type != TransactionType.INCOME) null else currentState.budgetCategory
+                budgetCategory = if (type != TransactionType.INCOME) null else currentState.budgetCategory,
+                isSplitEnabled = if (type == TransactionType.TRANSFER) false else currentState.isSplitEnabled,
+                splits = if (type == TransactionType.TRANSFER) emptyList() else currentState.splits
+            )
+        }
+    }
+
+    fun updatePaymentChannel(channel: PaymentChannel) {
+        _transactionUiState.update { currentState ->
+            currentState.copy(
+                paymentChannel = channel,
+                transactionType = if (channel == PaymentChannel.CREDIT_CARD) {
+                    TransactionType.CREDIT
+                } else {
+                    TransactionType.EXPENSE
+                }
             )
         }
     }
@@ -134,15 +158,29 @@ class AddViewModel @Inject constructor(
         }
     }
     
+    private val _applyToAllFromMerchant = MutableStateFlow(false)
+    val applyToAllFromMerchant: StateFlow<Boolean> = _applyToAllFromMerchant.asStateFlow()
+
+    fun toggleApplyToAllFromMerchant() {
+        _applyToAllFromMerchant.value = !_applyToAllFromMerchant.value
+    }
+
     fun updateTransactionCategory(category: String) {
-        _transactionUiState.update { currentState ->
-            currentState.copy(
+        _transactionUiState.update {
+            it.copy(
                 category = category,
                 categoryError = validateCategory(category)
             )
         }
     }
-    
+
+    fun createAndSelectTransactionCategory(name: String, color: String, isIncome: Boolean) {
+        viewModelScope.launch {
+            categoryRepository.createCategory(name, color, isIncome)
+            updateTransactionCategory(name)
+        }
+    }
+
     fun updateTransactionDate(dateMillis: Long) {
         val instant = Instant.ofEpochMilli(dateMillis)
         val localDate = instant.atZone(ZoneId.systemDefault()).toLocalDate()
@@ -181,8 +219,17 @@ class AddViewModel @Inject constructor(
         }
     }
 
-    fun updateReceiptUri(uri: Uri?) {
-        _transactionUiState.update { it.copy(receiptUri = uri) }
+    fun addReceiptUri(uri: Uri) {
+        _transactionUiState.update { it.copy(receiptUris = it.receiptUris + uri) }
+    }
+
+    fun removeReceiptUri(index: Int) {
+        _transactionUiState.update {
+            val updated = it.receiptUris.toMutableList().also { list ->
+                if (index in list.indices) list.removeAt(index)
+            }
+            it.copy(receiptUris = updated)
+        }
     }
 
     fun createCameraUri(): Uri = receiptManager.createCameraUri()
@@ -193,6 +240,30 @@ class AddViewModel @Inject constructor(
 
     fun updateBudgetCategory(category: String?) {
         _transactionUiState.update { it.copy(budgetCategory = category) }
+    }
+
+    fun toggleSplit() {
+        val state = _transactionUiState.value
+        if (state.isSplitEnabled) {
+            _transactionUiState.update { it.copy(isSplitEnabled = false, splits = emptyList()) }
+        } else {
+            val total = state.amount.toBigDecimalOrNull() ?: BigDecimal.ZERO
+            val half = total.divide(BigDecimal("2"), 2, RoundingMode.HALF_UP)
+            val remainder = total - half
+            _transactionUiState.update {
+                it.copy(
+                    isSplitEnabled = true,
+                    splits = listOf(
+                        SplitItem(category = it.category, amount = half),
+                        SplitItem(category = "Others", amount = remainder)
+                    )
+                )
+            }
+        }
+    }
+
+    fun updateSplits(splits: List<SplitItem>) {
+        _transactionUiState.update { it.copy(splits = splits) }
     }
 
     fun saveTransaction(onSuccess: () -> Unit) {
@@ -220,9 +291,9 @@ class AddViewModel @Inject constructor(
                 val amount = BigDecimal(state.amount)
                 val selectedAccount = state.selectedAccount
 
-                val receiptPath = state.receiptUri?.let { receiptManager.saveReceipt(it) }
+                val receiptPaths = receiptManager.saveReceipts(state.receiptUris)
 
-                addTransactionUseCase.execute(
+                val transactionId = addTransactionUseCase.execute(
                     amount = amount,
                     merchant = state.merchant.trim(),
                     category = state.category,
@@ -233,10 +304,27 @@ class AddViewModel @Inject constructor(
                     bankName = selectedAccount?.bankName,
                     accountLast4 = selectedAccount?.accountLast4,
                     currency = state.currency,
-                    receiptPath = receiptPath,
+                    receiptPaths = receiptPaths,
                     budgetCategory = state.budgetCategory,
                     budgetImpactType = state.budgetImpactType
                 )
+
+                if (state.isSplitEnabled && state.splits.size >= 2 && transactionId != -1L) {
+                    val splitEntities = state.splits.map { split ->
+                        TransactionSplitEntity(
+                            transactionId = transactionId,
+                            category = split.category,
+                            amount = split.amount,
+                            tags = split.tags.joinToString(",")
+                        )
+                    }
+                    transactionRepository.saveSplits(transactionId, splitEntities)
+                }
+
+                if (_applyToAllFromMerchant.value) {
+                    transactionRepository.updateCategoryForMerchant(state.merchant.trim(), state.category)
+                    _applyToAllFromMerchant.value = false
+                }
 
                 com.pennywiseai.tracker.widget.RecentTransactionsWidgetUpdateWorker.enqueueOneShot(appContext)
 
@@ -301,7 +389,14 @@ class AddViewModel @Inject constructor(
             )
         }
     }
-    
+
+    fun createAndSelectSubscriptionCategory(name: String, color: String, isIncome: Boolean) {
+        viewModelScope.launch {
+            categoryRepository.createCategory(name, color, isIncome)
+            updateSubscriptionCategory(name)
+        }
+    }
+
     fun updateSubscriptionNotes(notes: String) {
         _subscriptionUiState.update { currentState ->
             currentState.copy(notes = notes)
@@ -403,6 +498,10 @@ class AddViewModel @Inject constructor(
     }
 }
 
+enum class PaymentChannel {
+    CASH, CREDIT_CARD, ACCOUNT
+}
+
 // UI State Classes
 data class AddUiState(
     val currentTab: Int = 0
@@ -412,6 +511,7 @@ data class TransactionUiState(
     val amount: String = "",
     val amountError: String? = null,
     val transactionType: TransactionType = TransactionType.EXPENSE,
+    val paymentChannel: PaymentChannel = PaymentChannel.ACCOUNT,
     val merchant: String = "",
     val merchantError: String? = null,
     val category: String = "Others",
@@ -423,10 +523,20 @@ data class TransactionUiState(
     val error: String? = null,
     val selectedAccount: AccountBalanceEntity? = null,
     val currency: String = "INR",
-    val receiptUri: Uri? = null,
+    val receiptUris: List<Uri> = emptyList(),
     val budgetImpactType: BudgetImpactType? = null,
-    val budgetCategory: String? = null
+    val budgetCategory: String? = null,
+    val isSplitEnabled: Boolean = false,
+    val splits: List<SplitItem> = emptyList()
 ) {
+    private val areSplitsBalanced: Boolean
+        get() {
+            if (splits.size < 2) return false
+            val total = amount.toBigDecimalOrNull() ?: return false
+            val splitsSum = splits.fold(BigDecimal.ZERO) { acc, s -> acc + s.amount }
+            return (total - splitsSum).abs() <= BigDecimal("0.01")
+        }
+
     val isValid: Boolean
         get() = amount.isNotBlank() &&
                 amount.toDoubleOrNull() != null &&
@@ -436,7 +546,8 @@ data class TransactionUiState(
                 amountError == null &&
                 merchantError == null &&
                 categoryError == null &&
-                (budgetImpactType == null || budgetCategory != null)
+                (budgetImpactType == null || budgetCategory != null) &&
+                (!isSplitEnabled || areSplitsBalanced)
 }
 
 data class SubscriptionUiState(

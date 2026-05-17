@@ -27,6 +27,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -35,8 +37,11 @@ import com.pennywiseai.tracker.data.database.entity.TransactionType
 import com.pennywiseai.tracker.domain.model.displayName
 import com.pennywiseai.tracker.domain.model.getAccountType
 import com.pennywiseai.tracker.presentation.accounts.AccountType
+import com.pennywiseai.tracker.presentation.categories.CategoryEditDialog
+import com.pennywiseai.tracker.ui.components.SplitEditor
 import com.pennywiseai.tracker.ui.theme.*
 import com.pennywiseai.tracker.utils.CurrencyFormatter
+import java.math.BigDecimal
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -71,10 +76,12 @@ fun TransactionTabContent(
     val uiState by viewModel.transactionUiState.collectAsState()
     val categories by viewModel.categories.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
+    val applyToAllFromMerchant by viewModel.applyToAllFromMerchant.collectAsState()
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var showCategoryMenu by remember { mutableStateOf(false) }
+    var showCreateCategoryDialog by remember { mutableStateOf(false) }
     var showAccountMenu by remember { mutableStateOf(false) }
     var showCurrencyMenu by remember { mutableStateOf(false) }
 
@@ -169,20 +176,30 @@ fun TransactionTabContent(
             }
 
             // ── Transaction Type chips ──
+            val topLevelTypes = listOf(
+                TransactionType.INCOME,
+                TransactionType.EXPENSE,
+                TransactionType.TRANSFER,
+                TransactionType.INVESTMENT
+            )
+            val isExpenseSelected = uiState.transactionType == TransactionType.EXPENSE ||
+                    uiState.transactionType == TransactionType.CREDIT
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                 verticalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
-                TransactionType.values().forEach { type ->
+                topLevelTypes.forEach { type ->
+                    val selected = if (type == TransactionType.EXPENSE) isExpenseSelected
+                                   else uiState.transactionType == type
                     FilterChip(
-                        selected = uiState.transactionType == type,
+                        selected = selected,
                         onClick = { viewModel.updateTransactionType(type) },
                         label = {
                             Text(type.name.lowercase(Locale.getDefault())
                                 .replaceFirstChar { it.titlecase(Locale.getDefault()) })
                         },
-                        leadingIcon = if (uiState.transactionType == type) {
+                        leadingIcon = if (selected) {
                             {
                                 Icon(
                                     Icons.Default.Check,
@@ -199,10 +216,53 @@ fun TransactionTabContent(
                         ),
                         border = FilterChipDefaults.filterChipBorder(
                             borderWidth = 0.dp,
-                            selected = uiState.transactionType == type,
+                            selected = selected,
                             enabled = true
                         )
                     )
+                }
+            }
+
+            // ── Payment Channel sub-chips (Expense only) ──
+            if (isExpenseSelected) {
+                val channels = listOf(
+                    PaymentChannel.ACCOUNT to "Account",
+                    PaymentChannel.CASH to "Cash",
+                    PaymentChannel.CREDIT_CARD to "Credit Card"
+                )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                ) {
+                    channels.forEach { (channel, label) ->
+                        val channelSelected = uiState.paymentChannel == channel
+                        FilterChip(
+                            selected = channelSelected,
+                            onClick = { viewModel.updatePaymentChannel(channel) },
+                            label = { Text(label) },
+                            leadingIcon = if (channelSelected) {
+                                {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(Dimensions.Icon.small)
+                                    )
+                                }
+                            } else null,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(0.7f),
+                                labelColor = MaterialTheme.colorScheme.onSurface
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                borderWidth = 0.dp,
+                                selected = channelSelected,
+                                enabled = true
+                            )
+                        )
+                    }
                 }
             }
 
@@ -436,6 +496,53 @@ fun TransactionTabContent(
                                 }
                             )
                         }
+                        if (categories.isNotEmpty()) {
+                            HorizontalDivider()
+                        }
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        "Create new category",
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            },
+                            onClick = {
+                                showCategoryMenu = false
+                                showCreateCategoryDialog = true
+                            }
+                        )
+                    }
+                }
+
+                // Apply to all checkbox — only shown when a merchant name is entered
+                if (uiState.merchant.isNotBlank()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.toggleApplyToAllFromMerchant() }
+                            .padding(top = Spacing.xs),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = applyToAllFromMerchant,
+                            onCheckedChange = { viewModel.toggleApplyToAllFromMerchant() }
+                        )
+                        Text(
+                            text = "Apply category to all from ${uiState.merchant}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 }
             }
@@ -513,6 +620,37 @@ fun TransactionTabContent(
                 }
             }
 
+            // ── Split Transaction (EXPENSE / CREDIT only) ──
+            val canSplit = uiState.transactionType != TransactionType.TRANSFER &&
+                    uiState.transactionType != TransactionType.INCOME &&
+                    uiState.transactionType != TransactionType.INVESTMENT
+            if (canSplit) {
+                if (uiState.isSplitEnabled) {
+                    SplitEditor(
+                        totalAmount = uiState.amount.toBigDecimalOrNull() ?: BigDecimal.ZERO,
+                        currency = uiState.currency,
+                        splits = uiState.splits,
+                        availableCategories = categories.map { it.name },
+                        onSplitsChanged = viewModel::updateSplits,
+                        onRemoveSplits = viewModel::toggleSplit
+                    )
+                } else {
+                    OutlinedButton(
+                        onClick = viewModel::toggleSplit,
+                        enabled = uiState.amount.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } ?: false,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            Icons.Default.CallSplit,
+                            contentDescription = null,
+                            modifier = Modifier.size(Dimensions.Icon.small)
+                        )
+                        Spacer(modifier = Modifier.width(Spacing.xs))
+                        Text("Split across categories")
+                    }
+                }
+            }
+
             // ── Budget Impact (INCOME only) ──
             if (uiState.transactionType == TransactionType.INCOME) {
                 val activeBudgetCategories by viewModel.activeBudgetCategories.collectAsState()
@@ -527,9 +665,9 @@ fun TransactionTabContent(
 
             // ── Receipt ──
             ReceiptPickerSection(
-                receiptUri = uiState.receiptUri,
-                onReceiptSelected = { uri -> viewModel.updateReceiptUri(uri) },
-                onReceiptRemoved = { viewModel.updateReceiptUri(null) },
+                receiptUris = uiState.receiptUris,
+                onReceiptAdded = { uri -> viewModel.addReceiptUri(uri) },
+                onReceiptRemoved = { index -> viewModel.removeReceiptUri(index) },
                 onCreateCameraUri = { viewModel.createCameraUri() }
             )
 
@@ -630,23 +768,35 @@ fun TransactionTabContent(
             }
         )
     }
+
+    // Create Category Dialog
+    if (showCreateCategoryDialog) {
+        CategoryEditDialog(
+            category = null,
+            onDismiss = { showCreateCategoryDialog = false },
+            onSave = { name, color, isIncome ->
+                viewModel.createAndSelectTransactionCategory(name, color, isIncome)
+                showCreateCategoryDialog = false
+            }
+        )
+    }
 }
 
 @Composable
 fun ReceiptPickerSection(
-    receiptUri: android.net.Uri?,
-    onReceiptSelected: (android.net.Uri) -> Unit,
-    onReceiptRemoved: () -> Unit,
+    receiptUris: List<android.net.Uri>,
+    onReceiptAdded: (android.net.Uri) -> Unit,
+    onReceiptRemoved: (Int) -> Unit,
     onCreateCameraUri: () -> android.net.Uri
 ) {
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri -> uri?.let { onReceiptSelected(it) } }
+    ) { uri -> uri?.let { onReceiptAdded(it) } }
 
     var cameraUri by remember { mutableStateOf<android.net.Uri?>(null) }
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
-    ) { success -> if (success) cameraUri?.let { onReceiptSelected(it) } }
+    ) { success -> if (success) cameraUri?.let { onReceiptAdded(it) } }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -658,67 +808,71 @@ fun ReceiptPickerSection(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        if (receiptUri != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(MaterialTheme.shapes.medium)
+        if (receiptUris.isNotEmpty()) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
-                AsyncImage(
-                    model = receiptUri,
-                    contentDescription = "Receipt",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 160.dp),
-                    contentScale = ContentScale.Crop
-                )
-                FilledIconButton(
-                    onClick = onReceiptRemoved,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(Spacing.xs)
-                        .size(28.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Icon(
-                        Icons.Default.Close,
-                        contentDescription = "Remove receipt",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onErrorContainer
-                    )
+                itemsIndexed(receiptUris) { index, uri ->
+                    Box(
+                        modifier = Modifier
+                            .size(120.dp)
+                            .clip(MaterialTheme.shapes.medium)
+                    ) {
+                        AsyncImage(
+                            model = uri,
+                            contentDescription = "Receipt ${index + 1}",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                        FilledIconButton(
+                            onClick = { onReceiptRemoved(index) },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(4.dp)
+                                .size(24.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Remove receipt",
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
                 }
             }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            OutlinedButton(
+                onClick = {
+                    galleryLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                },
+                modifier = Modifier.weight(1f)
             ) {
-                OutlinedButton(
-                    onClick = {
-                        galleryLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(Dimensions.Icon.small))
-                    Spacer(modifier = Modifier.width(Spacing.xs))
-                    Text("Gallery")
-                }
-                OutlinedButton(
-                    onClick = {
-                        val uri = onCreateCameraUri()
-                        cameraUri = uri
-                        cameraLauncher.launch(uri)
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(Dimensions.Icon.small))
-                    Spacer(modifier = Modifier.width(Spacing.xs))
-                    Text("Camera")
-                }
+                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(Dimensions.Icon.small))
+                Spacer(modifier = Modifier.width(Spacing.xs))
+                Text("Gallery")
+            }
+            OutlinedButton(
+                onClick = {
+                    val uri = onCreateCameraUri()
+                    cameraUri = uri
+                    cameraLauncher.launch(uri)
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(Dimensions.Icon.small))
+                Spacer(modifier = Modifier.width(Spacing.xs))
+                Text("Camera")
             }
         }
     }

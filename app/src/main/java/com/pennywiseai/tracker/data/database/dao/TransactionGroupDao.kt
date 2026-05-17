@@ -4,6 +4,7 @@ import androidx.room.*
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionGroupEntity
 import kotlinx.coroutines.flow.Flow
+import java.time.LocalDateTime
 
 @Dao
 interface TransactionGroupDao {
@@ -67,4 +68,12 @@ interface TransactionGroupDao {
         LIMIT :limit
     """)
     fun searchUngroupedTransactions(query: String, limit: Int = 50): Flow<List<TransactionEntity>>
+
+    @Query("""
+        SELECT * FROM transactions
+        WHERE group_id IS NULL AND is_deleted = 0
+        AND date_time >= :startOfDay AND date_time < :endOfDay
+        ORDER BY date_time DESC
+    """)
+    fun getTodayUngroupedTransactions(startOfDay: LocalDateTime, endOfDay: LocalDateTime): Flow<List<TransactionEntity>>
 }

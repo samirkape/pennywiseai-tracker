@@ -1,6 +1,7 @@
 package com.pennywiseai.tracker.presentation.groups
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,13 +27,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionType
 import com.pennywiseai.tracker.ui.components.CustomTitleTopAppBar
+import com.pennywiseai.tracker.ui.components.cards.GroupMerchantAvatarStack
+import com.pennywiseai.tracker.ui.components.cards.GroupSummaryStatPillRow
 import com.pennywiseai.tracker.ui.components.cards.PennyWiseCardV2
+import com.pennywiseai.tracker.ui.components.cards.SectionHeaderV2
 import com.pennywiseai.tracker.ui.effects.overScrollVertical
 import com.pennywiseai.tracker.ui.effects.rememberOverscrollFlingBehavior
 import com.pennywiseai.tracker.ui.theme.*
 import com.pennywiseai.tracker.utils.CurrencyFormatter
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
+import java.math.BigDecimal
 import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -117,9 +122,22 @@ fun TransactionGroupDetailScreen(
         }
 
         val isDark = isSystemInDarkTheme()
-        val accentColor = if (isDark) income_dark else income_light
-        val expenseColor = if (isDark) expense_dark else expense_light
         val lazyListState = rememberLazyListState()
+
+        val currency = uiState.linkedTransactions.firstOrNull()?.currency ?: "INR"
+        val netTotal = uiState.totalIncome - uiState.totalExpense
+        val netPositive = netTotal >= BigDecimal.ZERO
+        val netAmountColor = if (netPositive) {
+            if (isDark) income_dark else income_light
+        } else {
+            if (isDark) expense_dark else expense_light
+        }
+        val netSign = if (netPositive) "+" else "-"
+        val netFormatted =
+            "$netSign${CurrencyFormatter.formatCurrency(netTotal.abs(), currency)}"
+        val merchantNames = remember(uiState.linkedTransactions) {
+            uiState.linkedTransactions.map { it.merchantName }.distinct()
+        }
 
         LazyColumn(
             state = lazyListState,
@@ -137,93 +155,77 @@ fun TransactionGroupDetailScreen(
             verticalArrangement = Arrangement.spacedBy(Spacing.md),
             flingBehavior = rememberOverscrollFlingBehavior { lazyListState }
         ) {
-            // Summary card
+            // Hero summary
             item {
                 PennyWiseCardV2(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                        verticalArrangement = Arrangement.spacedBy(Spacing.md)
                     ) {
-                        Text(
-                            group.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        if (!group.note.isNullOrBlank()) {
-                            Text(
-                                group.note,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        HorizontalDivider(modifier = Modifier.padding(vertical = Spacing.xs))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            GroupMerchantAvatarStack(merchantNames = merchantNames)
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    "Transactions",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    "${uiState.linkedTransactions.size}",
-                                    style = MaterialTheme.typography.titleMedium,
+                                    text = group.name,
+                                    style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
-                            }
-                            if (uiState.totalExpense > java.math.BigDecimal.ZERO) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                if (!group.note.isNullOrBlank()) {
                                     Text(
-                                        "Expenses",
-                                        style = MaterialTheme.typography.labelSmall,
+                                        text = group.note,
+                                        style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        CurrencyFormatter.formatCurrency(uiState.totalExpense),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = expenseColor
-                                    )
-                                }
-                            }
-                            if (uiState.totalIncome > java.math.BigDecimal.ZERO) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        "Income",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        CurrencyFormatter.formatCurrency(uiState.totalIncome),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = accentColor
                                     )
                                 }
                             }
                         }
+                        Text(
+                            text = netFormatted,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = netAmountColor
+                        )
+                        GroupSummaryStatPillRow(
+                            transactionCount = uiState.linkedTransactions.size,
+                            totalIncome = uiState.totalIncome,
+                            totalExpense = uiState.totalExpense,
+                            currency = currency,
+                        )
                     }
                 }
             }
 
             if (uiState.linkedTransactions.isNotEmpty()) {
                 item {
-                    Text(
-                        "Transactions",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    SectionHeaderV2(
+                        title = "Transactions (${uiState.linkedTransactions.size})"
                     )
                 }
-                items(uiState.linkedTransactions, key = { it.id }) { txn ->
-                    GroupTransactionItem(
-                        transaction = txn,
-                        onRemove = { viewModel.removeTransaction(txn.id) },
-                        onClick = { onNavigateToTransactionDetail(txn.id) }
-                    )
+                item {
+                    PennyWiseCardV2(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = 0.dp
+                    ) {
+                        uiState.linkedTransactions.forEachIndexed { index, txn ->
+                            GroupTransactionItem(
+                                transaction = txn,
+                                onRemove = { viewModel.removeTransaction(txn.id) },
+                                onClick = { onNavigateToTransactionDetail(txn.id) }
+                            )
+                            if (index < uiState.linkedTransactions.lastIndex) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                                    thickness = 0.5.dp
+                                )
+                            }
+                        }
+                    }
                 }
             } else {
                 item {
@@ -319,41 +321,68 @@ private fun GroupTransactionItem(
         else -> ""
     }
 
-    PennyWiseCardV2(
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        onClick = onClick
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier
+                .weight(1f)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    transaction.merchantName,
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = transaction.merchantName,
+                    style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    transaction.dateTime.format(DateTimeFormatter.ofPattern("d MMM yyyy")),
-                    style = MaterialTheme.typography.labelSmall,
+                    text = transaction.dateTime.format(DateTimeFormatter.ofPattern("d MMM yyyy")),
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            Spacer(modifier = Modifier.width(Spacing.sm))
             Text(
-                "$sign${CurrencyFormatter.formatCurrency(transaction.amount, transaction.currency)}",
-                style = MaterialTheme.typography.bodyMedium,
+                text = "$sign${CurrencyFormatter.formatCurrency(transaction.amount, transaction.currency)}",
+                style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = color
             )
-            Spacer(modifier = Modifier.width(Spacing.xs))
-            IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
+        }
+        Box {
+            IconButton(
+                onClick = { menuExpanded = true },
+                modifier = Modifier.size(40.dp)
+            ) {
                 Icon(
-                    Icons.Default.RemoveCircleOutline,
-                    contentDescription = "Remove from group",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "More options",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Remove from group") },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.RemoveCircleOutline,
+                            contentDescription = null
+                        )
+                    },
+                    onClick = {
+                        menuExpanded = false
+                        onRemove()
+                    }
                 )
             }
         }

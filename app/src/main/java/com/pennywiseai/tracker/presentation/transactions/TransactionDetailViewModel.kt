@@ -19,6 +19,7 @@ import com.pennywiseai.tracker.data.repository.AccountBalanceRepository
 import com.pennywiseai.tracker.data.repository.BudgetGroupRepository
 import com.pennywiseai.tracker.data.repository.CategoryRepository
 import com.pennywiseai.tracker.data.repository.LoanRepository
+import com.pennywiseai.tracker.data.repository.MerchantAliasRepository
 import com.pennywiseai.tracker.data.repository.MerchantMappingRepository
 import com.pennywiseai.tracker.data.repository.TransactionGroupRepository
 import com.pennywiseai.tracker.data.repository.TransactionRepository
@@ -37,6 +38,7 @@ import javax.inject.Inject
 class TransactionDetailViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val merchantMappingRepository: MerchantMappingRepository,
+    private val merchantAliasRepository: MerchantAliasRepository,
     private val categoryRepository: CategoryRepository,
     private val accountBalanceRepository: AccountBalanceRepository,
     private val loanRepository: LoanRepository,
@@ -50,6 +52,12 @@ class TransactionDetailViewModel @Inject constructor(
     
     private val _transaction = MutableStateFlow<TransactionEntity?>(null)
     val transaction: StateFlow<TransactionEntity?> = _transaction.asStateFlow()
+
+    private val _customCategories = MutableStateFlow<List<String>>(emptyList())
+    val customCategories: StateFlow<List<String>> = _customCategories.asStateFlow()
+
+    private val _pendingCustomCategories = MutableStateFlow<List<String>>(emptyList())
+    val pendingCustomCategories: StateFlow<List<String>> = _pendingCustomCategories.asStateFlow()
 
     private val _primaryCurrency = MutableStateFlow("INR")
     val primaryCurrency: StateFlow<String> = _primaryCurrency.asStateFlow()
@@ -82,6 +90,16 @@ class TransactionDetailViewModel @Inject constructor(
     val updateExistingTransactions: StateFlow<Boolean> = _updateExistingTransactions.asStateFlow()
     
     private val _existingTransactionCount = MutableStateFlow(0)
+
+    private val _originalMerchantNameOnEdit = MutableStateFlow<String?>(null)
+    private val _suggestedMerchantRename = MutableStateFlow<String?>(null)
+    val suggestedMerchantRename: StateFlow<String?> = _suggestedMerchantRename.asStateFlow()
+
+    private val _renameExistingTransactions = MutableStateFlow(false)
+    val renameExistingTransactions: StateFlow<Boolean> = _renameExistingTransactions.asStateFlow()
+
+    private val _showRenameExistingOption = MutableStateFlow(false)
+    val showRenameExistingOption: StateFlow<Boolean> = _showRenameExistingOption.asStateFlow()
     
     private val _showDeleteDialog = MutableStateFlow(false)
     val showDeleteDialog: StateFlow<Boolean> = _showDeleteDialog.asStateFlow()
@@ -108,6 +126,24 @@ class TransactionDetailViewModel @Inject constructor(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
+        )
+
+    // Maps each category name to the budget group name it belongs to.
+    // Used in the edit form to show which budget bucket a transaction counts against.
+    val categoryToBudgetMap: StateFlow<Map<String, String>> = budgetGroupRepository.getActiveGroups()
+        .map { groups ->
+            buildMap {
+                groups.forEach { bwc ->
+                    bwc.categories.forEach { cat ->
+                        put(cat.categoryName, bwc.budget.name)
+                    }
+                }
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyMap()
         )
 
     // Transaction group state
@@ -162,6 +198,58 @@ class TransactionDetailViewModel @Inject constructor(
     private val _hasSplits = MutableStateFlow(false)
     val hasSplits: StateFlow<Boolean> = _hasSplits.asStateFlow()
     
+    private val todayCategories: StateFlow<List<String>> = transactionRepository.getTodayCategories()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    private val _merchantSuggestionCategories = MutableStateFlow<List<String>>(emptyList())
+
+    val categorySuggestions: StateFlow<CategorySuggestionsState> = combine(
+        combine(
+            _merchantSuggestionCategories,
+            todayCategories,
+            _transaction,
+            _editableTransaction,
+            _pendingCustomCategories,
+        ) { merchantCats, todayCats, transaction, editable, pending ->
+            CategorySuggestionInputs(merchantCats, todayCats, transaction, editable, pending)
+        },
+        _isEditMode,
+    ) { inputs, isEdit ->
+        if (!isEdit) return@combine CategorySuggestionsState()
+        val txn = inputs.editable ?: inputs.transaction ?: return@combine CategorySuggestionsState()
+        val pending = inputs.pending
+        val merchantCats = inputs.merchantCategories
+        val todayCats = inputs.todayCategories
+        val selected = if (pending.isNotEmpty()) {
+            pending.toSet()
+        } else {
+            setOf(txn.category)
+        }
+        val merchantFiltered = merchantCats.filter { it !in selected }
+        if (merchantFiltered.isNotEmpty()) {
+            CategorySuggestionsState(
+                categories = merchantFiltered,
+                source = CategorySuggestionSource.MERCHANT,
+                merchantName = txn.merchantName
+            )
+        } else {
+            val todayFiltered = todayCats.filter { it !in selected }
+            CategorySuggestionsState(
+                categories = todayFiltered,
+                source = if (todayFiltered.isEmpty()) null else CategorySuggestionSource.USED_TODAY,
+                merchantName = txn.merchantName
+            )
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = CategorySuggestionsState()
+    )
+
     // Categories should be based on transaction type
     val categories: StateFlow<List<CategoryEntity>> = combine(
         _editableTransaction,
@@ -223,11 +311,20 @@ class TransactionDetailViewModel @Inject constructor(
                 determinePrimaryCurrency(it)
                 calculateConvertedAmount(it)
                 loadSplits(transactionId)
-                loadReceiptUri(it)
+                loadReceiptUris(it)
                 it.loanId?.let { id -> loadLoan(id) }
                 _budgetImpactType.value = it.budgetImpactType
                 _budgetCategory.value = it.budgetCategory
                 loadAccountProfileId(it)
+                loadCustomCategories(transactionId)
+            }
+        }
+    }
+
+    private fun loadCustomCategories(transactionId: Long) {
+        viewModelScope.launch {
+            transactionRepository.getCustomCategoriesForTransaction(transactionId).collect { cats ->
+                _customCategories.value = cats
             }
         }
     }
@@ -250,7 +347,9 @@ class TransactionDetailViewModel @Inject constructor(
                         SplitItem(
                             id = entity.id,
                             category = entity.category,
-                            amount = entity.amount
+                            amount = entity.amount,
+                            tags = if (entity.tags.isBlank()) emptyList()
+                                   else entity.tags.split(",").filter { it.isNotBlank() }
                         )
                     }
                     _splits.value = splitItems
@@ -299,8 +398,9 @@ class TransactionDetailViewModel @Inject constructor(
         _editableTransaction.value = _transaction.value?.copy()
         _isEditMode.value = true
         _errorMessage.value = null
-        _pendingReceiptUri.value = null
-        _receiptRemoved.value = false
+        _pendingReceiptUris.value = emptyList()
+        _removedReceiptIds.value = emptySet()
+        _pendingCustomCategories.value = _customCategories.value.toList()
 
         // Restore split state from original splits
         if (_hasSplits.value) {
@@ -310,14 +410,59 @@ class TransactionDetailViewModel @Inject constructor(
 
         // Load count of other transactions from same merchant
         _transaction.value?.let { txn ->
+            _originalMerchantNameOnEdit.value = txn.merchantName
             viewModelScope.launch {
                 val count = transactionRepository.getOtherTransactionCountForMerchant(
                     txn.merchantName,
                     txn.id
                 )
                 _existingTransactionCount.value = count
+                loadMerchantCategorySuggestions(txn.merchantName, txn.id)
+                loadMerchantRenameSuggestion(txn.merchantName)
             }
         }
+    }
+
+    private suspend fun loadMerchantRenameSuggestion(sourceMerchant: String) {
+        val knownMerchants = transactionRepository.getDistinctMerchantNames()
+        val suggested = merchantAliasRepository.suggestDisplayName(
+            sourceMerchant = sourceMerchant,
+            knownMerchants = knownMerchants
+        )
+        _suggestedMerchantRename.value = suggested?.takeIf {
+            !it.equals(sourceMerchant, ignoreCase = true)
+        }
+    }
+
+    fun applyMerchantRenameSuggestion() {
+        val suggested = _suggestedMerchantRename.value ?: return
+        _editableTransaction.update { current ->
+            current?.copy(merchantName = suggested)
+        }
+        updateRenameExistingOptionVisibility()
+    }
+
+    fun toggleRenameExistingTransactions() {
+        _renameExistingTransactions.value = !_renameExistingTransactions.value
+    }
+
+    private fun updateRenameExistingOptionVisibility() {
+        val original = _originalMerchantNameOnEdit.value ?: return
+        val current = _editableTransaction.value?.merchantName ?: return
+        val renamed = !current.equals(original, ignoreCase = true)
+        _showRenameExistingOption.value = renamed && _existingTransactionCount.value > 0
+        if (!renamed) {
+            _renameExistingTransactions.value = false
+        }
+    }
+
+    private suspend fun loadMerchantCategorySuggestions(merchantName: String, transactionId: Long) {
+        val mappingCategory = merchantMappingRepository.getCategoryForMerchant(merchantName)
+        _merchantSuggestionCategories.value = transactionRepository.getSuggestedCategoriesForMerchant(
+            merchantName = merchantName,
+            excludeTransactionId = transactionId,
+            merchantMappingCategory = mappingCategory
+        )
     }
     
     fun exitEditMode() {
@@ -327,14 +472,48 @@ class TransactionDetailViewModel @Inject constructor(
         _applyToAllFromMerchant.value = false
         _updateExistingTransactions.value = false
         _existingTransactionCount.value = 0
-        _pendingReceiptUri.value = null
-        _receiptRemoved.value = false
+        _pendingReceiptUris.value = emptyList()
+        _removedReceiptIds.value = emptySet()
+        _pendingCustomCategories.value = emptyList()
+        _merchantSuggestionCategories.value = emptyList()
+        _originalMerchantNameOnEdit.value = null
+        _suggestedMerchantRename.value = null
+        _renameExistingTransactions.value = false
+        _showRenameExistingOption.value = false
 
         // Reset split state to original values
         _splits.value = _originalSplits.value
         _showSplitEditor.value = _hasSplits.value
     }
-    
+
+    fun addPendingCustomCategory(categoryName: String) {
+        if (!_pendingCustomCategories.value.contains(categoryName)) {
+            _pendingCustomCategories.value = _pendingCustomCategories.value + categoryName
+            // Keep primary category in sync with first selected
+            if (_pendingCustomCategories.value.size == 1) {
+                _editableTransaction.update { it?.copy(category = categoryName) }
+            }
+        }
+    }
+
+    fun removePendingCustomCategory(categoryName: String) {
+        val updated = _pendingCustomCategories.value - categoryName
+        _pendingCustomCategories.value = updated
+        // If removing the primary category, update it to the next available one
+        val primary = _editableTransaction.value?.category
+        if (primary == categoryName) {
+            val newPrimary = updated.firstOrNull() ?: "Others"
+            _editableTransaction.update { it?.copy(category = newPrimary) }
+        }
+    }
+
+    fun createAndSelectCategory(name: String, color: String, isIncome: Boolean) {
+        viewModelScope.launch {
+            categoryRepository.createCategory(name, color, isIncome)
+            addPendingCustomCategory(name)
+        }
+    }
+
     fun toggleApplyToAllFromMerchant() {
         _applyToAllFromMerchant.value = !_applyToAllFromMerchant.value
     }
@@ -348,6 +527,7 @@ class TransactionDetailViewModel @Inject constructor(
             current?.copy(merchantName = name)
         }
         validateMerchantName(name)
+        updateRenameExistingOptionVisibility()
     }
     
     fun updateAmount(amountStr: String) {
@@ -399,7 +579,19 @@ class TransactionDetailViewModel @Inject constructor(
             current?.copy(isRecurring = isRecurring)
         }
     }
-    
+
+    fun updateExcludedFromTracking(excluded: Boolean) {
+        _editableTransaction.update { current ->
+            current?.copy(isExcludedFromTracking = excluded)
+        }
+        // Immediately persist so the change isn't lost if the user navigates away without saving
+        val transactionId = _transaction.value?.id ?: _editableTransaction.value?.id ?: return
+        viewModelScope.launch {
+            transactionRepository.updateExcludedFromTracking(transactionId, excluded)
+            _transaction.update { it?.copy(isExcludedFromTracking = excluded) }
+        }
+    }
+
     fun updateAccountNumber(accountNumber: String?) {
         _editableTransaction.update { current ->
             current?.copy(accountNumber = if (accountNumber.isNullOrEmpty()) null else accountNumber)
@@ -457,9 +649,9 @@ class TransactionDetailViewModel @Inject constructor(
     fun enableSplitMode() {
         val transaction = _editableTransaction.value ?: _transaction.value ?: return
 
-        // Only allow splits for expenses
-        if (transaction.transactionType != TransactionType.EXPENSE) {
-            _errorMessage.value = "Splits are only available for expenses"
+        // Splits not supported for transfers
+        if (transaction.transactionType == TransactionType.TRANSFER) {
+            _errorMessage.value = "Splits are not available for transfers"
             return
         }
 
@@ -569,27 +761,33 @@ class TransactionDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _isSaving.value = true
             try {
-                // Handle receipt changes
-                var newReceiptPath = toSave.receiptPath
-                val pendingUri = _pendingReceiptUri.value
-
-                if (_receiptRemoved.value || pendingUri != null) {
-                    // Delete old receipt file if it exists
-                    toSave.receiptPath?.let { receiptManager.deleteReceipt(it) }
-                    newReceiptPath = null
+                // Handle receipt deletions
+                val removedIds = _removedReceiptIds.value
+                for (id in removedIds) {
+                    val receipt = _existingReceipts.value.find { it.id == id }
+                    receipt?.let {
+                        receiptManager.deleteReceipt(it.path)
+                        transactionRepository.deleteReceipt(id)
+                    }
                 }
 
-                if (pendingUri != null) {
-                    newReceiptPath = receiptManager.saveReceipt(pendingUri)
+                // Save new pending receipts
+                val newPaths = receiptManager.saveReceipts(_pendingReceiptUris.value)
+                if (newPaths.isNotEmpty()) {
+                    transactionRepository.insertReceipts(toSave.id, newPaths)
                 }
 
                 // Normalize merchant name before saving
                 val normalizedTransaction = toSave.copy(
-                    merchantName = normalizeMerchantName(toSave.merchantName),
-                    receiptPath = newReceiptPath
+                    merchantName = normalizeMerchantName(toSave.merchantName)
                 )
 
                 transactionRepository.updateTransaction(normalizedTransaction)
+
+                // Save custom categories
+                val categoriesToSave = _pendingCustomCategories.value
+                    .ifEmpty { listOf(normalizedTransaction.category) }
+                transactionRepository.setCustomCategories(normalizedTransaction.id, categoriesToSave)
 
                 // Update account balance if account was changed or added
                 val originalTxn = _transaction.value
@@ -630,7 +828,8 @@ class TransactionDetailViewModel @Inject constructor(
                             id = item.id,
                             transactionId = normalizedTransaction.id,
                             category = item.category,
-                            amount = item.amount
+                            amount = item.amount,
+                            tags = item.tags.joinToString(",")
                         )
                     }
                     transactionRepository.saveSplits(normalizedTransaction.id, splitEntities)
@@ -659,10 +858,27 @@ class TransactionDetailViewModel @Inject constructor(
                     )
                 }
 
+                val originalMerchant = _originalMerchantNameOnEdit.value
+                if (originalMerchant != null &&
+                    !normalizedTransaction.merchantName.equals(originalMerchant, ignoreCase = true)
+                ) {
+                    merchantAliasRepository.setAlias(
+                        originalMerchant,
+                        normalizedTransaction.merchantName
+                    )
+                    if (_renameExistingTransactions.value) {
+                        transactionRepository.updateMerchantNameForMerchant(
+                            originalMerchant,
+                            normalizedTransaction.merchantName
+                        )
+                    }
+                }
+
                 _transaction.value = normalizedTransaction
-                loadReceiptUri(normalizedTransaction)
-                _pendingReceiptUri.value = null
-                _receiptRemoved.value = false
+                _pendingReceiptUris.value = emptyList()
+                _removedReceiptIds.value = emptySet()
+                loadReceiptUris(normalizedTransaction)
+                _pendingCustomCategories.value = emptyList()
                 _saveSuccess.value = true
                 _isEditMode.value = false
                 _editableTransaction.value = null
@@ -670,6 +886,10 @@ class TransactionDetailViewModel @Inject constructor(
                 _applyToAllFromMerchant.value = false
                 _updateExistingTransactions.value = false
                 _existingTransactionCount.value = 0
+                _originalMerchantNameOnEdit.value = null
+                _suggestedMerchantRename.value = null
+                _renameExistingTransactions.value = false
+                _showRenameExistingOption.value = false
                 _budgetImpactType.value = normalizedTransaction.budgetImpactType
                 _budgetCategory.value = normalizedTransaction.budgetCategory
             } catch (e: Exception) {
@@ -759,7 +979,9 @@ class TransactionDetailViewModel @Inject constructor(
                 _showDeleteDialog.value = false
 
                 try {
-                    txn.receiptPath?.let { receiptManager.deleteReceipt(it) }
+                    // Delete all receipt files before removing the transaction
+                    _existingReceipts.value.forEach { receiptManager.deleteReceipt(it.path) }
+                    txn.receiptPath?.let { receiptManager.deleteReceipt(it) } // legacy
                     transactionRepository.deleteTransaction(txn)
                     _deleteSuccess.value = true
                 } catch (e: Exception) {
@@ -773,40 +995,44 @@ class TransactionDetailViewModel @Inject constructor(
 
     // ========== Receipt Management ==========
 
-    private val _receiptUri = MutableStateFlow<Uri?>(null)
-    val receiptUri: StateFlow<Uri?> = _receiptUri.asStateFlow()
+    private val _existingReceipts = MutableStateFlow<List<ExistingReceipt>>(emptyList())
+    val existingReceipts: StateFlow<List<ExistingReceipt>> = _existingReceipts.asStateFlow()
 
-    private val _pendingReceiptUri = MutableStateFlow<Uri?>(null)
-    val pendingReceiptUri: StateFlow<Uri?> = _pendingReceiptUri.asStateFlow()
+    private val _pendingReceiptUris = MutableStateFlow<List<Uri>>(emptyList())
+    val pendingReceiptUris: StateFlow<List<Uri>> = _pendingReceiptUris.asStateFlow()
 
-    private val _receiptRemoved = MutableStateFlow(false)
-    val receiptRemoved: StateFlow<Boolean> = _receiptRemoved.asStateFlow()
+    private val _removedReceiptIds = MutableStateFlow<Set<Long>>(emptySet())
+    val removedReceiptIds: StateFlow<Set<Long>> = _removedReceiptIds.asStateFlow()
 
-    private val _showFullScreenReceipt = MutableStateFlow(false)
-    val showFullScreenReceipt: StateFlow<Boolean> = _showFullScreenReceipt.asStateFlow()
+    private val _fullScreenReceiptUri = MutableStateFlow<Uri?>(null)
+    val fullScreenReceiptUri: StateFlow<Uri?> = _fullScreenReceiptUri.asStateFlow()
 
-    fun showFullScreenReceipt() { _showFullScreenReceipt.value = true }
-    fun hideFullScreenReceipt() { _showFullScreenReceipt.value = false }
+    fun showFullScreenReceipt(uri: Uri) { _fullScreenReceiptUri.value = uri }
+    fun hideFullScreenReceipt() { _fullScreenReceiptUri.value = null }
 
-    fun updatePendingReceiptUri(uri: Uri?) {
-        _pendingReceiptUri.value = uri
-        _receiptRemoved.value = false
+    fun addPendingReceiptUri(uri: Uri) {
+        _pendingReceiptUris.value = _pendingReceiptUris.value + uri
     }
 
-    fun removeReceipt() {
-        _pendingReceiptUri.value = null
-        _receiptRemoved.value = true
+    fun removePendingReceiptUri(index: Int) {
+        val current = _pendingReceiptUris.value.toMutableList()
+        if (index in current.indices) current.removeAt(index)
+        _pendingReceiptUris.value = current
+    }
+
+    fun removeExistingReceipt(receiptId: Long) {
+        _removedReceiptIds.value = _removedReceiptIds.value + receiptId
     }
 
     fun createCameraUri(): Uri = receiptManager.createCameraUri()
 
-    private fun loadReceiptUri(transaction: TransactionEntity) {
-        transaction.receiptPath?.let { path ->
-            val file = receiptManager.getReceiptFile(path)
-            if (file.exists()) {
-                _receiptUri.value = file.toUri()
-            }
+    private suspend fun loadReceiptUris(transaction: TransactionEntity) {
+        val receipts = transactionRepository.getReceiptsForTransaction(transaction.id)
+        val existing = receipts.mapNotNull { entity ->
+            val file = receiptManager.getReceiptFile(entity.filePath)
+            if (file.exists()) ExistingReceipt(entity.id, file.toUri(), entity.filePath) else null
         }
+        _existingReceipts.value = existing
     }
 
     // ========== Loan Management ==========
@@ -886,3 +1112,25 @@ class TransactionDetailViewModel @Inject constructor(
         }
     }
 }
+
+data class ExistingReceipt(val id: Long, val uri: Uri, val path: String)
+
+enum class CategorySuggestionSource {
+    MERCHANT,
+    USED_TODAY
+}
+
+data class CategorySuggestionsState(
+    val categories: List<String> = emptyList(),
+    val source: CategorySuggestionSource? = null,
+    val merchantName: String = ""
+)
+
+private data class CategorySuggestionInputs(
+    val merchantCategories: List<String>,
+    val todayCategories: List<String>,
+    val transaction: TransactionEntity?,
+    val editable: TransactionEntity?,
+    val pending: List<String>,
+)
+

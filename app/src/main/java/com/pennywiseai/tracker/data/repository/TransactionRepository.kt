@@ -1,8 +1,12 @@
 package com.pennywiseai.tracker.data.repository
 
+import com.pennywiseai.tracker.data.database.dao.TransactionCategoryDao
 import com.pennywiseai.tracker.data.database.dao.TransactionDao
+import com.pennywiseai.tracker.data.database.dao.TransactionReceiptDao
 import com.pennywiseai.tracker.data.database.dao.TransactionSplitDao
+import com.pennywiseai.tracker.data.database.entity.TransactionCategoryEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
+import com.pennywiseai.tracker.data.database.entity.TransactionReceiptEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionSplitEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionType
 import com.pennywiseai.tracker.data.database.entity.TransactionWithSplits
@@ -19,7 +23,9 @@ import kotlin.math.min
 @Singleton
 class TransactionRepository @Inject constructor(
     private val transactionDao: TransactionDao,
-    private val transactionSplitDao: TransactionSplitDao
+    private val transactionSplitDao: TransactionSplitDao,
+    private val transactionCategoryDao: TransactionCategoryDao,
+    private val transactionReceiptDao: TransactionReceiptDao
 ) {
     fun getAllTransactions(): Flow<List<TransactionEntity>> = 
         transactionDao.getAllTransactions()
@@ -83,6 +89,35 @@ class TransactionRepository @Inject constructor(
     fun getAllCategories(): Flow<List<String>> =
         transactionDao.getAllCategories()
 
+    fun getTodayCategories(): Flow<List<String>> {
+        val start = LocalDate.now().atStartOfDay()
+        val end = LocalDate.now().atTime(23, 59, 59)
+        return transactionDao.getCategoriesUsedBetweenDates(start, end)
+    }
+
+    /**
+     * Categories previously used for this merchant (saved mapping, past transactions, tags).
+     */
+    suspend fun getSuggestedCategoriesForMerchant(
+        merchantName: String,
+        excludeTransactionId: Long,
+        merchantMappingCategory: String? = null
+    ): List<String> {
+        val fromTransactions = transactionDao.getCategoriesForMerchant(
+            merchantName = merchantName,
+            excludeTransactionId = excludeTransactionId
+        )
+        val fromTags = transactionCategoryDao.getTagCategoriesForMerchant(
+            merchantName = merchantName,
+            excludeTransactionId = excludeTransactionId
+        )
+        return buildList {
+            merchantMappingCategory?.let { add(it) }
+            addAll(fromTransactions)
+            addAll(fromTags)
+        }.distinct()
+    }
+
     /**
      * Gets the top N categories by usage count (number of transactions).
      * Useful for showing user's most frequently used categories in notifications.
@@ -108,8 +143,11 @@ class TransactionRepository @Inject constructor(
     suspend fun insertTransactions(transactions: List<TransactionEntity>) = 
         transactionDao.insertTransactions(transactions)
     
-    suspend fun updateTransaction(transaction: TransactionEntity) = 
+    suspend fun updateTransaction(transaction: TransactionEntity) =
         transactionDao.updateTransaction(transaction)
+
+    suspend fun updateExcludedFromTracking(transactionId: Long, excluded: Boolean) =
+        transactionDao.updateExcludedFromTracking(transactionId, excluded)
     
     suspend fun deleteTransaction(transaction: TransactionEntity, hardDelete: Boolean = false) {
         if (hardDelete) {
@@ -151,9 +189,17 @@ class TransactionRepository @Inject constructor(
     suspend fun updateCategoryForMerchant(merchantName: String, newCategory: String) {
         transactionDao.updateCategoryForMerchant(merchantName, newCategory)
     }
+
+    suspend fun updateMerchantNameForMerchant(oldMerchantName: String, newMerchantName: String) {
+        transactionDao.updateMerchantNameForMerchant(oldMerchantName, newMerchantName)
+    }
     
     suspend fun getOtherTransactionCountForMerchant(merchantName: String, excludeId: Long): Int {
         return transactionDao.getTransactionCountForMerchant(merchantName, excludeId)
+    }
+
+    suspend fun getDistinctMerchantNames(): List<String> {
+        return transactionDao.getDistinctMerchantNames()
     }
     
     // Additional methods for Home screen
@@ -175,7 +221,7 @@ class TransactionRepository @Inject constructor(
                     .filter { it.transactionType == TransactionType.INCOME }
                     .fold(BigDecimal.ZERO) { acc, transaction -> acc + transaction.amount }
                 val expenses = nonLoan
-                    .filter { it.transactionType == TransactionType.EXPENSE }
+                    .filter { it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT }
                     .fold(BigDecimal.ZERO) { acc, transaction -> acc + transaction.amount }
                 MonthlyBreakdown(
                     total = income - expenses,
@@ -184,7 +230,7 @@ class TransactionRepository @Inject constructor(
                 )
             }
     }
-    
+
     fun getCurrentMonthTotal(): Flow<BigDecimal> {
         return getCurrentMonthBreakdown().map { it.total }
     }
@@ -206,7 +252,7 @@ class TransactionRepository @Inject constructor(
                     .filter { it.transactionType == TransactionType.INCOME }
                     .fold(BigDecimal.ZERO) { acc, transaction -> acc + transaction.amount }
                 val expenses = nonLoan
-                    .filter { it.transactionType == TransactionType.EXPENSE }
+                    .filter { it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT }
                     .fold(BigDecimal.ZERO) { acc, transaction -> acc + transaction.amount }
                 MonthlyBreakdown(
                     total = income - expenses,
@@ -215,7 +261,7 @@ class TransactionRepository @Inject constructor(
                 )
             }
     }
-    
+
     fun getLastMonthTotal(): Flow<BigDecimal> {
         return getLastMonthBreakdown().map { it.total }
     }
@@ -233,7 +279,7 @@ class TransactionRepository @Inject constructor(
                         .filter { it.transactionType == TransactionType.INCOME }
                         .fold(BigDecimal.ZERO) { acc, transaction -> acc + transaction.amount }
                     val expenses = currencyTransactions
-                        .filter { it.transactionType == TransactionType.EXPENSE }
+                        .filter { it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT }
                         .fold(BigDecimal.ZERO) { acc, transaction -> acc + transaction.amount }
                     MonthlyBreakdown(
                         total = income - expenses,
@@ -261,7 +307,7 @@ class TransactionRepository @Inject constructor(
                         .filter { it.transactionType == TransactionType.INCOME }
                         .fold(BigDecimal.ZERO) { acc, transaction -> acc + transaction.amount }
                     val expenses = currencyTransactions
-                        .filter { it.transactionType == TransactionType.EXPENSE }
+                        .filter { it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT }
                         .fold(BigDecimal.ZERO) { acc, transaction -> acc + transaction.amount }
                     MonthlyBreakdown(
                         total = income - expenses,
@@ -387,6 +433,40 @@ class TransactionRepository @Inject constructor(
     suspend fun insertSplit(split: TransactionSplitEntity): Long =
         transactionSplitDao.insertSplit(split)
 
+    // ========== Custom Category Methods ==========
+
+    fun getCustomCategoriesForTransaction(transactionId: Long): Flow<List<String>> =
+        transactionCategoryDao.getCategoriesForTransaction(transactionId)
+
+    suspend fun getCustomCategoriesSync(transactionId: Long): List<String> =
+        transactionCategoryDao.getCategoriesForTransactionSync(transactionId)
+
+    suspend fun addCustomCategory(transactionId: Long, categoryName: String) {
+        transactionCategoryDao.addCategory(
+            TransactionCategoryEntity(transactionId = transactionId, categoryName = categoryName)
+        )
+    }
+
+    suspend fun removeCustomCategory(transactionId: Long, categoryName: String) {
+        transactionCategoryDao.removeCategory(transactionId, categoryName)
+    }
+
+    suspend fun setCustomCategories(transactionId: Long, categoryNames: List<String>) {
+        transactionCategoryDao.clearCategoriesForTransaction(transactionId)
+        categoryNames.forEach { name ->
+            transactionCategoryDao.addCategory(
+                TransactionCategoryEntity(transactionId = transactionId, categoryName = name)
+            )
+        }
+    }
+
+    suspend fun getCategoriesForTransactions(ids: List<Long>): List<TransactionCategoryEntity> {
+        if (ids.isEmpty()) return emptyList()
+        return ids.chunked(900).flatMap { chunk ->
+            transactionCategoryDao.getCategoriesForTransactions(chunk)
+        }
+    }
+
     /**
      * Updates a split.
      */
@@ -398,4 +478,22 @@ class TransactionRepository @Inject constructor(
      */
     suspend fun deleteSplit(split: TransactionSplitEntity) =
         transactionSplitDao.deleteSplit(split)
+
+    // ── Receipt methods ──
+
+    suspend fun insertReceipts(transactionId: Long, filePaths: List<String>) {
+        val entities = filePaths.map { path ->
+            TransactionReceiptEntity(transactionId = transactionId, filePath = path)
+        }
+        transactionReceiptDao.insertReceipts(entities)
+    }
+
+    suspend fun getReceiptsForTransaction(transactionId: Long): List<TransactionReceiptEntity> =
+        transactionReceiptDao.getReceiptsForTransaction(transactionId)
+
+    suspend fun deleteReceipt(receiptId: Long) =
+        transactionReceiptDao.deleteReceipt(receiptId)
+
+    suspend fun deleteReceiptsForTransaction(transactionId: Long) =
+        transactionReceiptDao.deleteReceiptsForTransaction(transactionId)
 }

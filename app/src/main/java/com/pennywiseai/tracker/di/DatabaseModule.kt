@@ -6,6 +6,7 @@ import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.pennywiseai.tracker.data.database.PennyWiseDatabase
 import com.pennywiseai.tracker.data.database.dao.AccountBalanceDao
+import com.pennywiseai.tracker.data.database.dao.SalaryMonthOverrideDao
 import com.pennywiseai.tracker.data.database.dao.ProfileDao
 import com.pennywiseai.tracker.data.database.dao.BankNotificationDao
 import com.pennywiseai.tracker.data.database.dao.BudgetDao
@@ -15,12 +16,15 @@ import com.pennywiseai.tracker.data.database.dao.CategoryDao
 import com.pennywiseai.tracker.data.database.dao.ChatDao
 import com.pennywiseai.tracker.data.database.dao.ExchangeRateDao
 import com.pennywiseai.tracker.data.database.dao.LoanDao
+import com.pennywiseai.tracker.data.database.dao.TransactionCategoryDao
 import com.pennywiseai.tracker.data.database.dao.TransactionGroupDao
+import com.pennywiseai.tracker.data.database.dao.MerchantAliasDao
 import com.pennywiseai.tracker.data.database.dao.MerchantMappingDao
 import com.pennywiseai.tracker.data.database.dao.RuleApplicationDao
 import com.pennywiseai.tracker.data.database.dao.RuleDao
 import com.pennywiseai.tracker.data.database.dao.SubscriptionDao
 import com.pennywiseai.tracker.data.database.dao.TransactionDao
+import com.pennywiseai.tracker.data.database.dao.TransactionReceiptDao
 import com.pennywiseai.tracker.data.database.dao.TransactionSplitDao
 import com.pennywiseai.tracker.data.database.dao.UnrecognizedSmsDao
 import dagger.Module
@@ -66,7 +70,13 @@ object DatabaseModule {
                 PennyWiseDatabase.MIGRATION_22_23,
                 PennyWiseDatabase.MIGRATION_38_39,
                 PennyWiseDatabase.MIGRATION_44_45,
-                PennyWiseDatabase.MIGRATION_45_46
+                PennyWiseDatabase.MIGRATION_45_46,
+                PennyWiseDatabase.MIGRATION_46_47,
+                PennyWiseDatabase.MIGRATION_47_48,
+                PennyWiseDatabase.MIGRATION_48_49,
+                PennyWiseDatabase.MIGRATION_49_50,
+                PennyWiseDatabase.MIGRATION_50_51,
+                PennyWiseDatabase.MIGRATION_51_52
             )
 
             // Enable auto-migrations
@@ -129,6 +139,12 @@ object DatabaseModule {
     @Singleton
     fun provideMerchantMappingDao(database: PennyWiseDatabase): MerchantMappingDao {
         return database.merchantMappingDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideMerchantAliasDao(database: PennyWiseDatabase): MerchantAliasDao {
+        return database.merchantAliasDao()
     }
     
     /**
@@ -267,6 +283,24 @@ object DatabaseModule {
     @Singleton
     fun provideProfileDao(database: PennyWiseDatabase): ProfileDao {
         return database.profileDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideTransactionCategoryDao(database: PennyWiseDatabase): TransactionCategoryDao {
+        return database.transactionCategoryDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideSalaryMonthOverrideDao(database: PennyWiseDatabase): SalaryMonthOverrideDao {
+        return database.salaryMonthOverrideDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideTransactionReceiptDao(database: PennyWiseDatabase): TransactionReceiptDao {
+        return database.transactionReceiptDao()
     }
 }
 

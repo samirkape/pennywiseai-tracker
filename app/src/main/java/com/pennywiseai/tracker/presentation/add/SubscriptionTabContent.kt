@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pennywiseai.tracker.ui.components.cards.PennyWiseCardV2
+import com.pennywiseai.tracker.presentation.categories.CategoryEditDialog
 import com.pennywiseai.tracker.ui.theme.*
 import com.pennywiseai.tracker.utils.CurrencyFormatter
 import java.time.format.DateTimeFormatter
@@ -59,6 +60,7 @@ fun SubscriptionTabContent(
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showCategoryMenu by remember { mutableStateOf(false) }
+    var showCreateCategoryDialog by remember { mutableStateOf(false) }
     var showBillingCycleMenu by remember { mutableStateOf(false) }
     var showCurrencyMenu by remember { mutableStateOf(false) }
 
@@ -317,6 +319,32 @@ fun SubscriptionTabContent(
                                 }
                             )
                         }
+                        if (categories.isNotEmpty()) {
+                            HorizontalDivider()
+                        }
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        "Create new category",
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            },
+                            onClick = {
+                                showCategoryMenu = false
+                                showCreateCategoryDialog = true
+                            }
+                        )
                     }
                 }
 
@@ -401,5 +429,17 @@ fun SubscriptionTabContent(
         ) {
             DatePicker(state = datePickerState)
         }
+    }
+
+    // Create Category Dialog
+    if (showCreateCategoryDialog) {
+        CategoryEditDialog(
+            category = null,
+            onDismiss = { showCreateCategoryDialog = false },
+            onSave = { name, color, isIncome ->
+                viewModel.createAndSelectSubscriptionCategory(name, color, isIncome)
+                showCreateCategoryDialog = false
+            }
+        )
     }
 }

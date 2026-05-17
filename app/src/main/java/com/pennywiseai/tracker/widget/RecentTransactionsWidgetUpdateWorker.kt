@@ -80,7 +80,7 @@ class RecentTransactionsWidgetUpdateWorker @AssistedInject constructor(
                 .first()
 
             val totalSpent = allTransactions
-                .filter { it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT || it.transactionType == TransactionType.INVESTMENT }
+                .filter { !it.isExcludedFromTracking && (it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT || it.transactionType == TransactionType.INVESTMENT) }
                 .fold(BigDecimal.ZERO) { acc, tx ->
                     val amount = if (!tx.currency.equals(targetCurrency, ignoreCase = true)) {
                         currencyConversionService.convertAmount(tx.amount, tx.currency, targetCurrency)

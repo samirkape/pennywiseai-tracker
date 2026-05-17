@@ -37,11 +37,13 @@ class CsvExporter @Inject constructor(
      * Exports transactions to CSV file with progress updates
      * @param transactions List of transactions to export
      * @param fileName Optional custom filename (without extension)
+     * @param additionalCategories Map of transactionId -> list of extra category tags from junction table
      * @return Flow emitting progress updates and final Uri
      */
     fun exportTransactions(
         transactions: List<TransactionEntity>,
-        fileName: String? = null
+        fileName: String? = null,
+        additionalCategories: Map<Long, List<String>> = emptyMap()
     ): Flow<ExportResult> = flow {
         emit(ExportResult.Progress(0f, "Preparing export..."))
         
@@ -71,6 +73,7 @@ class CsvExporter @Inject constructor(
                         "Time",
                         "Merchant",
                         "Category",
+                        "Tags",
                         "Type",
                         "Amount",
                         "Currency",
@@ -84,12 +87,17 @@ class CsvExporter @Inject constructor(
                     // Write transactions with progress updates
                     val totalTransactions = transactions.size
                     transactions.forEachIndexed { index, transaction ->
+                        val tags = additionalCategories[transaction.id]
+                            ?.filter { it != transaction.category }
+                            ?.joinToString("; ")
+                            ?: ""
                         // Write transaction row
                         csvWriter.writeNext(arrayOf(
                             transaction.dateTime.format(dateFormatter),
                             transaction.dateTime.format(timeFormatter),
                             transaction.merchantName,
                             transaction.category,
+                            tags,
                             when (transaction.transactionType) {
                                 TransactionType.INCOME -> "Income"
                                 TransactionType.EXPENSE -> "Expense"
@@ -148,7 +156,8 @@ class CsvExporter @Inject constructor(
      */
     suspend fun exportTransactionsToFile(
         transactions: List<TransactionEntity>,
-        fileName: String? = null
+        fileName: String? = null,
+        additionalCategories: Map<Long, List<String>> = emptyMap()
     ): Uri = withContext(Dispatchers.IO) {
         val exportDir = File(context.cacheDir, EXPORT_DIR)
         if (!exportDir.exists()) {
@@ -167,6 +176,7 @@ class CsvExporter @Inject constructor(
                     "Time",
                     "Merchant",
                     "Category",
+                    "Tags",
                     "Type",
                     "Amount",
                     "Currency",
@@ -179,11 +189,16 @@ class CsvExporter @Inject constructor(
 
                 // Write transactions
                 transactions.forEach { transaction ->
+                    val tags = additionalCategories[transaction.id]
+                        ?.filter { it != transaction.category }
+                        ?.joinToString("; ")
+                        ?: ""
                     csvWriter.writeNext(arrayOf(
                         transaction.dateTime.format(dateFormatter),
                         transaction.dateTime.format(timeFormatter),
                         transaction.merchantName,
                         transaction.category,
+                        tags,
                         when (transaction.transactionType) {
                             TransactionType.INCOME -> "Income"
                             TransactionType.EXPENSE -> "Expense"

@@ -104,8 +104,9 @@ class AccountDetailViewModel @Inject constructor(
 
                     when (transaction.transactionType) {
                         com.pennywiseai.tracker.data.database.entity.TransactionType.INCOME -> totalIncome += convertedAmount
-                        com.pennywiseai.tracker.data.database.entity.TransactionType.EXPENSE -> totalExpenses += convertedAmount
-                        else -> { /* TRANSFER, INVESTMENT, CREDIT are not counted as expenses */ }
+                        com.pennywiseai.tracker.data.database.entity.TransactionType.EXPENSE,
+                        com.pennywiseai.tracker.data.database.entity.TransactionType.CREDIT -> totalExpenses += convertedAmount
+                        else -> { /* TRANSFER, INVESTMENT are not counted */ }
                     }
                 }
 

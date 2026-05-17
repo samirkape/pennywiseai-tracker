@@ -80,7 +80,7 @@ fun AppLockScreen(
 
                 // Title
                 Text(
-                    text = "PennyWise is Locked",
+                    text = "SpendTracker PRO is Locked",
                     style = MaterialTheme.typography.headlineMedium,
                     textAlign = TextAlign.Center
                 )

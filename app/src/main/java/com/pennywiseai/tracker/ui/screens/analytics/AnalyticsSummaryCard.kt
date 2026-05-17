@@ -32,6 +32,7 @@ fun AnalyticsSummaryCard(
     topCategoryPercentage: Float,
     currency: String,
     isLoading: Boolean = false,
+    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     // Animate alpha on load: 0 → 1
@@ -45,7 +46,8 @@ fun AnalyticsSummaryCard(
     )
 
     PennyWiseCard(
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth(),
+        onClick = onClick
     ) {
         Column(
             modifier = Modifier

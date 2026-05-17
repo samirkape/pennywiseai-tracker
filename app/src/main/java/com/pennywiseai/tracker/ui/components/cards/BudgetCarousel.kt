@@ -11,6 +11,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -128,18 +132,26 @@ fun BudgetCarousel(
                 )
             }
 
-            Spacer(modifier = Modifier.height(Spacing.sm))
+                Spacer(modifier = Modifier.height(Spacing.sm))
 
+            // M3-style pill/dot pager indicators
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 repeat(groups.size) { index ->
                     val isActive = pagerState.currentPage == index
+                    val indicatorWidth by animateDpAsState(
+                        targetValue = if (isActive) 16.dp else 6.dp,
+                        animationSpec = tween(durationMillis = 200),
+                        label = "indicator_width_$index"
+                    )
                     Box(
                         modifier = Modifier
-                            .padding(horizontal = Spacing.xs)
-                            .size(if (isActive) Spacing.sm else Spacing.xs)
+                            .padding(horizontal = 3.dp)
+                            .width(indicatorWidth)
+                            .height(6.dp)
                             .clip(CircleShape)
                             .background(
                                 if (isActive) MaterialTheme.colorScheme.primary

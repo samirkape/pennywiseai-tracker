@@ -57,6 +57,9 @@ data class TransactionEntity(
     
     @ColumnInfo(name = "is_deleted", defaultValue = "0")
     val isDeleted: Boolean = false,
+
+    @ColumnInfo(name = "is_excluded_from_tracking", defaultValue = "0")
+    val isExcludedFromTracking: Boolean = false,
     
     @ColumnInfo(name = "created_at")
     val createdAt: LocalDateTime = LocalDateTime.now(),

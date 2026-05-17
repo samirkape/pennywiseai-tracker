@@ -1,8 +1,6 @@
 package com.pennywiseai.tracker.presentation.subscriptions
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -183,8 +181,7 @@ fun SubscriptionsScreen(
                         SwipeableSubscriptionItem(
                             subscription = subscription,
                             convertedAmount = uiState.convertedAmounts[subscription.id],
-                            displayCurrency = uiState.displayCurrency,
-                            onHide = { viewModel.hideSubscription(subscription.id) }
+                            displayCurrency = uiState.displayCurrency
                         )
                     }
                 }
@@ -234,57 +231,18 @@ private fun TotalSubscriptionsSummary(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SwipeableSubscriptionItem(
     subscription: SubscriptionEntity,
     convertedAmount: BigDecimal? = null,
-    displayCurrency: String? = null,
-    onHide: () -> Unit
+    displayCurrency: String? = null
 ) {
     var showSmsBody by remember { mutableStateOf(false) }
-    
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { dismissValue ->
-            when (dismissValue) {
-                SwipeToDismissBoxValue.EndToStart -> {
-                    onHide()
-                    true
-                }
-                else -> false
-            }
-        }
-    )
-    
-    SwipeToDismissBox(
-        state = dismissState,
-        backgroundContent = {
-            val color by animateColorAsState(
-                when (dismissState.targetValue) {
-                    SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.error
-                    else -> Color.Transparent
-                },
-                label = "background color"
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(color)
-                    .padding(horizontal = Dimensions.Padding.content),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Icon(
-                    imageVector = Icons.Default.VisibilityOff,
-                    contentDescription = "Hide",
-                    tint = MaterialTheme.colorScheme.onError
-                )
-            }
-        },
-        content = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+    ) {
                 PennyWiseCardV2(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -464,9 +422,7 @@ private fun SwipeableSubscriptionItem(
                         }
                     }
                 }
-            }
-        }
-    )
+    }
 }
 
 @Composable

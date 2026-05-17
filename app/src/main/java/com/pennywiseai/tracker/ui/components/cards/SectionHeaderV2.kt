@@ -24,7 +24,7 @@ fun SectionHeaderV2(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = Spacing.xs)
+            .padding(top = Spacing.sm, bottom = Spacing.xs)
             .semantics { heading() },
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -38,8 +38,8 @@ fun SectionHeaderV2(
             }
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold
             )
         }

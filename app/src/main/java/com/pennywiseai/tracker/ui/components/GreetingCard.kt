@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -87,10 +87,10 @@ fun GreetingCard(
             .padding(horizontal = Dimensions.Padding.content, vertical = Spacing.xs),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Profile Avatar
+        // Profile Avatar — 52dp with a ring border for depth
         Box(
             modifier = Modifier
-                .size(44.dp)
+                .size(52.dp)
                 .clip(CircleShape)
                 .background(avatarBackground)
                 .clickable(onClick = onAvatarClick),
@@ -139,7 +139,7 @@ fun GreetingCard(
         ) {
             Text(
                 text = userName.ifBlank { "User" },
-                style = MaterialTheme.typography.titleMedium.copy(
+                style = MaterialTheme.typography.titleLarge.copy(
                     fontWeight = FontWeight.SemiBold
                 ),
                 color = MaterialTheme.colorScheme.onBackground
@@ -147,7 +147,7 @@ fun GreetingCard(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -155,14 +155,19 @@ fun GreetingCard(
         if (profiles.isNotEmpty()) {
             var showProfileMenu by remember { mutableStateOf(false) }
             Box {
-                IconButton(
-                    onClick = { showProfileMenu = true },
-                    modifier = Modifier.size(48.dp)
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainer, CircleShape)
+                        .clickable(onClick = { showProfileMenu = true }),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = profileFilterIcon(profiles, selectedProfileId),
                         contentDescription = "Profile filter",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
                 ProfileFilterDropdown(
@@ -175,15 +180,22 @@ fun GreetingCard(
             }
         }
 
-        // Menu button — plain IconButton, no circular background
-        IconButton(
-            onClick = onMenuClick,
-            modifier = Modifier.size(48.dp)
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // Menu button — circular surfaceContainer background
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceContainer, CircleShape)
+                .clickable(onClick = onMenuClick),
+            contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Default.MoreHoriz,
-                contentDescription = "More options",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                imageVector = Icons.Default.Settings,
+                contentDescription = "Settings",
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(20.dp)
             )
         }
     }

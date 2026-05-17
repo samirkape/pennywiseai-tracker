@@ -72,6 +72,9 @@ class ReceiptManager @Inject constructor(
         )
     }
 
+    suspend fun saveReceipts(sourceUris: List<Uri>): List<String> =
+        sourceUris.mapNotNull { saveReceipt(it) }
+
     fun deleteAllReceipts() {
         if (receiptsDir.exists()) receiptsDir.deleteRecursively()
     }

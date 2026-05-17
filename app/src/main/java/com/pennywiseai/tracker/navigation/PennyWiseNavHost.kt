@@ -119,9 +119,6 @@ fun PennyWiseNavHost(
                 onNavigateToUnrecognizedSms = {
                     navController.navigate(UnrecognizedSms) { launchSingleTop = true }
                 },
-                onNavigateToFaq = {
-                    navController.navigate(Faq) { launchSingleTop = true }
-                },
                 onNavigateToBudgets = {
                     navController.navigate(BudgetGroups) { launchSingleTop = true }
                 },
@@ -133,7 +130,21 @@ fun PennyWiseNavHost(
                 },
                 onNavigateToTransactionGroups = {
                     navController.navigate(TransactionGroups) { launchSingleTop = true }
+                },
+                onNavigateToPayPeriodSettings = {
+                    navController.navigate(PayPeriodSettings) { launchSingleTop = true }
                 }
+            )
+        }
+
+        composable<PayPeriodSettings>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+        ) {
+            com.pennywiseai.tracker.ui.screens.settings.PayPeriodSettingsScreen(
+                onNavigateBack = { navController.safePopBackStack() }
             )
         }
 

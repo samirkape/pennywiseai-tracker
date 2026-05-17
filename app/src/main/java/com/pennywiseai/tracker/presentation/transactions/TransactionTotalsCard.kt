@@ -33,6 +33,7 @@ fun TransactionTotalsCard(
     expenses: BigDecimal,
     netBalance: BigDecimal,
     currency: String,
+    transactionCount: Int = 0,
     availableCurrencies: List<String> = emptyList(),
     onCurrencySelected: (String) -> Unit = {},
     isUnifiedMode: Boolean = false,
@@ -71,6 +72,20 @@ fun TransactionTotalsCard(
                     onCurrencySelected = onCurrencySelected,
                     modifier = Modifier
                         .padding(horizontal = Spacing.xs)
+                )
+                Spacer(modifier = Modifier.height(Spacing.xs))
+            }
+
+            // Transaction count
+            if (transactionCount > 0 || !isLoading) {
+                Text(
+                    text = if (transactionCount == 1) "1 transaction" else "$transactionCount transactions",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .padding(horizontal = Spacing.sm)
+                        .alpha(if (isLoading) 0.5f else 1f)
                 )
                 Spacer(modifier = Modifier.height(Spacing.xs))
             }

@@ -25,8 +25,10 @@ import com.pennywiseai.tracker.data.backup.BackupImporter
 import com.pennywiseai.tracker.data.backup.ExportResult
 import com.pennywiseai.tracker.data.backup.ImportResult
 import com.pennywiseai.tracker.data.backup.ImportStrategy
+import com.pennywiseai.tracker.data.repository.SalaryMonthOverrideRepository
 import com.pennywiseai.tracker.data.repository.TransactionRepository
 import com.pennywiseai.tracker.utils.CurrencyUtils
+import com.pennywiseai.tracker.utils.DateRangeUtils
 import android.content.Intent
 import androidx.core.content.FileProvider
 import com.pennywiseai.tracker.core.Constants
@@ -34,9 +36,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.first
-import java.net.URLEncoder
 import java.io.File
+import java.net.URLEncoder
+import java.time.LocalDate
 import javax.inject.Inject
 
 @HiltViewModel
@@ -47,7 +49,8 @@ class SettingsViewModel @Inject constructor(
     private val unrecognizedSmsRepository: UnrecognizedSmsRepository,
     private val transactionRepository: TransactionRepository,
     private val backupExporter: BackupExporter,
-    private val backupImporter: BackupImporter
+    private val backupImporter: BackupImporter,
+    private val salaryMonthOverrideRepository: SalaryMonthOverrideRepository
 ) : ViewModel() {
     
     private val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
@@ -99,6 +102,89 @@ class SettingsViewModel @Inject constructor(
     
     // Base currency state
     val baseCurrency = userPreferencesRepository.baseCurrency
+
+    // Usual salary day (1–28 or DateRangeUtils.LAST_DAY_SENTINEL = 0)
+    val monthStartDay = userPreferencesRepository.monthStartDay
+
+    fun updateMonthStartDay(day: Int) {
+        viewModelScope.launch {
+            userPreferencesRepository.updateMonthStartDay(day)
+        }
+    }
+
+    // Pay-period mode toggle (true = financial/salary month, false = calendar month)
+    val useFinancialMonth = userPreferencesRepository.useFinancialMonth
+
+    fun setUseFinancialMonth(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.updateUseFinancialMonth(enabled)
+        }
+    }
+
+    val useFixedBudgetPeriodEnd = userPreferencesRepository.useFixedBudgetPeriodEnd
+
+    val budgetPeriodEndDay = userPreferencesRepository.budgetPeriodEndDay
+
+    fun setUseFixedBudgetPeriodEnd(useFixed: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setUseFixedBudgetPeriodEnd(useFixed)
+        }
+    }
+
+    fun updateBudgetPeriodEndDay(day: Int) {
+        viewModelScope.launch {
+            userPreferencesRepository.updateBudgetPeriodEndDay(day)
+        }
+    }
+
+    /**
+     * Persists a recurring pay-month window from two reference calendar dates.
+     * [onResult] is invoked on the main thread with `true` if saved, `false` if the range was invalid.
+     */
+    fun saveFixedPayPeriodFromDates(
+        periodStart: LocalDate,
+        periodEnd: LocalDate,
+        onResult: (Boolean) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            if (!periodEnd.isAfter(periodStart)) {
+                onResult(false)
+                return@launch
+            }
+            val startDom = dayOfMonthToPreference(periodStart)
+            val endDom = dayOfMonthToPreference(periodEnd)
+            userPreferencesRepository.applyFixedPayMonthDom(startDom, endDom)
+            onResult(true)
+        }
+    }
+
+    /** Switches to implicit period end (day before next start); keeps pay-month mode on. */
+    fun clearFixedBudgetPeriodEnd(onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            userPreferencesRepository.setUseFixedBudgetPeriodEnd(false)
+            onDone()
+        }
+    }
+
+    private fun dayOfMonthToPreference(date: LocalDate): Int {
+        val len = date.lengthOfMonth()
+        return if (date.dayOfMonth == len) DateRangeUtils.LAST_DAY_SENTINEL else date.dayOfMonth
+    }
+
+    // Per-month salary date overrides (legacy); kept for data import and future use.
+    val salaryMonthOverrides = salaryMonthOverrideRepository.overridesMap
+
+    fun setSalaryMonthOverride(yearMonth: String, startDay: Int) {
+        viewModelScope.launch {
+            salaryMonthOverrideRepository.setOverride(yearMonth, startDay)
+        }
+    }
+
+    fun clearSalaryMonthOverride(yearMonth: String) {
+        viewModelScope.launch {
+            salaryMonthOverrideRepository.clearOverride(yearMonth)
+        }
+    }
     
     // Unrecognized SMS state
     val unreportedSmsCount = unrecognizedSmsRepository.getUnreportedCount()
@@ -549,7 +635,7 @@ class SettingsViewModel @Inject constructor(
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/octet-stream"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "PennyWise Backup")
+                putExtra(Intent.EXTRA_SUBJECT, "SpendTracker PRO Backup")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }

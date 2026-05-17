@@ -446,6 +446,7 @@ fun ManageAccountsScreen(
             UpdateBalanceDialog(
                 bankName = selectedAccount!!.first,
                 accountLast4 = selectedAccount!!.second,
+                currentBalance = selectedAccountEntity!!.balance,
                 onDismiss = {
                     showUpdateDialog = false
                     selectedAccount = null
@@ -698,7 +699,7 @@ private fun CreditCardItem(
             ) {
                 // Primary action
                 OutlinedButton(
-                    onClick = if (isManualAccount) onEditAccount else onUpdateBalance
+                    onClick = onUpdateBalance
                 ) {
                     Icon(
                         Icons.Default.Edit,
@@ -706,7 +707,7 @@ private fun CreditCardItem(
                         modifier = Modifier.size(Dimensions.Icon.small)
                     )
                     Spacer(modifier = Modifier.width(Spacing.xs))
-                    Text(if (isManualAccount) "Edit" else "Update")
+                    Text("Set Balance")
                 }
 
                 // Overflow menu
@@ -721,6 +722,21 @@ private fun CreditCardItem(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
+                        if (isManualAccount) {
+                            DropdownMenuItem(
+                                text = { Text("Edit Account") },
+                                onClick = {
+                                    showMenu = false
+                                    onEditAccount()
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.EditNote,
+                                        contentDescription = null
+                                    )
+                                }
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text("History") },
                             onClick = {
@@ -1059,7 +1075,7 @@ private fun AccountItem(
             ) {
                 // Primary action
                 OutlinedButton(
-                    onClick = if (isManualAccount) onEditAccount else onUpdateBalance
+                    onClick = onUpdateBalance
                 ) {
                     Icon(
                         Icons.Default.Edit,
@@ -1067,7 +1083,7 @@ private fun AccountItem(
                         modifier = Modifier.size(Dimensions.Icon.small)
                     )
                     Spacer(modifier = Modifier.width(Spacing.xs))
-                    Text(if (isManualAccount) "Edit" else "Update Balance")
+                    Text("Set Balance")
                 }
 
                 // Overflow menu
@@ -1082,6 +1098,21 @@ private fun AccountItem(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
+                        if (isManualAccount) {
+                            DropdownMenuItem(
+                                text = { Text("Edit Account") },
+                                onClick = {
+                                    showMenu = false
+                                    onEditAccount()
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.EditNote,
+                                        contentDescription = null
+                                    )
+                                }
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text("History") },
                             onClick = {
@@ -1152,17 +1183,18 @@ private fun AccountItem(
 private fun UpdateBalanceDialog(
     bankName: String,
     accountLast4: String,
+    currentBalance: BigDecimal = BigDecimal.ZERO,
     onDismiss: () -> Unit,
     onConfirm: (BigDecimal) -> Unit
 ) {
-    var balanceText by remember { mutableStateOf("") }
-    var isValid by remember { mutableStateOf(false) }
+    var balanceText by remember { mutableStateOf(currentBalance.stripTrailingZeros().toPlainString()) }
+    var isValid by remember { mutableStateOf(true) }
     
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Column {
-                Text("Update Balance")
+                Text("Set Balance")
                 Text(
                     text = "$bankName ••$accountLast4",
                     style = MaterialTheme.typography.bodyMedium,
@@ -1179,7 +1211,7 @@ private fun UpdateBalanceDialog(
                         isValid = text.isNotBlank() && text.toDoubleOrNull() != null
                     }
                 },
-                label = { Text("New Balance") },
+                label = { Text("Current Balance") },
                 placeholder = { Text("0.00") },
                 leadingIcon = {
                     Text(
@@ -1204,7 +1236,7 @@ private fun UpdateBalanceDialog(
                 },
                 enabled = isValid
             ) {
-                Text("Update")
+                Text("Save")
             }
         },
         dismissButton = {

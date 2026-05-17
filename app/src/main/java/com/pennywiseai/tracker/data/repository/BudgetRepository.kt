@@ -150,8 +150,8 @@ class BudgetRepository @Inject constructor(
             endDate = budget.endDate.atTime(23, 59, 59),
             currency = budget.currency
         ).map { allTransactions ->
-            // Filter to only include EXPENSE transactions, excluding loan repayments
-            allTransactions.filter { it.transaction.transactionType == TransactionType.EXPENSE && it.transaction.loanId == null }
+            // Filter to include EXPENSE and CREDIT (credit card) transactions, excluding loan repayments
+            allTransactions.filter { (it.transaction.transactionType == TransactionType.EXPENSE || it.transaction.transactionType == TransactionType.CREDIT) && it.transaction.loanId == null }
         }
 
         val categoriesFlow = if (budget.includeAllCategories) {
