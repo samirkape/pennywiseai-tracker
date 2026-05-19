@@ -63,6 +63,20 @@ T&C. Ignore if paid""",
                 )
             ),
 
+            // ACH payroll salary (ACH substring must not classify as investment)
+            ParserTestCase(
+                name = "ACH C-SAL salary credit",
+                message = "Update! INR 1,97,317.00 deposited in HDFC Bank A/c XX2518 on 24-DEC-25 for ACH C-SAL-THWORKSTECHINDPV-SalaryDec254.Avl bal INR 1,97,317.00. Cheque deposits in A/C are subject to clearing",
+                sender = "VD-HDFCBK-S",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("197317.00"),
+                    currency = "INR",
+                    type = com.pennywiseai.parser.core.TransactionType.INCOME,
+                    accountLast4 = "2518",
+                    merchant = "THWORKSTECHINDPV",
+                ),
+            ),
+
             // NEFT deposit (salary/income)
             ParserTestCase(
                 name = "NEFT Credit Deposit - Income",

@@ -125,6 +125,17 @@ class UserPreferencesRepository @Inject constructor(
 
         // Pay-period suggestion dismissals: set of "YYYY-MM:dayOfMonth"
         val DISMISSED_SALARY_SUGGESTIONS = stringPreferencesKey("dismissed_salary_suggestions")
+
+        // One-shot flag: has the historical credit-card-bill-payment linker pass run?
+        val HAS_RUN_CC_PAYMENT_BACKFILL = booleanPreferencesKey("has_run_cc_payment_backfill")
+
+    }
+
+    val hasRunCcPaymentBackfill: Flow<Boolean> = context.dataStore.data
+        .map { it[PreferencesKeys.HAS_RUN_CC_PAYMENT_BACKFILL] ?: false }
+
+    suspend fun setHasRunCcPaymentBackfill(value: Boolean) {
+        context.dataStore.edit { it[PreferencesKeys.HAS_RUN_CC_PAYMENT_BACKFILL] = value }
     }
 
     val userPreferences: Flow<UserPreferences> = context.dataStore.data
@@ -739,6 +750,7 @@ class UserPreferencesRepository @Inject constructor(
             preferences[PreferencesKeys.DISMISSED_SALARY_SUGGESTIONS] = current.joinToString("|")
         }
     }
+
 }
 
 data class UserPreferences(

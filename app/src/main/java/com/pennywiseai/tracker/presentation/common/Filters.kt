@@ -99,10 +99,27 @@ fun getDateRangeForPeriod(
             start to today
         }
         TimePeriod.LAST_MONTH -> {
-            val lastMonth = YearMonth.now().minusMonths(1)
-            val start = lastMonth.atDay(1)
-            val end = lastMonth.atEndOfMonth()
-            start to end
+            if (useFinancialMonth) {
+                // Return the previous pay period (one period before the current budget period)
+                val currentPeriodStart = DateRangeUtils.calculateBudgetPeriodRange(
+                    today,
+                    monthStartDay,
+                    useFixedBudgetPeriodEnd,
+                    budgetPeriodEndDay,
+                    monthStartOverrides
+                ).first
+                val prevPeriodEnd = currentPeriodStart.minusDays(1)
+                DateRangeUtils.calculateBudgetPeriodRange(
+                    prevPeriodEnd,
+                    monthStartDay,
+                    useFixedBudgetPeriodEnd,
+                    budgetPeriodEndDay,
+                    monthStartOverrides
+                )
+            } else {
+                val lastMonth = YearMonth.now().minusMonths(1)
+                lastMonth.atDay(1) to lastMonth.atEndOfMonth()
+            }
         }
         TimePeriod.CURRENT_FY -> {
             // Indian Financial Year: April 1 to March 31

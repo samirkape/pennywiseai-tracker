@@ -150,6 +150,36 @@ interface TransactionDao {
     suspend fun getTransactionCountForMerchant(merchantName: String, excludeId: Long): Int
 
     @Query("""
+        SELECT COUNT(*) FROM transactions
+        WHERE is_deleted = 0 AND merchant_name = :merchantName AND id != :excludeId
+    """)
+    suspend fun getActiveTransactionCountForMerchant(merchantName: String, excludeId: Long): Int
+
+    @Query("""
+        SELECT * FROM transactions
+        WHERE is_deleted = 0 AND merchant_name = :merchantName
+        ORDER BY date_time DESC
+        LIMIT 1
+    """)
+    suspend fun getLatestTransactionForMerchant(merchantName: String): TransactionEntity?
+
+    @Query("""
+        SELECT * FROM transactions
+        WHERE is_deleted = 0
+        AND merchant_name = :merchantName
+        AND id != :excludeId
+        ORDER BY date_time DESC
+    """)
+    suspend fun getActiveTransactionsForMerchant(merchantName: String, excludeId: Long): List<TransactionEntity>
+
+    @Query("UPDATE transactions SET merchant_name = :newMerchantName, updated_at = :updatedAt WHERE id = :transactionId")
+    suspend fun updateMerchantNameById(
+        transactionId: Long,
+        newMerchantName: String,
+        updatedAt: LocalDateTime,
+    )
+
+    @Query("""
         SELECT category FROM transactions
         WHERE is_deleted = 0
         AND merchant_name = :merchantName
@@ -237,4 +267,96 @@ interface TransactionDao {
         dateStart: LocalDateTime,
         dateEnd: LocalDateTime
     ): List<TransactionEntity>
+
+    /**
+     * Find candidate counterpart rows for credit-card-bill-payment pairing.
+     *
+     * Matches by amount + currency within a date window, excluding the caller's
+     * own row, soft-deleted rows, rows already linked, and the same transfer-kind
+     * direction (so a bill-payment debit leg only matches an unlinked credit leg
+     * and vice versa). Used by `CreditCardPaymentLinker`.
+     */
+    @Query("""
+        SELECT * FROM transactions
+        WHERE is_deleted = 0
+        AND id != :excludeId
+        AND amount = :amount
+        AND currency = :currency
+        AND date_time BETWEEN :dateStart AND :dateEnd
+        AND linked_transaction_id IS NULL
+        AND transaction_type IN ('TRANSFER', 'CREDIT', 'INCOME', 'EXPENSE')
+        ORDER BY date_time ASC
+    """)
+    suspend fun findLinkCandidates(
+        excludeId: Long,
+        amount: BigDecimal,
+        currency: String,
+        dateStart: LocalDateTime,
+        dateEnd: LocalDateTime
+    ): List<TransactionEntity>
+
+    /**
+     * Atomically sets the linked_transaction_id pointer for a single row.
+     */
+    @Query("""
+        UPDATE transactions
+        SET linked_transaction_id = :linkedId,
+            transfer_kind = COALESCE(:transferKind, transfer_kind),
+            updated_at = :now
+        WHERE id = :transactionId
+    """)
+    suspend fun setLinkedTransaction(
+        transactionId: Long,
+        linkedId: Long?,
+        transferKind: String?,
+        now: LocalDateTime = LocalDateTime.now()
+    )
+
+    /**
+     * Re-classifies a row as a transfer of the given kind. Used by the linker
+     * when it pairs a CC-side row that the parser originally tagged INCOME/CREDIT.
+     */
+    @Query("""
+        UPDATE transactions
+        SET transaction_type = :type,
+            transfer_kind = :transferKind,
+            category = CASE WHEN :forceCategory IS NULL THEN category ELSE :forceCategory END,
+            updated_at = :now
+        WHERE id = :transactionId
+    """)
+    suspend fun reclassifyAsTransfer(
+        transactionId: Long,
+        type: TransactionType,
+        transferKind: String?,
+        forceCategory: String?,
+        now: LocalDateTime = LocalDateTime.now()
+    )
+
+    /**
+     * Clears `linked_transaction_id` on any row that points to the given id.
+     * Called when a linked transaction is deleted, to avoid dangling pointers.
+     */
+    @Query("""
+        UPDATE transactions
+        SET linked_transaction_id = NULL, updated_at = :now
+        WHERE linked_transaction_id = :transactionId
+    """)
+    suspend fun clearLinksTo(
+        transactionId: Long,
+        now: LocalDateTime = LocalDateTime.now()
+    )
+
+    /**
+     * Unlinked CC bill payment legs, oldest first. Used by the one-shot
+     * historical linker pass to backfill `linked_transaction_id` on rows that
+     * existed before the linking logic shipped.
+     */
+    @Query("""
+        SELECT * FROM transactions
+        WHERE is_deleted = 0
+          AND linked_transaction_id IS NULL
+          AND transfer_kind = 'CC_BILL_PAYMENT'
+        ORDER BY date_time ASC
+    """)
+    suspend fun getUnlinkedCcBillPayments(): List<TransactionEntity>
 }

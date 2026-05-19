@@ -55,7 +55,7 @@ fun LoansScreen(
             CustomTitleTopAppBar(
                 scrollBehaviorSmall = scrollBehaviorSmall,
                 scrollBehaviorLarge = scrollBehaviorLarge,
-                title = "Loans",
+                title = "Lent & Borrowed",
                 hasBackButton = true,
                 navigationContent = {
                     IconButton(onClick = onNavigateBack) {
@@ -92,13 +92,13 @@ fun LoansScreen(
                     )
                     Spacer(modifier = Modifier.height(Spacing.md))
                     Text(
-                        "No loans yet",
+                        "No lent/borrowed entries yet",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(Spacing.xs))
                     Text(
-                        "Mark a transaction as \"Lent\" or \"Borrowed\" to start tracking",
+                        "Mark a transaction as \"Lent\" or \"Borrowed\" to start tracking money between people",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )

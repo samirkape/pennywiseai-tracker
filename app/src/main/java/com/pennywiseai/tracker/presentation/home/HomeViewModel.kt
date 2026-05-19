@@ -481,13 +481,20 @@ class HomeViewModel @Inject constructor(
                     d >= prevFinancialStart && d < financialStart
                 }
 
-                // Filter to EXPENSE only (excluding loans), respect currency/unified mode
+                // Filter to spending (EXPENSE + credit card purchases) excluding loans,
+                // respecting currency / unified mode. TRANSFER is excluded so credit
+                // card bill payments don't double-count alongside the original CREDIT
+                // purchase row.
+                val isSpending: (TransactionEntity) -> Boolean = { tx ->
+                    !tx.isExcludedFromTracking &&
+                        (tx.transactionType == TransactionType.EXPENSE ||
+                            tx.transactionType == TransactionType.CREDIT) &&
+                        tx.loanId == null
+                }
                 val currentExpenses = if (isUnified) {
-                    currentMonthTxs.filter { !it.isExcludedFromTracking && it.transactionType == TransactionType.EXPENSE && it.loanId == null }
+                    currentMonthTxs.filter(isSpending)
                 } else {
-                    currentMonthTxs.filter {
-                        !it.isExcludedFromTracking && it.transactionType == TransactionType.EXPENSE && it.currency == selectedCurrency && it.loanId == null
-                    }
+                    currentMonthTxs.filter { isSpending(it) && it.currency == selectedCurrency }
                 }
 
                 // Group by day and sum amounts (convert if unified mode)
@@ -514,11 +521,9 @@ class HomeViewModel @Inject constructor(
 
                 // Build previous month's cumulative spending (same day count for comparison)
                 val lastMonthExpenses = if (isUnified) {
-                    lastMonthTxs.filter { !it.isExcludedFromTracking && it.transactionType == TransactionType.EXPENSE && it.loanId == null }
+                    lastMonthTxs.filter(isSpending)
                 } else {
-                    lastMonthTxs.filter {
-                        !it.isExcludedFromTracking && it.transactionType == TransactionType.EXPENSE && it.currency == selectedCurrency && it.loanId == null
-                    }
+                    lastMonthTxs.filter { isSpending(it) && it.currency == selectedCurrency }
                 }
 
                 val lastMonthDailySums = mutableMapOf<LocalDate, BigDecimal>()
@@ -766,10 +771,16 @@ class HomeViewModel @Inject constructor(
             val filtered = filterTransactionsByProfile(transactions, profileId, buildProfileAccountKeys(balances))
             val selectedCurrency = _uiState.value.selectedCurrency
             val isUnified = _uiState.value.isUnifiedMode
+            val isSpending: (TransactionEntity) -> Boolean = { tx ->
+                !tx.isExcludedFromTracking &&
+                    (tx.transactionType == TransactionType.EXPENSE ||
+                        tx.transactionType == TransactionType.CREDIT) &&
+                    tx.loanId == null
+            }
             val expenses = if (isUnified) {
-                filtered.filter { !it.isExcludedFromTracking && it.transactionType == TransactionType.EXPENSE && it.loanId == null }
+                filtered.filter(isSpending)
             } else {
-                filtered.filter { !it.isExcludedFromTracking && it.transactionType == TransactionType.EXPENSE && it.currency == selectedCurrency && it.loanId == null }
+                filtered.filter { isSpending(it) && it.currency == selectedCurrency }
             }
             val dailySums = mutableMapOf<LocalDate, BigDecimal>()
             for (tx in expenses) {

@@ -5,11 +5,14 @@ import android.app.Application
 import android.os.Bundle
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.pennywiseai.tracker.data.preferences.UserPreferencesRepository
 import com.pennywiseai.tracker.data.repository.AppLockRepository
+import com.pennywiseai.tracker.domain.usecase.CreditCardPaymentLinker
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -21,6 +24,12 @@ class PennyWiseApplication : Application(), Configuration.Provider {
 
     @Inject
     lateinit var appLockRepository: AppLockRepository
+
+    @Inject
+    lateinit var creditCardPaymentLinker: CreditCardPaymentLinker
+
+    @Inject
+    lateinit var userPreferencesRepository: UserPreferencesRepository
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var activityReferences = 0
@@ -42,6 +51,23 @@ class PennyWiseApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         registerActivityLifecycleCallbacks(AppLockLifecycleObserver())
+        scheduleHistoricalCcLinkerBackfill()
+    }
+
+    /**
+     * One-shot historical pass: when a user upgrades, any existing credit card
+     * bill-payment rows are already re-classified by the SQL migration. This
+     * follow-up pairs the two SMS legs together so the credit card outstanding
+     * is correctly reduced. Guarded by a preference flag so it runs at most once.
+     */
+    private fun scheduleHistoricalCcLinkerBackfill() {
+        applicationScope.launch(Dispatchers.IO) {
+            runCatching {
+                if (userPreferencesRepository.hasRunCcPaymentBackfill.first()) return@launch
+                creditCardPaymentLinker.backfillHistoricalLinks()
+                userPreferencesRepository.setHasRunCcPaymentBackfill(true)
+            }
+        }
     }
 
     /**

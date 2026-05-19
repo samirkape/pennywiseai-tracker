@@ -32,6 +32,7 @@ import android.view.HapticFeedbackConstants
 import com.pennywiseai.tracker.data.database.entity.ProfileEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionType
+import com.pennywiseai.tracker.data.database.entity.TransferKind
 import com.pennywiseai.tracker.ui.LocalNavAnimatedVisibilityScope
 import com.pennywiseai.tracker.ui.LocalSharedTransitionScope
 import com.pennywiseai.tracker.ui.components.BrandIcon
@@ -39,6 +40,7 @@ import com.pennywiseai.tracker.ui.theme.*
 import com.pennywiseai.tracker.utils.CurrencyFormatter
 import com.pennywiseai.tracker.utils.formatAmount
 import java.math.BigDecimal
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,8 +73,11 @@ fun TransactionItem(
     }
 
     val dateTimeFormatter = remember { DateTimeFormatter.ofPattern("d MMM \u00B7 h:mm a") }
+    val dateTimeFormatterWithYear = remember { DateTimeFormatter.ofPattern("d MMM yyyy \u00B7 h:mm a") }
     val dateTimeText = remember(transaction.dateTime) {
-        transaction.dateTime.format(dateTimeFormatter)
+        val currentYear = LocalDate.now().year
+        val formatter = if (transaction.dateTime.year != currentYear) dateTimeFormatterWithYear else dateTimeFormatter
+        transaction.dateTime.format(formatter)
     }
 
     val isEffectivelyBusiness = remember(transaction, profileAccountKeys) {
@@ -87,13 +92,16 @@ fun TransactionItem(
 
     val showSplitPortion = categoryDisplayAmount != null
 
-    val subtitle = remember(transaction, dateTimeText, isEffectivelyBusiness, showSplitPortion) {
+    val isCcBillPayment = transaction.transferKind == TransferKind.CC_BILL_PAYMENT
+
+    val subtitle = remember(transaction, dateTimeText, isEffectivelyBusiness, showSplitPortion, isCcBillPayment) {
         buildList {
             add(dateTimeText)
-            when (transaction.transactionType) {
-                TransactionType.CREDIT -> add("Card")
-                TransactionType.TRANSFER -> add("Transfer")
-                TransactionType.INVESTMENT -> add("Investment")
+            when {
+                isCcBillPayment -> add("CC Payment")
+                transaction.transactionType == TransactionType.CREDIT -> add("Card")
+                transaction.transactionType == TransactionType.TRANSFER -> add("Transfer")
+                transaction.transactionType == TransactionType.INVESTMENT -> add("Investment")
                 else -> {}
             }
             if (showSplitPortion) add("Split")

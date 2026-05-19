@@ -179,6 +179,11 @@ fun PennyWiseNavHost(
                         navController.navigate(LoanDetail(loanId)) {
                             launchSingleTop = true
                         }
+                    },
+                    onFindSimilar = { merchant ->
+                        navController.navigate(TransactionsByMerchant(merchant)) {
+                            launchSingleTop = true
+                        }
                     }
                 )
             }
@@ -242,7 +247,41 @@ fun PennyWiseNavHost(
                     navController.navigate(CreateRule(ruleId = ruleId)) {
                         launchSingleTop = true
                     }
-                }
+                },
+                onNavigateToQuickKeywordRules = {
+                    navController.navigate(QuickKeywordRules) {
+                        launchSingleTop = true
+                    }
+                },
+            )
+        }
+
+        composable<QuickKeywordRules>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } },
+        ) {
+            com.pennywiseai.tracker.ui.screens.rules.QuickKeywordRulesScreen(
+                onNavigateBack = { navController.safePopBackStack() },
+                onNavigateToEdit = { ruleId ->
+                    navController.navigate(EditQuickKeywordRule(ruleId = ruleId)) {
+                        launchSingleTop = true
+                    }
+                },
+            )
+        }
+
+        composable<EditQuickKeywordRule>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } },
+        ) { backStackEntry ->
+            val route = backStackEntry.toRoute<EditQuickKeywordRule>()
+            com.pennywiseai.tracker.ui.screens.rules.EditQuickKeywordRuleScreen(
+                ruleId = route.ruleId,
+                onNavigateBack = { navController.safePopBackStack() },
             )
         }
 
@@ -434,6 +473,29 @@ fun PennyWiseNavHost(
                 initialCategory = args.category,
                 initialPeriod = args.period,
                 initialCurrency = args.currency,
+                onNavigateBack = { navController.safePopBackStack() },
+                onTransactionClick = { transactionId ->
+                    navController.navigate(TransactionDetail(transactionId)) { launchSingleTop = true }
+                },
+                onAddTransactionClick = {
+                    navController.navigate(AddTransaction) { launchSingleTop = true }
+                },
+                onNavigateToSettings = {
+                    navController.navigate(Settings) { launchSingleTop = true }
+                }
+            )
+        }
+
+        composable<TransactionsByMerchant>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+        ) { backStackEntry ->
+            val args = backStackEntry.toRoute<TransactionsByMerchant>()
+            com.pennywiseai.tracker.presentation.transactions.TransactionsScreen(
+                initialMerchant = args.merchant,
+                initialPeriod = "ALL",
                 onNavigateBack = { navController.safePopBackStack() },
                 onTransactionClick = { transactionId ->
                     navController.navigate(TransactionDetail(transactionId)) { launchSingleTop = true }

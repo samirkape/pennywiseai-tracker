@@ -93,10 +93,16 @@ class ICICIBankParserTest {
                 shouldParse = false
             ),
             ParserTestCase(
-                name = "Credit card bill payment",
+                name = "Credit card bill payment is classified as CC_BILL_PAYMENT transfer",
                 message = "Payment of Rs 26,266.00 has been received on your ICICI Bank Credit Card XX9006 through Bharat Bill Payment System on 06-DEC-25.",
                 sender = "AD-ICICIT-S",
-                shouldParse = false
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("26266.00"),
+                    currency = "INR",
+                    type = TransactionType.TRANSFER,
+                    transferKind = com.pennywiseai.parser.core.TransferKinds.CC_BILL_PAYMENT,
+                    accountLast4 = "9006"
+                )
             ),
             ParserTestCase(
                 name = "Regular debit with UPI reference",

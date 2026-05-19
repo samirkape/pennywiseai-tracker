@@ -37,6 +37,11 @@ class AMEXBankParser : BankParser() {
     override fun parse(smsBody: String, sender: String, timestamp: Long): ParsedTransaction? {
         val parsed = super.parse(smsBody, sender, timestamp) ?: return null
 
+        // Preserve credit card bill-payment classification from BaseIndianBankParser.
+        // Without this guard, a CC payment SMS would be force-promoted to CREDIT and
+        // double-count alongside the debit leg from the user's bank account.
+        if (parsed.isCreditCardBillPayment()) return parsed
+
         // AMEX transactions are always credit card transactions
         // All spending on AMEX cards should be marked as CREDIT type
         return parsed.copy(

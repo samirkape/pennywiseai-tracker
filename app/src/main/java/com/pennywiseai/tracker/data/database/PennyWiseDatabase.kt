@@ -67,7 +67,7 @@ import com.pennywiseai.tracker.data.database.entity.UnrecognizedSmsEntity
  */
 @Database(
     entities = [TransactionEntity::class, SubscriptionEntity::class, ChatMessage::class, MerchantMappingEntity::class, MerchantAliasEntity::class, CategoryEntity::class, AccountBalanceEntity::class, UnrecognizedSmsEntity::class, CardEntity::class, RuleEntity::class, RuleApplicationEntity::class, ExchangeRateEntity::class, BudgetEntity::class, BudgetCategoryEntity::class, BudgetMonthSnapshotEntity::class, BudgetCategoryMonthSnapshotEntity::class, TransactionSplitEntity::class, BankNotificationEntity::class, LoanEntity::class, TransactionGroupEntity::class, ProfileEntity::class, SalaryMonthOverrideEntity::class, TransactionReceiptEntity::class],
-    version = 53,
+    version = 55,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -117,6 +117,8 @@ import com.pennywiseai.tracker.data.database.entity.UnrecognizedSmsEntity
         // 50→51 is a manual migration registered in DatabaseModule (add merchant_aliases table)
         // 51→52 is a manual migration registered in DatabaseModule (add tags column to transaction_splits)
         // 52→53 is a manual migration registered in DatabaseModule (add tags to transactions, drop transaction_categories)
+        // 53→54 is a manual migration registered in DatabaseModule (add linked_transaction_id + transfer_kind to transactions)
+        // 54→55 is a manual migration registered in DatabaseModule (backfill HDFC→CRED Club bill payments)
     ]
 )
 @TypeConverters(Converters::class)
@@ -177,7 +179,9 @@ abstract class PennyWiseDatabase : RoomDatabase() {
                         MIGRATION_49_50,
                         MIGRATION_50_51,
                         MIGRATION_51_52,
-                        MIGRATION_52_53
+                        MIGRATION_52_53,
+                        MIGRATION_53_54,
+                        MIGRATION_54_55
                     )
                     .build()
                 INSTANCE = instance
@@ -553,6 +557,83 @@ abstract class PennyWiseDatabase : RoomDatabase() {
                 """.trimIndent())
                 // Drop the old junction table
                 db.execSQL("DROP TABLE IF EXISTS `transaction_categories`")
+            }
+        }
+
+        /**
+         * Manual migration from version 53 to 54.
+         * - Adds `linked_transaction_id` and `transfer_kind` columns to `transactions`.
+         * - Creates an index on `linked_transaction_id`.
+         * - Backfills existing rows tagged as Credit Card Payment to TRANSFER + CC_BILL_PAYMENT
+         *   so spending totals stop double-counting credit card bill payments.
+         */
+        val MIGRATION_53_54 = object : Migration(53, 54) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `transactions` ADD COLUMN `linked_transaction_id` INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE `transactions` ADD COLUMN `transfer_kind` TEXT DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_linked_transaction_id` ON `transactions` (`linked_transaction_id`)")
+
+                // Reclassify existing EXPENSE rows already tagged as Credit Card Payment.
+                // These are the bill-payment debit legs that HDFC/JioPay etc. recorded as EXPENSE,
+                // which caused double-counting alongside the CREDIT (purchase) rows.
+                db.execSQL(
+                    """
+                    UPDATE `transactions`
+                    SET `transaction_type` = 'TRANSFER',
+                        `transfer_kind` = 'CC_BILL_PAYMENT'
+                    WHERE `is_deleted` = 0
+                      AND `transaction_type` = 'EXPENSE'
+                      AND `category` = 'Credit Card Payment'
+                    """.trimIndent()
+                )
+
+                // Reclassify legacy SBI CC `INCOME` rows where the account belongs to a known credit card.
+                // (SBIBankParser used to mark "payment of X credited to your SBI Credit Card" as INCOME.)
+                db.execSQL(
+                    """
+                    UPDATE `transactions`
+                    SET `transaction_type` = 'TRANSFER',
+                        `transfer_kind` = 'CC_BILL_PAYMENT'
+                    WHERE `is_deleted` = 0
+                      AND `transaction_type` = 'INCOME'
+                      AND `account_number` IS NOT NULL
+                      AND EXISTS (
+                          SELECT 1 FROM `account_balances` ab
+                          WHERE ab.bank_name = `transactions`.bank_name
+                            AND ab.account_last4 = `transactions`.account_number
+                            AND ab.is_credit_card = 1
+                      )
+                      AND (
+                          LOWER(IFNULL(`sms_body`, '')) LIKE '%payment of%credited to your%credit card%'
+                          OR LOWER(IFNULL(`sms_body`, '')) LIKE '%payment%received%credit card%'
+                      )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        /**
+         * Manual migration from version 54 to 55.
+         * Reclassifies HDFC (and similar) debits to CRED / CRED Club that were saved as
+         * EXPENSE because the SMS says "To CRED Club" without "credit card".
+         */
+        val MIGRATION_54_55 = object : Migration(54, 55) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    UPDATE `transactions`
+                    SET `transaction_type` = 'TRANSFER',
+                        `transfer_kind` = 'CC_BILL_PAYMENT',
+                        `category` = 'Credit Card Payment'
+                    WHERE `is_deleted` = 0
+                      AND `transaction_type` = 'EXPENSE'
+                      AND (
+                          LOWER(`merchant_name`) IN ('cred', 'cred club')
+                          OR LOWER(IFNULL(`sms_body`, '')) LIKE '%to cred club%'
+                          OR LOWER(IFNULL(`sms_body`, '')) LIKE '% to cred %'
+                      )
+                    """.trimIndent()
+                )
             }
         }
 

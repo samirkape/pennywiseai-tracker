@@ -59,7 +59,8 @@ enum class TransactionField {
     TRANSACTION_TIME,        // Time as HH:mm
     TRANSACTION_DAY_OF_WEEK, // 1=Monday .. 7=Sunday
     TRANSACTION_DAY_OF_MONTH,// 01-31
-    TRANSACTION_DATE         // yyyy-MM-dd
+    TRANSACTION_DATE,        // yyyy-MM-dd
+    SEARCHABLE_TEXT          // SMS + merchant + description (rule evaluation only)
 }
 
 @Serializable
@@ -77,6 +78,20 @@ enum class ConditionOperator {
     IN,
     NOT_IN,
     REGEX_MATCHES,
+    /** Value is keyword list encoded with [QuickKeywordRuleCompiler] storage delimiter; any case-insensitive substring match. */
+    CONTAINS_ANY_KEYWORD,
+    /** Encoded keyword list; every keyword must appear as a case-insensitive substring. */
+    CONTAINS_ALL_KEYWORDS,
+    /** Encoded keyword list; searchable text must equal one keyword (ignore case). */
+    EQUALS_ANY_KEYWORD,
+    /** Encoded keyword list; text starts with any keyword (ignore case). */
+    STARTS_WITH_ANY_KEYWORD,
+    /** Encoded keyword list; text ends with any keyword (ignore case). */
+    ENDS_WITH_ANY_KEYWORD,
+    /** Encoded keyword list; no keyword appears as a case-insensitive substring. */
+    NOT_CONTAINS_ANY_KEYWORD,
+    /** Encoded keyword list; any keyword matches as a case-insensitive regex. */
+    REGEX_ANY_KEYWORD,
     IS_EMPTY,
     IS_NOT_EMPTY
 }

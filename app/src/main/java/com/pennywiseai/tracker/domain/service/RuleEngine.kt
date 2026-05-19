@@ -1,5 +1,6 @@
 package com.pennywiseai.tracker.domain.service
 
+import com.pennywiseai.parser.core.PayrollCreditDetector
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionType
 import com.pennywiseai.tracker.domain.model.rule.*
@@ -125,16 +126,16 @@ class RuleEngine @Inject constructor() {
     ): Boolean {
         if (conditions.isEmpty()) return false
 
-        // KISS: Simply AND all conditions together
-        // Each condition must be true for the rule to apply
-        for (condition in conditions) {
+        var result = evaluateCondition(transaction, smsText, conditions.first())
+        for (index in 1 until conditions.size) {
+            val condition = conditions[index]
             val conditionResult = evaluateCondition(transaction, smsText, condition)
-            if (!conditionResult) {
-                return false // If any condition is false, rule doesn't match
+            result = when (condition.logicalOperator) {
+                LogicalOperator.OR -> result || conditionResult
+                LogicalOperator.AND -> result && conditionResult
             }
         }
-
-        return true // All conditions matched
+        return result
     }
 
     private fun evaluateCondition(
@@ -155,11 +156,38 @@ class RuleEngine @Inject constructor() {
             ConditionOperator.GREATER_THAN -> compareNumeric(fieldValue, condition.value) > 0
             ConditionOperator.LESS_THAN_OR_EQUAL -> compareNumeric(fieldValue, condition.value) <= 0
             ConditionOperator.GREATER_THAN_OR_EQUAL -> compareNumeric(fieldValue, condition.value) >= 0
-            ConditionOperator.IN -> condition.value.split(",").map { it.trim() }
-                .any { fieldValue.equals(it, ignoreCase = true) }
+            ConditionOperator.IN -> {
+                val allowed = condition.value.split(",").map { it.trim() }
+                if (allowed.any { fieldValue.equals(it, ignoreCase = true) }) {
+                    true
+                } else if (
+                    condition.field == TransactionField.TYPE &&
+                    transaction.transactionType == TransactionType.INVESTMENT &&
+                    allowed.any { it.equals("INCOME", ignoreCase = true) || it.equals("CREDIT", ignoreCase = true) }
+                ) {
+                    PayrollCreditDetector.isPayrollCreditMessage(
+                        QuickKeywordRuleMatcher.buildSearchableText(transaction, smsText),
+                    )
+                } else {
+                    false
+                }
+            }
             ConditionOperator.NOT_IN -> !condition.value.split(",").map { it.trim() }
                 .any { fieldValue.equals(it, ignoreCase = true) }
-            ConditionOperator.REGEX_MATCHES -> fieldValue.matches(Regex(condition.value))
+            ConditionOperator.REGEX_MATCHES -> Regex(condition.value).containsMatchIn(fieldValue)
+            ConditionOperator.CONTAINS_ANY_KEYWORD,
+            ConditionOperator.CONTAINS_ALL_KEYWORDS,
+            ConditionOperator.EQUALS_ANY_KEYWORD,
+            ConditionOperator.STARTS_WITH_ANY_KEYWORD,
+            ConditionOperator.ENDS_WITH_ANY_KEYWORD,
+            ConditionOperator.NOT_CONTAINS_ANY_KEYWORD,
+            ConditionOperator.REGEX_ANY_KEYWORD,
+            ->
+                QuickKeywordRuleMatcher.evaluateKeywordCondition(
+                    fieldValue,
+                    condition.value,
+                    condition.operator,
+                )
             ConditionOperator.IS_EMPTY -> fieldValue.isBlank()
             ConditionOperator.IS_NOT_EMPTY -> fieldValue.isNotBlank()
         }
@@ -188,6 +216,8 @@ class RuleEngine @Inject constructor() {
                 String.format("%02d", transaction.dateTime.dayOfMonth)
             TransactionField.TRANSACTION_DATE ->
                 transaction.dateTime.toLocalDate().toString()
+            TransactionField.SEARCHABLE_TEXT ->
+                QuickKeywordRuleMatcher.buildSearchableText(transaction, smsText)
         }
     }
 

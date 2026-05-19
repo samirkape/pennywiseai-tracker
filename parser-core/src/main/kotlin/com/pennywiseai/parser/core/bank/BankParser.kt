@@ -1,6 +1,7 @@
 package com.pennywiseai.parser.core.bank
 
 import com.pennywiseai.parser.core.CompiledPatterns
+import com.pennywiseai.parser.core.PayrollCreditDetector
 import com.pennywiseai.parser.core.Constants
 import com.pennywiseai.parser.core.ParsedTransaction
 import com.pennywiseai.parser.core.TransactionType
@@ -202,6 +203,9 @@ abstract class BankParser {
      * Can be overridden by specific bank parsers for custom logic.
      */
     protected open fun isInvestmentTransaction(lowerMessage: String): Boolean {
+        if (PayrollCreditDetector.isPayrollCreditMessage(lowerMessage)) {
+            return false
+        }
         val investmentKeywords = listOf(
             // Clearing corporations
             "iccl",                         // Indian Clearing Corporation Limited

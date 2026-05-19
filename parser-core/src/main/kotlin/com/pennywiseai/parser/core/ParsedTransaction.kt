@@ -18,8 +18,21 @@ data class ParsedTransaction(
     val isFromCard: Boolean = false,
     val currency: String = "INR",
     val fromAccount: String? = null,
-    val toAccount: String? = null
+    val toAccount: String? = null,
+    /**
+     * Optional transfer classification, used to flag transactions that should be
+     * excluded from spending (e.g. credit card bill payments). Mirrors the
+     * `transfer_kind` column on TransactionEntity. See [TransferKinds] for values.
+     */
+    val transferKind: String? = null
 ) {
+    /**
+     * Convenience flag: true when this parsed transaction represents a credit card
+     * bill payment leg (TRANSFER + transferKind = CC_BILL_PAYMENT).
+     */
+    fun isCreditCardBillPayment(): Boolean =
+        type == TransactionType.TRANSFER && transferKind == TransferKinds.CC_BILL_PAYMENT
+
     fun generateTransactionId(): String {
         val normalizedAmount = amount.setScale(2, java.math.RoundingMode.HALF_UP)
         // Use SMS body hash for reliable deduplication across different timestamp sources
@@ -29,6 +42,15 @@ data class ParsedTransaction(
         val data = "$sender|$normalizedAmount|$smsBodyHash"
         return md5Hex(data)
     }
+}
+
+/**
+ * String constants for [ParsedTransaction.transferKind]. Kept in parser-core so
+ * parsers can set them without depending on the app module.
+ */
+object TransferKinds {
+    const val CC_BILL_PAYMENT = "CC_BILL_PAYMENT"
+    const val SELF_TRANSFER = "SELF_TRANSFER"
 }
 
 

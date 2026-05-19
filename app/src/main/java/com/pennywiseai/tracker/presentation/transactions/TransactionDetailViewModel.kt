@@ -23,6 +23,7 @@ import com.pennywiseai.tracker.data.repository.MerchantAliasRepository
 import com.pennywiseai.tracker.data.repository.MerchantMappingRepository
 import com.pennywiseai.tracker.data.repository.TransactionGroupRepository
 import com.pennywiseai.tracker.data.repository.TransactionRepository
+import com.pennywiseai.tracker.domain.model.TransactionRenameCandidate
 import com.pennywiseai.tracker.data.database.entity.TransactionGroupEntity
 import com.pennywiseai.tracker.core.Constants
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -104,11 +105,8 @@ class TransactionDetailViewModel @Inject constructor(
     private val _suggestedMerchantRename = MutableStateFlow<String?>(null)
     val suggestedMerchantRename: StateFlow<String?> = _suggestedMerchantRename.asStateFlow()
 
-    private val _renameExistingTransactions = MutableStateFlow(false)
-    val renameExistingTransactions: StateFlow<Boolean> = _renameExistingTransactions.asStateFlow()
-
-    private val _showRenameExistingOption = MutableStateFlow(false)
-    val showRenameExistingOption: StateFlow<Boolean> = _showRenameExistingOption.asStateFlow()
+    private val _merchantRenameReview = MutableStateFlow<MerchantRenameReviewState?>(null)
+    val merchantRenameReview: StateFlow<MerchantRenameReviewState?> = _merchantRenameReview.asStateFlow()
     
     private val _showDeleteDialog = MutableStateFlow(false)
     val showDeleteDialog: StateFlow<Boolean> = _showDeleteDialog.asStateFlow()
@@ -385,17 +383,15 @@ class TransactionDetailViewModel @Inject constructor(
             _showSplitEditor.value = true
         }
 
-        // Load count of other transactions from same merchant
         _transaction.value?.let { txn ->
             _originalMerchantNameOnEdit.value = txn.merchantName
             viewModelScope.launch {
-                val count = transactionRepository.getOtherTransactionCountForMerchant(
+                _existingTransactionCount.value = transactionRepository.getOtherTransactionCountForMerchant(
                     txn.merchantName,
-                    txn.id
+                    txn.id,
                 )
-                _existingTransactionCount.value = count
-                loadMerchantCategorySuggestions(txn.merchantName, txn.id)
                 loadMerchantRenameSuggestion(txn.merchantName)
+                loadMerchantCategorySuggestions(txn.merchantName, txn.id)
             }
         }
     }
@@ -415,21 +411,6 @@ class TransactionDetailViewModel @Inject constructor(
         val suggested = _suggestedMerchantRename.value ?: return
         _editableTransaction.update { current ->
             current?.copy(merchantName = suggested)
-        }
-        updateRenameExistingOptionVisibility()
-    }
-
-    fun toggleRenameExistingTransactions() {
-        _renameExistingTransactions.value = !_renameExistingTransactions.value
-    }
-
-    private fun updateRenameExistingOptionVisibility() {
-        val original = _originalMerchantNameOnEdit.value ?: return
-        val current = _editableTransaction.value?.merchantName ?: return
-        val renamed = !current.equals(original, ignoreCase = true)
-        _showRenameExistingOption.value = renamed && _existingTransactionCount.value > 0
-        if (!renamed) {
-            _renameExistingTransactions.value = false
         }
     }
 
@@ -457,8 +438,7 @@ class TransactionDetailViewModel @Inject constructor(
         _merchantSuggestionCategories.value = emptyList()
         _originalMerchantNameOnEdit.value = null
         _suggestedMerchantRename.value = null
-        _renameExistingTransactions.value = false
-        _showRenameExistingOption.value = false
+        _merchantRenameReview.value = null
 
         // Reset split state to original values
         _splits.value = _originalSplits.value
@@ -493,7 +473,6 @@ class TransactionDetailViewModel @Inject constructor(
             current?.copy(merchantName = name)
         }
         validateMerchantName(name)
-        updateRenameExistingOptionVisibility()
     }
     
     fun updateAmount(amountStr: String) {
@@ -513,15 +492,28 @@ class TransactionDetailViewModel @Inject constructor(
             _budgetImpactType.value = null
             _budgetCategory.value = null
             _editableTransaction.update { current ->
-                current?.copy(transactionType = type, budgetImpactType = null, budgetCategory = null)
+                // When switching to Transfer, default to SELF_TRANSFER sub-kind
+                val newTransferKind = if (type == TransactionType.TRANSFER)
+                    current?.transferKind?.takeIf {
+                        it == com.pennywiseai.tracker.data.database.entity.TransferKind.SELF_TRANSFER ||
+                        it == com.pennywiseai.tracker.data.database.entity.TransferKind.OTHERS_TRANSFER
+                    } ?: com.pennywiseai.tracker.data.database.entity.TransferKind.SELF_TRANSFER
+                else null
+                current?.copy(transactionType = type, budgetImpactType = null, budgetCategory = null, transferKind = newTransferKind)
             }
         } else {
             _editableTransaction.update { current ->
-                current?.copy(transactionType = type)
+                current?.copy(transactionType = type, transferKind = null)
             }
         }
     }
-    
+
+    fun updateTransferKind(kind: String) {
+        _editableTransaction.update { current ->
+            current?.copy(transferKind = kind)
+        }
+    }
+
     fun updateCategory(category: String) {
         _editableTransaction.update { current ->
             current?.copy(category = category.ifEmpty { "Others" })
@@ -821,6 +813,7 @@ class TransactionDetailViewModel @Inject constructor(
                 }
 
                 val originalMerchant = _originalMerchantNameOnEdit.value
+                var pendingRenameReview = false
                 if (originalMerchant != null &&
                     !normalizedTransaction.merchantName.equals(originalMerchant, ignoreCase = true)
                 ) {
@@ -828,11 +821,17 @@ class TransactionDetailViewModel @Inject constructor(
                         originalMerchant,
                         normalizedTransaction.merchantName
                     )
-                    if (_renameExistingTransactions.value) {
-                        transactionRepository.updateMerchantNameForMerchant(
-                            originalMerchant,
-                            normalizedTransaction.merchantName
+                    val similarTransactions = transactionRepository.findSimilarTransactionsForRename(
+                        originalMerchant = originalMerchant,
+                        newMerchantName = normalizedTransaction.merchantName,
+                        excludeTransactionId = normalizedTransaction.id,
+                    )
+                    if (similarTransactions.isNotEmpty()) {
+                        _merchantRenameReview.value = MerchantRenameReviewState(
+                            newMerchantName = normalizedTransaction.merchantName,
+                            transactions = similarTransactions,
                         )
+                        pendingRenameReview = true
                     }
                 }
 
@@ -841,7 +840,9 @@ class TransactionDetailViewModel @Inject constructor(
                 _removedReceiptIds.value = emptySet()
                 loadReceiptUris(normalizedTransaction)
                 _pendingTags.value = emptyList()
-                _saveSuccess.value = true
+                if (!pendingRenameReview) {
+                    _saveSuccess.value = true
+                }
                 _isEditMode.value = false
                 _editableTransaction.value = null
                 _errorMessage.value = null
@@ -850,8 +851,6 @@ class TransactionDetailViewModel @Inject constructor(
                 _existingTransactionCount.value = 0
                 _originalMerchantNameOnEdit.value = null
                 _suggestedMerchantRename.value = null
-                _renameExistingTransactions.value = false
-                _showRenameExistingOption.value = false
                 _budgetImpactType.value = normalizedTransaction.budgetImpactType
                 _budgetCategory.value = normalizedTransaction.budgetCategory
             } catch (e: Exception) {
@@ -868,6 +867,70 @@ class TransactionDetailViewModel @Inject constructor(
     
     fun clearSaveSuccess() {
         _saveSuccess.value = false
+    }
+
+    fun approveCurrentRenameCandidate() {
+        advanceRenameReview(approved = true)
+    }
+
+    fun skipCurrentRenameCandidate() {
+        advanceRenameReview(approved = false)
+    }
+
+    fun applyAllRenameCandidates() {
+        val state = _merchantRenameReview.value ?: return
+        val remainingIds = state.transactions
+            .drop(state.currentIndex)
+            .map { it.transactionId }
+        finishMerchantRenameReview(state.approvedTransactionIds + remainingIds)
+    }
+
+    fun dismissMerchantRenameReview() {
+        _merchantRenameReview.value = null
+        _saveSuccess.value = true
+    }
+
+    private fun advanceRenameReview(approved: Boolean) {
+        val state = _merchantRenameReview.value ?: return
+        val current = state.currentTransaction ?: return
+        val updated = state.copy(
+            currentIndex = state.currentIndex + 1,
+            approvedTransactionIds = if (approved) {
+                state.approvedTransactionIds + current.transactionId
+            } else {
+                state.approvedTransactionIds
+            },
+        )
+        if (updated.isComplete) {
+            finishMerchantRenameReview(updated.approvedTransactionIds)
+        } else {
+            _merchantRenameReview.value = updated
+        }
+    }
+
+    private fun finishMerchantRenameReview(approvedTransactionIds: List<Long>) {
+        val state = _merchantRenameReview.value ?: return
+        if (approvedTransactionIds.isEmpty()) {
+            _merchantRenameReview.value = null
+            _saveSuccess.value = true
+            return
+        }
+        viewModelScope.launch {
+            _merchantRenameReview.value = state.copy(isApplying = true)
+            try {
+                val idToMerchant = state.transactions.associate { it.transactionId to it.currentMerchantName }
+                for (id in approvedTransactionIds.distinct()) {
+                    val oldName = idToMerchant[id] ?: continue
+                    transactionRepository.updateMerchantNameForTransaction(id, state.newMerchantName)
+                    merchantAliasRepository.setAlias(oldName, state.newMerchantName)
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to rename some transactions: ${e.message}"
+            } finally {
+                _merchantRenameReview.value = null
+                _saveSuccess.value = true
+            }
+        }
     }
     
     private fun validateMerchantName(name: String) {
@@ -1088,4 +1151,20 @@ data class CategorySuggestionsState(
     val merchantName: String = ""
 )
 
+data class MerchantRenameReviewState(
+    val newMerchantName: String,
+    val transactions: List<TransactionRenameCandidate>,
+    val currentIndex: Int = 0,
+    val approvedTransactionIds: List<Long> = emptyList(),
+    val isApplying: Boolean = false,
+) {
+    val currentTransaction: TransactionRenameCandidate?
+        get() = transactions.getOrNull(currentIndex)
+
+    val isComplete: Boolean
+        get() = currentIndex >= transactions.size
+
+    val totalCount: Int
+        get() = transactions.size
+}
 

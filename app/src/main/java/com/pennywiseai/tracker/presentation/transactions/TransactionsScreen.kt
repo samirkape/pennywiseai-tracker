@@ -12,6 +12,8 @@ import com.pennywiseai.tracker.ui.effects.overScrollVertical
 import com.pennywiseai.tracker.ui.effects.rememberOverscrollFlingBehavior
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
@@ -69,11 +71,14 @@ fun TransactionsScreen(
     initialPeriod: String? = null,
     initialCurrency: String? = null,
     focusSearch: Boolean = false,
-    // New parameters for budget navigation
+    // Parameters for budget navigation (explicit date range)
     initialStartDateEpochDay: Long? = null,
     initialEndDateEpochDay: Long? = null,
     initialCategories: String? = null,  // Comma-separated category names
     initialTransactionType: String? = null,
+    // Epoch days for a CUSTOM period from analytics (separate from budget date range)
+    initialPeriodStartEpoch: Long? = null,
+    initialPeriodEndEpoch: Long? = null,
     viewModel: TransactionsViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit = {},
     onTransactionClick: (Long) -> Unit = {},
@@ -168,7 +173,17 @@ fun TransactionsScreen(
     val customRangeLabel = remember(customDateRange) {
         DateRangeUtils.formatDateRange(customDateRange)
     }
-    
+
+    // Month being viewed for prev/next navigation (null for non-monthly periods like FY, All)
+    val viewingYearMonth: java.time.YearMonth? = remember(selectedPeriod, customDateRange) {
+        when (selectedPeriod) {
+            TimePeriod.THIS_MONTH, TimePeriod.CALENDAR_MONTH -> java.time.YearMonth.now()
+            TimePeriod.LAST_MONTH -> java.time.YearMonth.now().minusMonths(1)
+            TimePeriod.CUSTOM -> customDateRange?.first?.let { java.time.YearMonth.from(it) }
+            else -> null
+        }
+    }
+
     // Apply initial filters only once when screen is first created
     LaunchedEffect(Unit) {
         viewModel.applyInitialFilters(
@@ -183,21 +198,23 @@ fun TransactionsScreen(
     var processedNavParams by rememberSaveable { mutableStateOf(false) }
 
     // Apply navigation filters only ONCE when actually navigating (not when returning from detail)
-    LaunchedEffect(initialCategory, initialMerchant, initialPeriod, initialCurrency, initialTransactionType) {
+    LaunchedEffect(initialCategory, initialMerchant, initialPeriod, initialCurrency, initialTransactionType, initialPeriodStartEpoch, initialPeriodEndEpoch) {
         if (!processedNavParams && (initialCategory != null || initialMerchant != null || initialPeriod != null || initialCurrency != null || initialTransactionType != null)) {
             viewModel.applyNavigationFilters(
                 initialCategory,
                 initialMerchant,
                 initialPeriod,
                 initialCurrency,
-                initialTransactionType
+                initialTransactionType,
+                initialPeriodStartEpoch,
+                initialPeriodEndEpoch
             )
             processedNavParams = true
         }
     }
 
     // Apply budget filters when navigating from budget screen
-    LaunchedEffect(initialStartDateEpochDay, initialEndDateEpochDay, initialCategories, initialTransactionType) {
+    LaunchedEffect(initialStartDateEpochDay, initialEndDateEpochDay, initialCategories, initialTransactionType, initialPeriodStartEpoch, initialPeriodEndEpoch) {
         if (initialStartDateEpochDay != null && initialEndDateEpochDay != null) {
             viewModel.applyBudgetFilters(
                 startDateEpochDay = initialStartDateEpochDay,
@@ -206,9 +223,9 @@ fun TransactionsScreen(
                 categories = initialCategories,
                 transactionType = initialTransactionType
             )
-        } else if (initialCategories != null && initialStartDateEpochDay == null) {
-            // Multi-category navigation from analytics (no date range)
-            viewModel.applyMultiCategoryFilter(initialCategories, initialPeriod)
+        } else if (initialCategories != null) {
+            // Multi-category navigation from analytics, with optional CUSTOM period epoch days
+            viewModel.applyMultiCategoryFilter(initialCategories, initialPeriod, initialPeriodStartEpoch, initialPeriodEndEpoch)
         }
     }
     
@@ -436,6 +453,46 @@ fun TransactionsScreen(
             }
         }
         
+        // Month navigation arrows — shown for monthly periods (THIS_MONTH, CALENDAR_MONTH, LAST_MONTH, CUSTOM single-month)
+        viewingYearMonth?.let { ym ->
+            val monthLabel = remember(ym) {
+                ym.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy"))
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Dimensions.Padding.content, vertical = Spacing.xs),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { viewModel.navigateToMonth(ym.minusMonths(1)) }) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        contentDescription = "Previous month",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    text = monthLabel,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                IconButton(
+                    onClick = { viewModel.navigateToMonth(ym.plusMonths(1)) },
+                    enabled = ym < java.time.YearMonth.now()
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "Next month",
+                        tint = if (ym < java.time.YearMonth.now())
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        else
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    )
+                }
+            }
+        }
+
         // Data scope info banner
         if (viewModel.isShowingLimitedData()) {
             PennyWiseCardV2(

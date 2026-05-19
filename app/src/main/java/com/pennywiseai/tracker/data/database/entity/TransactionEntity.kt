@@ -9,7 +9,10 @@ import java.time.LocalDateTime
 
 @Entity(
     tableName = "transactions",
-    indices = [Index(value = ["transaction_hash"], unique = true)]
+    indices = [
+        Index(value = ["transaction_hash"], unique = true),
+        Index(value = ["linked_transaction_id"])
+    ]
 )
 data class TransactionEntity(
     @PrimaryKey(autoGenerate = true)
@@ -98,8 +101,27 @@ data class TransactionEntity(
     val profileId: Long? = null,
 
     @ColumnInfo(name = "tags", defaultValue = "")
-    val tags: String = ""
+    val tags: String = "",
+
+    @ColumnInfo(name = "linked_transaction_id", defaultValue = "NULL")
+    val linkedTransactionId: Long? = null,
+
+    @ColumnInfo(name = "transfer_kind", defaultValue = "NULL")
+    val transferKind: String? = null
 )
+
+/**
+ * Kinds of transfer-like records. Stored as raw strings in `transfer_kind`.
+ * - CC_BILL_PAYMENT: credit card bill payment (the debit leg from a bank account
+ *   and / or the credit leg on the card). These rows are excluded from spend.
+ * - SELF_TRANSFER: a transfer between the user's own accounts (excluded from spend).
+ * - OTHERS_TRANSFER: a transfer to someone else's account (included in spend tracking).
+ */
+object TransferKind {
+    const val CC_BILL_PAYMENT = "CC_BILL_PAYMENT"
+    const val SELF_TRANSFER = "SELF_TRANSFER"
+    const val OTHERS_TRANSFER = "OTHERS_TRANSFER"
+}
 
 enum class BudgetImpactType {
     DEDUCT_SPENT,

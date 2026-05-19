@@ -72,8 +72,8 @@ private enum class CategoryViewType { CHART, LIST }
 fun AnalyticsScreen(
     viewModel: AnalyticsViewModel = hiltViewModel(),
     onNavigateToChat: () -> Unit = {},
-    onNavigateToTransactions: (category: String?, merchant: String?, period: String?, currency: String?, transactionType: String?) -> Unit = { _, _, _, _, _ -> },
-    onNavigateToTransactionsMultiCategory: (categories: String, period: String?, currency: String?) -> Unit = { _, _, _ -> },
+    onNavigateToTransactions: (category: String?, merchant: String?, period: String?, currency: String?, transactionType: String?, startDateEpochDay: Long?, endDateEpochDay: Long?) -> Unit = { _, _, _, _, _, _, _ -> },
+    onNavigateToTransactionsMultiCategory: (categories: String, period: String?, currency: String?, startDateEpochDay: Long?, endDateEpochDay: Long?) -> Unit = { _, _, _, _, _ -> },
     onNavigateToTransaction: (Long) -> Unit = {},
     onNavigateToHome: () -> Unit = {},
     onNavigateToBehavioralStats: () -> Unit = {}
@@ -344,7 +344,7 @@ fun AnalyticsScreen(
                     currency = uiState.currency,
                     isLoading = uiState.isLoading,
                     onClick = {
-                        onNavigateToTransactions(categoryFilter, null, selectedPeriod.name, selectedCurrency, transactionTypeFilter.name)
+                        onNavigateToTransactions(categoryFilter, null, selectedPeriod.name, selectedCurrency, transactionTypeFilter.name, customDateRange?.first?.toEpochDay(), customDateRange?.second?.toEpochDay())
                     }
                 )
             }
@@ -522,14 +522,14 @@ fun AnalyticsScreen(
                                 categories = uiState.categoryBreakdown,
                                 currency = selectedCurrency,
                                 onCategoryClick = { category ->
-                                    onNavigateToTransactions(category.name, null, selectedPeriod.name, selectedCurrency, transactionTypeFilter.name)
+                                    onNavigateToTransactions(category.name, null, selectedPeriod.name, selectedCurrency, transactionTypeFilter.name, customDateRange?.first?.toEpochDay(), customDateRange?.second?.toEpochDay())
                                 }
                             )
                             CategoryViewType.LIST -> CategoryBreakdownCard(
                                 categories = uiState.categoryBreakdown,
                                 currency = selectedCurrency,
                                 onCategoryClick = { category ->
-                                    onNavigateToTransactions(category.name, null, selectedPeriod.name, selectedCurrency, transactionTypeFilter.name)
+                                    onNavigateToTransactions(category.name, null, selectedPeriod.name, selectedCurrency, transactionTypeFilter.name, customDateRange?.first?.toEpochDay(), customDateRange?.second?.toEpochDay())
                                 }
                             )
                         }
@@ -556,7 +556,7 @@ fun AnalyticsScreen(
                     onOverlapClick = { overlap ->
                         val encoded = listOf(overlap.categoryA, overlap.categoryB)
                             .joinToString(",") { java.net.URLEncoder.encode(it, "UTF-8") }
-                        onNavigateToTransactionsMultiCategory(encoded, selectedPeriod.name, selectedCurrency)
+                        onNavigateToTransactionsMultiCategory(encoded, selectedPeriod.name, selectedCurrency, customDateRange?.first?.toEpochDay(), customDateRange?.second?.toEpochDay())
                     }
                 )
             }
@@ -592,7 +592,7 @@ fun AnalyticsScreen(
                         merchant = merchant,
                         currency = selectedCurrency,
                         onClick = {
-                            onNavigateToTransactions(null, merchant.name, selectedPeriod.name, selectedCurrency, transactionTypeFilter.name)
+                            onNavigateToTransactions(null, merchant.name, selectedPeriod.name, selectedCurrency, transactionTypeFilter.name, customDateRange?.first?.toEpochDay(), customDateRange?.second?.toEpochDay())
                         }
                     )
                 }

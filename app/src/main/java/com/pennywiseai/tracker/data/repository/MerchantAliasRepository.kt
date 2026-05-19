@@ -37,12 +37,11 @@ class MerchantAliasRepository @Inject constructor(
         MerchantNameMatcher.findBestDisplayName(source, aliasCandidates)?.let { return it }
 
         val displayNamesFromAliases = aliases.map { it.displayName }.distinct()
-        val merchantCandidates = (knownMerchants + displayNamesFromAliases)
+        val merchantLabels = (knownMerchants + displayNamesFromAliases)
             .distinct()
             .filter { !it.equals(source, ignoreCase = true) }
-            .map { it to it }
 
-        return MerchantNameMatcher.findBestDisplayName(source, merchantCandidates)
+        return MerchantNameMatcher.findBestMerchantLabel(source, merchantLabels)
     }
 
     suspend fun setAlias(sourceMerchant: String, displayName: String) {

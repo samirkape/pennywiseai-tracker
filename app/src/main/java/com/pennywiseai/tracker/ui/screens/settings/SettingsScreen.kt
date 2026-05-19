@@ -337,8 +337,8 @@ fun SettingsScreen(
                     icon = Icons.Default.SwapHoriz,
                     iconBgColor = amber_light,
                     iconTint = amber_dark,
-                    title = "Loans",
-                    subtitle = "Track money lent and borrowed",
+                    title = "Lent & Borrowed",
+                    subtitle = "Track money lent to others and borrowed",
                     onClick = onNavigateToLoans,
                     position = ItemPosition.MIDDLE
                 )

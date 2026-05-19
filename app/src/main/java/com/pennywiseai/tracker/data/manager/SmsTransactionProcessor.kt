@@ -17,6 +17,8 @@ import com.pennywiseai.tracker.data.repository.SubscriptionRepository
 import com.pennywiseai.tracker.data.repository.TransactionRepository
 import com.pennywiseai.tracker.domain.repository.RuleRepository
 import com.pennywiseai.tracker.domain.service.RuleEngine
+import com.pennywiseai.tracker.domain.service.QuickKeywordRuleMatcher
+import com.pennywiseai.tracker.domain.usecase.CreditCardPaymentLinker
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDateTime
@@ -38,7 +40,8 @@ class SmsTransactionProcessor @Inject constructor(
     private val merchantMappingRepository: MerchantMappingRepository,
     private val subscriptionRepository: SubscriptionRepository,
     private val ruleRepository: RuleRepository,
-    private val ruleEngine: RuleEngine
+    private val ruleEngine: RuleEngine,
+    private val creditCardPaymentLinker: CreditCardPaymentLinker
 ) {
     companion object {
         private const val TAG = "SmsTransactionProcessor"
@@ -149,6 +152,13 @@ class SmsTransactionProcessor @Inject constructor(
 
             if (ruleApplications.isNotEmpty()) {
                 Log.d(TAG, "Applied ${ruleApplications.size} rules to transaction")
+                ruleApplications.forEach { application ->
+                    Log.d(
+                        QuickKeywordRuleMatcher.LOG_TAG,
+                        "SMS ingest rule=${application.ruleName} merchant=${entityWithRules.merchantName} " +
+                            "category=${entityWithRules.category}",
+                    )
+                }
             }
 
             // Check if this transaction matches an active subscription
@@ -179,6 +189,15 @@ class SmsTransactionProcessor @Inject constructor(
 
                 // Process balance updates
                 processBalanceUpdate(parsedTransaction, finalEntity, rowId)
+
+                // Try to link credit card bill payment legs together. This both
+                // de-duplicates spending (TRANSFER is excluded from totals) and
+                // reduces the credit card outstanding when the link succeeds.
+                runCatching {
+                    creditCardPaymentLinker.linkIfApplicable(finalEntity.copy(id = rowId))
+                }.onFailure { e ->
+                    Log.w(TAG, "CC bill payment linker failed: ${e.message}")
+                }
 
                 // Trigger widget refresh for recent transactions
                 com.pennywiseai.tracker.widget.RecentTransactionsWidgetUpdateWorker.enqueueOneShot(appContext)

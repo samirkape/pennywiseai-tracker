@@ -39,6 +39,10 @@ class OneCardParser : BankParser() {
     override fun parse(smsBody: String, sender: String, timestamp: Long): ParsedTransaction? {
         val parsed = super.parse(smsBody, sender, timestamp) ?: return null
 
+        // Preserve credit card bill-payment classification (TRANSFER + CC_BILL_PAYMENT)
+        // so it isn't promoted back to CREDIT and double-counted as spending.
+        if (parsed.isCreditCardBillPayment()) return parsed
+
         // OneCard transactions are always credit card transactions
         // All spending on OneCard should be marked as CREDIT type
         return parsed.copy(

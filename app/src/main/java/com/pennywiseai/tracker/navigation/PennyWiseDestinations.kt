@@ -52,6 +52,12 @@ object Rules
 data class CreateRule(val ruleId: String? = null)
 
 @Serializable
+object QuickKeywordRules
+
+@Serializable
+data class EditQuickKeywordRule(val ruleId: String? = null)
+
+@Serializable
 object ExchangeRates
 
 @Serializable
@@ -84,3 +90,6 @@ data class TransactionsWithFilter(
     val period: String? = null,
     val currency: String? = null
 )
+
+@Serializable
+data class TransactionsByMerchant(val merchant: String)

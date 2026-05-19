@@ -17,7 +17,8 @@ import javax.inject.Inject
 class AddTransactionUseCase @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val subscriptionRepository: SubscriptionRepository,
-    private val accountBalanceRepository: AccountBalanceRepository
+    private val accountBalanceRepository: AccountBalanceRepository,
+    private val creditCardPaymentLinker: CreditCardPaymentLinker
 ) {
     suspend fun execute(
         amount: BigDecimal,
@@ -82,6 +83,14 @@ class AddTransactionUseCase @Inject constructor(
                 date = date,
                 transactionId = transactionId
             )
+        }
+
+        // Try linking this transaction to a credit card bill payment counterpart
+        // (no-op for everything that isn't a CC bill payment leg).
+        if (transactionId != -1L) {
+            runCatching {
+                creditCardPaymentLinker.linkIfApplicable(transaction.copy(id = transactionId))
+            }
         }
         
         // If marked as recurring, create a subscription

@@ -667,6 +667,7 @@ fun CreateRuleScreen(
                                         TransactionField.TRANSACTION_DAY_OF_WEEK -> "day of week"
                                         TransactionField.TRANSACTION_DAY_OF_MONTH -> "day of month"
                                         TransactionField.TRANSACTION_DATE -> "date"
+                                        TransactionField.SEARCHABLE_TEXT -> "SMS, merchant, or description"
                                     })
                                     append(" ")
                                     append(when(condition.operator) {

@@ -4,6 +4,9 @@ import com.pennywiseai.tracker.data.database.dao.TransactionDao
 import com.pennywiseai.tracker.data.database.dao.TransactionReceiptDao
 import com.pennywiseai.tracker.data.database.dao.TransactionSplitDao
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
+import com.pennywiseai.tracker.domain.model.MerchantRenameMatch
+import com.pennywiseai.tracker.domain.model.TransactionRenameCandidate
+import com.pennywiseai.tracker.utils.MerchantRenameMatcher
 import com.pennywiseai.tracker.data.database.entity.TransactionReceiptEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionSplitEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionType
@@ -142,6 +145,9 @@ class TransactionRepository @Inject constructor(
         transactionDao.updateExcludedFromTracking(transactionId, excluded)
     
     suspend fun deleteTransaction(transaction: TransactionEntity, hardDelete: Boolean = false) {
+        // Drop any inbound pointers so the linked counterpart doesn't keep a
+        // dangling linked_transaction_id reference.
+        transactionDao.clearLinksTo(transaction.id)
         if (hardDelete) {
             transactionDao.deleteTransaction(transaction)
         } else {
@@ -150,6 +156,7 @@ class TransactionRepository @Inject constructor(
     }
 
     suspend fun deleteTransactionById(id: Long, hardDelete: Boolean = false) {
+        transactionDao.clearLinksTo(id)
         if (hardDelete) {
             transactionDao.deleteTransactionById(id)
         } else {
@@ -188,6 +195,71 @@ class TransactionRepository @Inject constructor(
     
     suspend fun getOtherTransactionCountForMerchant(merchantName: String, excludeId: Long): Int {
         return transactionDao.getTransactionCountForMerchant(merchantName, excludeId)
+    }
+
+    suspend fun findSimilarTransactionsForRename(
+        originalMerchant: String,
+        newMerchantName: String,
+        excludeTransactionId: Long,
+    ): List<TransactionRenameCandidate> {
+        val merchantMatches = findSimilarMerchantMatches(
+            originalMerchant,
+            newMerchantName,
+            excludeTransactionId,
+        )
+        return merchantMatches.flatMap { match ->
+            transactionDao.getActiveTransactionsForMerchant(
+                match.sourceMerchant,
+                excludeTransactionId,
+            ).map { txn ->
+                TransactionRenameCandidate(
+                    transactionId = txn.id,
+                    currentMerchantName = txn.merchantName,
+                    similarityScore = match.similarityScore,
+                    amount = txn.amount,
+                    currency = txn.currency,
+                    dateTime = txn.dateTime,
+                    category = txn.category,
+                )
+            }
+        }.sortedByDescending { it.dateTime }
+    }
+
+    suspend fun updateMerchantNameForTransaction(transactionId: Long, newMerchantName: String) {
+        transactionDao.updateMerchantNameById(
+            transactionId = transactionId,
+            newMerchantName = newMerchantName,
+            updatedAt = LocalDateTime.now(),
+        )
+    }
+
+    private suspend fun findSimilarMerchantMatches(
+        originalMerchant: String,
+        newMerchantName: String,
+        excludeTransactionId: Long,
+    ): List<MerchantRenameMatch> {
+        val knownMerchants = transactionDao.getDistinctMerchantNames()
+        val merchantDetails = knownMerchants.mapNotNull { merchant ->
+            val name = merchant.trim()
+            if (name.isEmpty()) return@mapNotNull null
+            val count = transactionDao.getActiveTransactionCountForMerchant(name, excludeTransactionId)
+            if (count <= 0) return@mapNotNull null
+            MerchantRenameMatcher.MerchantMatchDetails(
+                merchantName = name,
+                transactionCount = count,
+                sample = MerchantRenameMatcher.MerchantSample(
+                    amount = BigDecimal.ZERO,
+                    currency = "",
+                    dateTime = LocalDateTime.now(),
+                    category = "",
+                ),
+            )
+        }
+        return MerchantRenameMatcher.findCandidates(
+            originalMerchant = originalMerchant,
+            newMerchantName = newMerchantName,
+            merchantDetails = merchantDetails,
+        )
     }
 
     suspend fun getDistinctMerchantNames(): List<String> {
@@ -347,6 +419,12 @@ class TransactionRepository @Inject constructor(
         val endDate = LocalDateTime.now().plusYears(10)
         return transactionDao.getTransactionsBetweenDatesList(startDate, endDate)
     }
+
+    suspend fun getTransactionsBetweenDatesList(
+        startDate: LocalDateTime,
+        endDate: LocalDateTime,
+    ): List<TransactionEntity> =
+        transactionDao.getTransactionsBetweenDatesList(startDate, endDate)
 
     suspend fun getUncategorizedTransactions(): List<TransactionEntity> {
         // Get all transactions without a category or with "Others" category

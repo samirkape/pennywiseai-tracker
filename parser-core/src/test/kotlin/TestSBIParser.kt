@@ -92,16 +92,15 @@ class SBIBankParserTest {
                 )
             ),
             ParserTestCase(
-                name = "SBI Card payment credited",
+                name = "SBI Card payment credited is classified as CC_BILL_PAYMENT transfer",
                 message = "Your payment of Rs.1,644.55 has been credited to your SBI Credit Card ending with 5667. Your available limit is Rs.48,355.45.",
                 sender = "SBICRD",
                 expected = ExpectedTransaction(
                     amount = BigDecimal("1644.55"),
                     currency = "INR",
-                    type = TransactionType.INCOME,
-                    accountLast4 = "5667",
-                    isFromCard = true,
-                    creditLimit = BigDecimal("48355.45")
+                    type = TransactionType.TRANSFER,
+                    transferKind = com.pennywiseai.parser.core.TransferKinds.CC_BILL_PAYMENT,
+                    accountLast4 = "5667"
                 )
             )
         )

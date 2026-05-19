@@ -65,6 +65,7 @@ import com.pennywiseai.tracker.data.database.entity.ProfileEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionGroupEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionType
+import com.pennywiseai.tracker.data.database.entity.TransferKind
 import com.pennywiseai.tracker.presentation.add.PaymentChannel
 import com.pennywiseai.tracker.ui.LocalNavAnimatedVisibilityScope
 import com.pennywiseai.tracker.ui.LocalSharedTransitionScope
@@ -116,6 +117,7 @@ fun TransactionDetailScreen(
     transactionId: Long,
     onNavigateBack: () -> Unit,
     onNavigateToLoanDetail: (Long) -> Unit = {},
+    onFindSimilar: (String) -> Unit = {},
     viewModel: TransactionDetailViewModel = hiltViewModel()
 ) {
     val transaction by viewModel.transaction.collectAsStateWithLifecycle()
@@ -127,8 +129,7 @@ fun TransactionDetailScreen(
     val applyToAllFromMerchant by viewModel.applyToAllFromMerchant.collectAsStateWithLifecycle()
     val updateExistingTransactions by viewModel.updateExistingTransactions.collectAsStateWithLifecycle()
     val existingTransactionCount by viewModel.existingTransactionCount.collectAsStateWithLifecycle()
-    val renameExistingTransactions by viewModel.renameExistingTransactions.collectAsStateWithLifecycle()
-    val showRenameExistingOption by viewModel.showRenameExistingOption.collectAsStateWithLifecycle()
+    val merchantRenameReview by viewModel.merchantRenameReview.collectAsStateWithLifecycle()
     val showDeleteDialog by viewModel.showDeleteDialog.collectAsStateWithLifecycle()
     val isDeleting by viewModel.isDeleting.collectAsStateWithLifecycle()
     val deleteSuccess by viewModel.deleteSuccess.collectAsStateWithLifecycle()
@@ -310,8 +311,6 @@ fun TransactionDetailScreen(
                 applyToAllFromMerchant = applyToAllFromMerchant,
                 updateExistingTransactions = updateExistingTransactions,
                 existingTransactionCount = existingTransactionCount,
-                renameExistingTransactions = renameExistingTransactions,
-                showRenameExistingOption = showRenameExistingOption,
                 viewModel = viewModel,
                 accountPrimaryCurrency = accountPrimaryCurrency,
                 convertedAmount = convertedAmount,
@@ -320,6 +319,7 @@ fun TransactionDetailScreen(
                 hasSplits = hasSplits,
                 loan = loan,
                 onNavigateToLoanDetail = onNavigateToLoanDetail,
+                onFindSimilar = onFindSimilar,
                 accountProfileId = accountProfileId,
                 hazeState = hazeState,
                 modifier = Modifier.padding(paddingValues)
@@ -327,6 +327,16 @@ fun TransactionDetailScreen(
         }
     }
     
+    merchantRenameReview?.let { reviewState ->
+        MerchantRenameReviewSheet(
+            reviewState = reviewState,
+            onApprove = { viewModel.approveCurrentRenameCandidate() },
+            onSkip = { viewModel.skipCurrentRenameCandidate() },
+            onApplyAll = { viewModel.applyAllRenameCandidates() },
+            onDismiss = { viewModel.dismissMerchantRenameReview() },
+        )
+    }
+
     // Delete Confirmation Dialog
     if (showDeleteDialog) {
         AlertDialog(
@@ -434,8 +444,6 @@ private fun TransactionDetailContent(
     applyToAllFromMerchant: Boolean,
     updateExistingTransactions: Boolean,
     existingTransactionCount: Int,
-    renameExistingTransactions: Boolean,
-    showRenameExistingOption: Boolean,
     viewModel: TransactionDetailViewModel,
     accountPrimaryCurrency: String,
     convertedAmount: BigDecimal?,
@@ -444,6 +452,7 @@ private fun TransactionDetailContent(
     hasSplits: Boolean,
     loan: LoanEntity?,
     onNavigateToLoanDetail: (Long) -> Unit,
+    onFindSimilar: (String) -> Unit,
     accountProfileId: Long?,
     hazeState: HazeState,
     modifier: Modifier = Modifier
@@ -474,8 +483,6 @@ private fun TransactionDetailContent(
                 applyToAllFromMerchant = applyToAllFromMerchant,
                 updateExistingTransactions = updateExistingTransactions,
                 existingTransactionCount = existingTransactionCount,
-                renameExistingTransactions = renameExistingTransactions,
-                showRenameExistingOption = showRenameExistingOption,
                 accountProfileId = accountProfileId,
                 viewModel = viewModel,
                 splits = splits,
@@ -492,6 +499,7 @@ private fun TransactionDetailContent(
                 hasSplits = hasSplits,
                 loan = loan,
                 onNavigateToLoanDetail = onNavigateToLoanDetail,
+                onFindSimilar = onFindSimilar,
                 accountProfileId = accountProfileId
             )
         }
@@ -510,6 +518,7 @@ private fun TransactionReceipt(
     hasSplits: Boolean,
     loan: LoanEntity?,
     onNavigateToLoanDetail: (Long) -> Unit,
+    onFindSimilar: (String) -> Unit = {},
     accountProfileId: Long? = null
 ) {
     val currentGroup by viewModel.currentGroup.collectAsStateWithLifecycle()
@@ -631,7 +640,7 @@ private fun TransactionReceipt(
                             Icon(
                                 Icons.Default.SwapHoriz,
                                 contentDescription = null,
-                                modifier = Modifier.size(Dimensions.Icon.small),
+                                modifier = Modifier.size(Dimens.Icon.small),
                                 tint = loanColor
                             )
                         },
@@ -643,27 +652,20 @@ private fun TransactionReceipt(
                         border = null
                     )
                 } else {
-                    SuggestionChip(
-                        onClick = { viewModel.showMarkAsLoanSheet() },
-                        label = {
-                            Text(
-                                text = "Mark as loan",
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                        },
-                        icon = {
-                            Icon(
-                                Icons.Default.SwapHoriz,
-                                contentDescription = null,
-                                modifier = Modifier.size(Dimensions.Icon.small)
-                            )
-                        },
-                        colors = SuggestionChipDefaults.suggestionChipColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            iconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        border = null
+                    val trackAsLabel = if (transaction.transactionType == TransactionType.INCOME) {
+                        "Track as borrowed"
+                    } else {
+                        "Track as lent"
+                    }
+                     SuggestionChip(
+                         onClick = { viewModel.showMarkAsLoanSheet() },
+                         label = {
+                             Text(
+                                text = trackAsLabel,
+                                 style = MaterialTheme.typography.labelMedium
+                             )
+                         },
+                        trailingIcon = null
                     )
                 }
 
@@ -693,6 +695,31 @@ private fun TransactionReceipt(
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                         iconContentColor = if (currentGroup != null) groupColor
                         else MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    border = null
+                )
+
+                // Find Similar chip
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                SuggestionChip(
+                    onClick = { onFindSimilar(transaction.merchantName) },
+                    label = {
+                        Text(
+                            text = "Find similar",
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    },
+                    icon = {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(Dimensions.Icon.small)
+                        )
+                    },
+                    colors = SuggestionChipDefaults.suggestionChipColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        iconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     ),
                     border = null
                 )
@@ -849,6 +876,23 @@ private fun TransactionReceipt(
                 )
             }
 
+            // Credit Card bill payment hint
+            if (transaction.transferKind == com.pennywiseai.tracker.data.database.entity.TransferKind.CC_BILL_PAYMENT) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                DetailInfoRow(
+                    icon = Icons.Default.CreditCard,
+                    label = "Credit Card Payment",
+                    value = "Not counted in spending (paired with card purchase)"
+                )
+                transaction.linkedTransactionId?.let { linkedId ->
+                    DetailInfoRow(
+                        icon = Icons.Default.Link,
+                        label = "Linked transaction",
+                        value = "#$linkedId"
+                    )
+                }
+            }
+
             // Classification
             val effectiveProfileId = transaction.profileId ?: accountProfileId
             val isEffectivelyBusiness = effectiveProfileId == ProfileEntity.BUSINESS_ID
@@ -1001,10 +1045,11 @@ private fun TransactionReceipt(
 private fun DetailInfoRow(
     icon: ImageVector,
     label: String,
-    value: String
+    value: String,
+    modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = Spacing.xs, vertical = Spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
@@ -1355,6 +1400,43 @@ private fun EditableTransactionHeader(
             }
         }
 
+        // Transfer sub-chips (Transfer only): Self vs Others
+        val isTransferSelected = transaction.transactionType == TransactionType.TRANSFER
+        if (isTransferSelected) {
+            val transferSubOptions = listOf(
+                TransferKind.SELF_TRANSFER to "Self",
+                TransferKind.OTHERS_TRANSFER to "Others"
+            )
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                transferSubOptions.forEach { (kind, label) ->
+                    val subSelected = transaction.transferKind == kind
+                    FilterChip(
+                        selected = subSelected,
+                        onClick = { viewModel.updateTransferKind(kind) },
+                        label = { Text(label, maxLines = 1) },
+                        leadingIcon = if (subSelected) {
+                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(Dimensions.Icon.small)) }
+                        } else null,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(0.7f),
+                            labelColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            borderWidth = 0.dp,
+                            selected = subSelected,
+                            enabled = true
+                        )
+                    )
+                }
+            }
+        }
+
         // Date and Time
         DateTimeField(
             dateTime = transaction.dateTime,
@@ -1371,8 +1453,6 @@ private fun EditableExtractedInfoCard(
     applyToAllFromMerchant: Boolean,
     updateExistingTransactions: Boolean,
     existingTransactionCount: Int,
-    renameExistingTransactions: Boolean,
-    showRenameExistingOption: Boolean,
     accountProfileId: Long?,
     viewModel: TransactionDetailViewModel,
     splits: List<SplitItem>,
@@ -1416,10 +1496,15 @@ private fun EditableExtractedInfoCard(
             }
 
             if (!showSplitEditor) {
-                CategoryMultiSelect(
-                    primaryCategory = transaction.category,
-                    viewModel = viewModel
-                )
+                // Hide category for self-transfers: they are internal movements excluded from spend
+                val isSelfTransfer = transaction.transactionType == TransactionType.TRANSFER &&
+                        transaction.transferKind == TransferKind.SELF_TRANSFER
+                if (!isSelfTransfer) {
+                    CategoryMultiSelect(
+                        primaryCategory = transaction.category,
+                        viewModel = viewModel
+                    )
+                }
             }
         }
 
@@ -1468,28 +1553,6 @@ private fun EditableExtractedInfoCard(
                     )
                     Text(
                         text = "Update $existingTransactionCount existing ${if (existingTransactionCount == 1) "transaction" else "transactions"}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-
-            if (showRenameExistingOption) {
-                Spacer(modifier = Modifier.height(Spacing.sm))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = renameExistingTransactions,
-                        onCheckedChange = { viewModel.toggleRenameExistingTransactions() }
-                    )
-                    Text(
-                        text = stringResource(
-                            R.string.txn_edit_rename_existing,
-                            existingTransactionCount,
-                            transaction.merchantName
-                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -2306,8 +2369,9 @@ private fun MarkAsLoanBottomSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val directionLabel = if (direction == LoanDirection.LENT) "Lent" else "Borrowed"
-
-    ModalBottomSheet(
+    val sheetTitle = if (direction == LoanDirection.LENT) "Track money lent" else "Track money borrowed"
+ 
+     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         dragHandle = { BottomSheetDefaults.DragHandle() }
@@ -2321,7 +2385,7 @@ private fun MarkAsLoanBottomSheet(
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
             Text(
-                text = "$directionLabel ${CurrencyFormatter.formatCurrency(transactionAmount, transactionCurrency)}",
+                text = "$sheetTitle: ${CurrencyFormatter.formatCurrency(transactionAmount, transactionCurrency)}",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -2571,5 +2635,3 @@ private fun GroupBottomSheet(
         }
     }
 }
-
-

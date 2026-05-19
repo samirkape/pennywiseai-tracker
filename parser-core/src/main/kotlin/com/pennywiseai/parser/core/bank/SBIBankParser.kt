@@ -63,6 +63,13 @@ class SBIBankParser : BaseIndianBankParser() {
 
         val parsed = super.parse(normalizedBody, sender, timestamp) ?: return null
 
+        // If the base parser already detected this as a credit card bill payment,
+        // keep that classification verbatim. Anything else would double-count it
+        // or re-promote it to INCOME / CREDIT on the card side.
+        if (parsed.isCreditCardBillPayment()) {
+            return parsed
+        }
+
         // Handle credit card messages
         if (isCreditCardMessage(sender, normalizedBody)) {
             // Extract credit card last 4 digits
@@ -71,20 +78,17 @@ class SBIBankParser : BaseIndianBankParser() {
             // Extract available limit for credit card messages
             val creditLimit = extractAvailableLimit(normalizedBody) ?: parsed.creditLimit
 
-            // Determine transaction type based on message content
+            // Determine transaction type based on message content.
+            // Note: bill-payment credits ("payment of X credited to your SBI
+            // Credit Card") are intentionally NOT special-cased here. They are
+            // re-classified centrally in BaseIndianBankParser as
+            // TRANSFER + CC_BILL_PAYMENT so they don't double-count as spending.
             val transactionType = when {
-                // Payment TO credit card (reducing debt)
-                normalizedBody.contains("payment of", ignoreCase = true) &&
-                        normalizedBody.contains("credited to your SBI Credit Card", ignoreCase = true) -> {
-                    TransactionType.INCOME  // Payment received by credit card
-                }
-                // Credit card spending
                 normalizedBody.contains("spent on", ignoreCase = true) ||
                         normalizedBody.contains("spent", ignoreCase = true) -> {
-                    TransactionType.CREDIT  // Credit card expense
+                    TransactionType.CREDIT
                 }
-                // Default for other credit card transactions
-                else -> TransactionType.CREDIT
+                else -> parsed.type
             }
 
             // Extract merchant for credit card transactions

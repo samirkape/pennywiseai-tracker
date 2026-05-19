@@ -2,6 +2,7 @@ package com.pennywiseai.parser.core.bank
 
 import com.pennywiseai.parser.core.ParsedTransaction
 import com.pennywiseai.parser.core.TransactionType
+import com.pennywiseai.parser.core.TransferKinds
 import java.math.BigDecimal
 
 /**
@@ -64,6 +65,12 @@ class CredParser : BankParser() {
     override fun extractTransactionType(message: String): TransactionType {
         // Credit card bill payments are transfers from bank account to credit card account
         return TransactionType.TRANSFER
+    }
+
+    override fun parse(smsBody: String, sender: String, timestamp: Long): ParsedTransaction? {
+        val parsed = super.parse(smsBody, sender, timestamp) ?: return null
+        // Every CRED SMS represents a credit card bill payment.
+        return parsed.copy(transferKind = TransferKinds.CC_BILL_PAYMENT)
     }
 
     override fun isTransactionMessage(message: String): Boolean {

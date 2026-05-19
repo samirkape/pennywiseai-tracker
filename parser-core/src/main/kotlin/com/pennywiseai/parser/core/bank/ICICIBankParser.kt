@@ -48,7 +48,7 @@ class ICICIBankParser : BaseIndianBankParser() {
             null
         }
 
-        return ParsedTransaction(
+        val parsed = ParsedTransaction(
             amount = amount,
             type = type,
             merchant = extractMerchant(smsBody, sender),
@@ -63,6 +63,11 @@ class ICICIBankParser : BaseIndianBankParser() {
             isFromCard = detectIsCard(smsBody),
             currency = currency
         )
+
+        // Route through the shared CC bill-payment hook so the ICICI card-side
+        // "payment received on your credit card" SMS gets reclassified to
+        // TRANSFER + CC_BILL_PAYMENT (and isn't double-counted with the bank-side leg).
+        return applyCreditCardBillPayment(parsed)
     }
 
     /**
@@ -497,11 +502,10 @@ class ICICIBankParser : BaseIndianBankParser() {
             return false // This is a future debit notification, not an actual transaction
         }
 
-        // Skip credit card bill payment confirmations - these are transfers between own accounts
-        // Example: "Payment of Rs 26,266.00 has been received on your ICICI Bank Credit Card XX9006..."
-        if (lowerMessage.contains("has been received on your icici bank credit card")) {
-            return false // This is a credit card bill payment, not a transaction
-        }
+        // Credit card bill payment confirmations are NOT skipped anymore.
+        // BaseIndianBankParser re-classifies them as TRANSFER + CC_BILL_PAYMENT
+        // so they are not double-counted as spending and can be linked to the
+        // matching debit leg.
 
         // Check for ICICI-specific transaction keywords
         val iciciKeywords = listOf(

@@ -30,7 +30,10 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import com.pennywiseai.tracker.ui.theme.Dimensions
 import com.pennywiseai.tracker.ui.theme.Spacing
+import com.pennywiseai.tracker.R
+import com.pennywiseai.tracker.domain.service.QuickKeywordRuleCompiler
 import com.pennywiseai.tracker.ui.viewmodel.RulesViewModel
+import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,6 +41,7 @@ fun RulesScreen(
     onNavigateBack: () -> Unit,
     onNavigateToCreateRule: () -> Unit,
     onNavigateToEditRule: (String) -> Unit,
+    onNavigateToQuickKeywordRules: () -> Unit = {},
     viewModel: RulesViewModel = hiltViewModel()
 ) {
     val rules by viewModel.rules.collectAsStateWithLifecycle()
@@ -146,6 +150,42 @@ fun RulesScreen(
                 flingBehavior = rememberOverscrollFlingBehavior { lazyListState },
                 verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
+                item {
+                    PennyWiseCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onNavigateToQuickKeywordRules,
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Default.Key,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.quick_keyword_rules_title),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Text(
+                                    text = stringResource(R.string.quick_keyword_rules_entry_subtitle),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Icon(
+                                Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+
                 // Info Card
                 item {
                     PennyWiseCard(
@@ -183,7 +223,8 @@ fun RulesScreen(
 
                 // Group rules by category for better organization
                 item {
-                    val groupedRules = rules.groupBy { rule ->
+                    val advancedRules = rules.filter { !QuickKeywordRuleCompiler.isQuickKeywordRule(it) }
+                    val groupedRules = advancedRules.groupBy { rule ->
                         when {
                             rule.name.contains("Food", ignoreCase = true) ||
                             rule.name.contains("Fuel", ignoreCase = true) -> "Daily Expenses"

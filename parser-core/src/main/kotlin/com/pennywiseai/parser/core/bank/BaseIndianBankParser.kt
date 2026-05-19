@@ -1,8 +1,11 @@
 package com.pennywiseai.parser.core.bank
 
 import com.pennywiseai.parser.core.CompiledPatterns
+import com.pennywiseai.parser.core.PayrollCreditDetector
 import com.pennywiseai.parser.core.MandateInfo
+import com.pennywiseai.parser.core.ParsedTransaction
 import com.pennywiseai.parser.core.TransactionType
+import com.pennywiseai.parser.core.TransferKinds
 import kotlinx.datetime.LocalDateTime
 import java.math.BigDecimal
 
@@ -15,10 +18,95 @@ abstract class BaseIndianBankParser : BankParser() {
     override fun getCurrency() = "INR"
 
     /**
+     * Single source of truth for Indian credit card bill payment detection.
+     *
+     * Banks describe a CC bill payment with phrases like:
+     *  - "payment of Rs X received towards your ... credit card"
+     *  - "received your payment ... credit card"
+     *  - "thank you for the payment ... credit card"
+     *  - "payment ... credited to your ... credit card"
+     *  - "payment received on your ... credit card"
+     *  - BBPS + credit card, or CRED app payments
+     *  - "card payment of Rs X" / "Rs X towards credit card"
+     *
+     * When true, the bill-payment leg should be classified as
+     * [TransactionType.TRANSFER] with [TransferKinds.CC_BILL_PAYMENT] so the app
+     * never double-counts it as spending alongside the original card purchase.
+     */
+    open fun isCreditCardBillPayment(message: String): Boolean {
+        val m = message.lowercase()
+
+        // Refunds and cashbacks should never be treated as bill payments.
+        if (m.contains("refund") || m.contains("reversal") || m.contains("cashback")) {
+            return false
+        }
+
+        val ccContext = m.contains("credit card") || m.contains(" cc ") ||
+            m.contains("cc payment") || m.contains("credit card payment")
+        val cardContext = ccContext || m.contains("card") || m.contains("bbps") || m.contains("cred")
+
+        if (!cardContext) return false
+
+        // Bill payment received on the card side (i.e. CC SMS).
+        val receivedOnCard = ccContext && (
+            m.contains("payment received") ||
+            m.contains("received your payment") ||
+            m.contains("payment has been received") ||
+            (m.contains("payment of") && (m.contains("received") || m.contains("credited"))) ||
+            m.contains("credited towards")
+        )
+
+        // Bill payment from a bank account towards a credit card.
+        val paidTowardsCard = ccContext && (
+            m.contains("towards") ||
+            m.contains("payment to") ||
+            m.contains("thank you for the payment")
+        )
+
+        // BBPS / CRED confirmation SMS that explicitly names the credit card.
+        val mentionsCredApp = Regex("""\bcred\b""", RegexOption.IGNORE_CASE).containsMatchIn(m)
+        val bbpsCred = (m.contains("bbps") || mentionsCredApp) && ccContext
+
+        // Bank debit / UPI to the CRED app (e.g. HDFC "Sent Rs.X ... To CRED Club").
+        // These never say "credit card" on the debit leg, but they are bill payments.
+        val paidToCredApp =
+            Regex("""\bto\s+cred(?:\s+club)?\b""", RegexOption.IGNORE_CASE).containsMatchIn(m) ||
+                Regex("""\btowards\s+cred(?:\s+club)?\b""", RegexOption.IGNORE_CASE).containsMatchIn(m) ||
+                Regex("""\bupi\s+cred\b""", RegexOption.IGNORE_CASE).containsMatchIn(m)
+
+        return receivedOnCard || paidTowardsCard || bbpsCred || paidToCredApp
+    }
+
+    /**
+     * Hook applied to every parsed transaction. Tags credit card bill payments
+     * uniformly so all Indian bank parsers funnel through the same logic.
+     */
+    override fun parse(smsBody: String, sender: String, timestamp: Long): ParsedTransaction? {
+        val parsed = super.parse(smsBody, sender, timestamp) ?: return null
+        return applyCreditCardBillPayment(parsed)
+    }
+
+    /**
+     * Re-classifies the given parsed transaction as a CC_BILL_PAYMENT transfer
+     * if its SMS body matches [isCreditCardBillPayment]. No-op otherwise.
+     */
+    protected fun applyCreditCardBillPayment(parsed: ParsedTransaction): ParsedTransaction {
+        if (parsed.transferKind == TransferKinds.CC_BILL_PAYMENT) return parsed
+        if (!isCreditCardBillPayment(parsed.smsBody)) return parsed
+        return parsed.copy(
+            type = TransactionType.TRANSFER,
+            transferKind = TransferKinds.CC_BILL_PAYMENT
+        )
+    }
+
+    /**
      * Checks if the message is for an investment transaction.
      * Contains keywords specific to Indian investment platforms and terms.
      */
     override fun isInvestmentTransaction(lowerMessage: String): Boolean {
+        if (PayrollCreditDetector.isPayrollCreditMessage(lowerMessage)) {
+            return false
+        }
         val investmentKeywords = listOf(
             // Clearing corporations
             "iccl",                         // Indian Clearing Corporation Limited

@@ -64,6 +64,10 @@ object CompiledPatterns {
             Regex("^[A-Z]{2}-HDFCB.*$")
         )
 
+        val ACH_PAYROLL_COMPANY = Regex(
+            """for\s+ACH\s+C-SAL-([^-.\n]+)""",
+            RegexOption.IGNORE_CASE,
+        )
         val SALARY_PATTERN = Regex(
             """for\s+[^-]+-[^-]+-[^-]+\s+[A-Z]+\s+SALARY-([^\.\n]+)""",
             RegexOption.IGNORE_CASE

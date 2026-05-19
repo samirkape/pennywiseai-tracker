@@ -1,6 +1,7 @@
 package com.pennywiseai.tracker.data.mapper
 
 import com.pennywiseai.parser.core.ParsedTransaction
+import com.pennywiseai.parser.core.TransferKinds
 import com.pennywiseai.tracker.core.Constants
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionType
@@ -31,11 +32,19 @@ fun ParsedTransaction.toEntity(): TransactionEntity {
         com.pennywiseai.parser.core.TransactionType.BALANCE_UPDATE -> TransactionType.EXPENSE
     }
 
+    // Credit card bill payments always belong in the "Credit Card Payment" bucket
+    // regardless of merchant-string heuristics.
+    val resolvedCategory = if (transferKind == TransferKinds.CC_BILL_PAYMENT) {
+        "Credit Card Payment"
+    } else {
+        determineCategory(merchant, entityType)
+    }
+
     return TransactionEntity(
         id = 0, // Auto-generated
         amount = amount,
         merchantName = normalizedMerchant ?: "Unknown Merchant",
-        category = determineCategory(merchant, entityType),
+        category = resolvedCategory,
         transactionType = entityType,
         dateTime = dateTime,
         description = null,
@@ -51,7 +60,8 @@ fun ParsedTransaction.toEntity(): TransactionEntity {
         currency = currency,
         fromAccount = fromAccount,
         toAccount = toAccount,
-        reference = reference
+        reference = reference,
+        transferKind = transferKind
     )
 }
 

@@ -288,7 +288,7 @@ class TransactionsViewModel @Inject constructor(
         val scanMonthsValue = smsScanMonths.value
 
         return when (currentPeriod) {
-            TimePeriod.ALL -> true
+            TimePeriod.ALL -> false
             TimePeriod.CURRENT_FY -> {
                 // Check if FY start is before scan period
                 val dateRange = getDateRangeForPeriod(TimePeriod.CURRENT_FY)
@@ -623,6 +623,32 @@ class TransactionsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Navigates to a specific [yearMonth], selecting the appropriate period chip for the
+     * current month or setting a custom date range for historical months.
+     */
+    fun navigateToMonth(yearMonth: YearMonth) {
+        viewModelScope.launch {
+            val monthStartDay = userPreferencesRepository.monthStartDay.first()
+            val useFinancialMonth = userPreferencesRepository.useFinancialMonth.first()
+            val useFixedEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
+            val endDom = userPreferencesRepository.budgetPeriodEndDay.first()
+            val overrides = salaryMonthOverrideRepository.overridesMap.first()
+            when {
+                useFinancialMonth && yearMonth == YearMonth.now() ->
+                    selectPeriod(TimePeriod.THIS_MONTH)
+                !useFinancialMonth && yearMonth == YearMonth.now() ->
+                    selectPeriod(TimePeriod.CALENDAR_MONTH)
+                else -> {
+                    val range = getDateRangeForYearMonth(
+                        yearMonth, monthStartDay, useFinancialMonth, overrides, useFixedEnd, endDom
+                    )
+                    setCustomDateRange(range.first, range.second)
+                }
+            }
+        }
+    }
+
     fun toggleExcludedFromTracking(transaction: TransactionEntity) {
         viewModelScope.launch {
             transactionRepository.updateExcludedFromTracking(transaction.id, !transaction.isExcludedFromTracking)
@@ -723,10 +749,12 @@ class TransactionsViewModel @Inject constructor(
         merchant: String?,
         period: String?,
         currency: String?,
-        transactionType: String? = null
+        transactionType: String? = null,
+        periodStartEpochDay: Long? = null,
+        periodEndEpochDay: Long? = null
     ) {
         // Create current params to compare
-        val currentParams = NavigationParams(category, merchant, period, currency, transactionType)
+        val currentParams = NavigationParams(category, merchant, period, currency, transactionType, periodStartEpochDay, periodEndEpochDay)
 
         // Only apply navigation filters if:
         // 1. This is the first time (appliedNavigationParams is null)
@@ -760,7 +788,12 @@ class TransactionsViewModel @Inject constructor(
                 updateSearchQuery(decoded)
             }
 
-            if (period != null) {
+            if (period == "CUSTOM" && periodStartEpochDay != null && periodEndEpochDay != null) {
+                setCustomDateRange(
+                    LocalDate.ofEpochDay(periodStartEpochDay),
+                    LocalDate.ofEpochDay(periodEndEpochDay)
+                )
+            } else if (period != null) {
                 applyPeriodFromNavigation(period)
             } else {
                 selectPeriod(
@@ -848,16 +881,24 @@ class TransactionsViewModel @Inject constructor(
     }
 
     /**
-     * Applies a multi-category filter from analytics navigation (no date constraint).
+     * Applies a multi-category filter from analytics navigation.
      * Categories is a comma-separated, URL-encoded string.
+     * When period is CUSTOM and epoch days are provided, applies the custom date range.
      */
-    fun applyMultiCategoryFilter(categoriesEncoded: String, period: String?) {
+    fun applyMultiCategoryFilter(categoriesEncoded: String, period: String?, periodStartEpochDay: Long? = null, periodEndEpochDay: Long? = null) {
         clearCategoryFilter()
         updateSearchQuery("")
         setSortOption(SortOption.DATE_NEWEST)
 
         viewModelScope.launch {
-            period?.let { applyPeriodFromNavigation(it) }
+            if (period == "CUSTOM" && periodStartEpochDay != null && periodEndEpochDay != null) {
+                setCustomDateRange(
+                    LocalDate.ofEpochDay(periodStartEpochDay),
+                    LocalDate.ofEpochDay(periodEndEpochDay)
+                )
+            } else {
+                period?.let { applyPeriodFromNavigation(it) }
+            }
         }
 
         val categoryList = categoriesEncoded.split(",").map { cat ->
@@ -1337,7 +1378,9 @@ private data class NavigationParams(
     val merchant: String?,
     val period: String?,
     val currency: String?,
-    val transactionType: String? = null
+    val transactionType: String? = null,
+    val periodStartEpochDay: Long? = null,
+    val periodEndEpochDay: Long? = null
 )
 
 /**

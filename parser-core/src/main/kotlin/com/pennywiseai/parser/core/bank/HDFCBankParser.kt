@@ -138,6 +138,14 @@ class HDFCBankParser : BaseIndianBankParser() {
             }
         }
 
+        // HDFC payroll ACH: "for ACH C-SAL-COMPANY-SalaryDec25"
+        CompiledPatterns.HDFC.ACH_PAYROLL_COMPANY.find(message)?.let { match ->
+            val merchant = match.groupValues[1].trim()
+            if (merchant.isNotEmpty()) {
+                return cleanMerchantName(merchant)
+            }
+        }
+
         // Pattern 1: Salary credit - "for XXXXX-ABC-XYZ MONTH SALARY-COMPANY NAME"
         if (message.contains("SALARY", ignoreCase = true) && message.contains(
                 "deposited",
@@ -284,9 +292,10 @@ class HDFCBankParser : BaseIndianBankParser() {
             // Legacy pattern for older format that explicitly says "spent on card"
             lowerMessage.contains("spent on card") && !lowerMessage.contains("block dc") -> TransactionType.CREDIT
 
-            // Credit card bill payments (these are regular expenses from bank account)
-            lowerMessage.contains("payment") && lowerMessage.contains("credit card") -> TransactionType.EXPENSE
-            lowerMessage.contains("towards") && lowerMessage.contains("credit card") -> TransactionType.EXPENSE
+            // Credit card bill payments handled centrally in BaseIndianBankParser
+            // (re-classified as TRANSFER + transfer_kind = CC_BILL_PAYMENT so they
+            // are not double-counted as spending). Fall through here so the
+            // detection runs once, after this method returns its candidate type.
 
             // HDFC specific: "Sent Rs.X From HDFC Bank"
             lowerMessage.contains("sent") && lowerMessage.contains("from hdfc") -> TransactionType.EXPENSE
@@ -465,17 +474,12 @@ class HDFCBankParser : BaseIndianBankParser() {
         }
 
 
-        // Skip credit card payment confirmations
-        if (lowerMessage.contains("received towards your credit card")) {
-            return false
-        }
-
-        // Skip credit card payment credited notifications
-        if (lowerMessage.contains("payment") &&
-            lowerMessage.contains("credited to your card")
-        ) {
-            return false
-        }
+        // Credit card payment confirmations are NOT skipped anymore. They are
+        // re-classified centrally as TRANSFER + CC_BILL_PAYMENT in
+        // BaseIndianBankParser so that they:
+        //   1. do not double-count as spending alongside the original purchase,
+        //   2. can be linked to the matching debit leg, and
+        //   3. correctly reduce the credit card outstanding balance.
 
         // Skip OTP and promotional messages
         if (lowerMessage.contains("otp") ||

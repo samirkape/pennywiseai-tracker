@@ -217,7 +217,7 @@ fun MainScreen(
             }
 
             composable(
-                route = "transactions?category={category}&merchant={merchant}&period={period}&currency={currency}&focusSearch={focusSearch}&type={type}&categories={categories}",
+                route = "transactions?category={category}&merchant={merchant}&period={period}&currency={currency}&focusSearch={focusSearch}&type={type}&categories={categories}&startDateEpoch={startDateEpoch}&endDateEpoch={endDateEpoch}",
                 arguments = listOf(
                     navArgument("category") {
                         type = NavType.StringType
@@ -252,6 +252,16 @@ fun MainScreen(
                         type = NavType.StringType
                         nullable = true
                         defaultValue = null
+                    },
+                    navArgument("startDateEpoch") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("endDateEpoch") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
                     }
                 )
             ) { backStackEntry ->
@@ -262,6 +272,8 @@ fun MainScreen(
                 val focusSearch = backStackEntry.arguments?.getBoolean("focusSearch") ?: false
                 val transactionType = backStackEntry.arguments?.getString("type")
                 val categories = backStackEntry.arguments?.getString("categories")
+                val periodStartEpoch = backStackEntry.arguments?.getString("startDateEpoch")?.toLongOrNull()
+                val periodEndEpoch = backStackEntry.arguments?.getString("endDateEpoch")?.toLongOrNull()
 
                 TransactionsScreen(
                     modifier = Modifier.imePadding(),
@@ -272,6 +284,8 @@ fun MainScreen(
                     focusSearch = focusSearch,
                     initialTransactionType = transactionType,
                     initialCategories = categories,
+                    initialPeriodStartEpoch = periodStartEpoch,
+                    initialPeriodEndEpoch = periodEndEpoch,
                     onNavigateBack = {
                         navController.safePopBackStack()
                     },
@@ -328,18 +342,20 @@ fun MainScreen(
                             com.pennywiseai.tracker.navigation.TransactionDetail(transactionId)
                         ) { launchSingleTop = true }
                     },
-                    onNavigateToTransactionsMultiCategory = { categories, period, currency ->
+                    onNavigateToTransactionsMultiCategory = { categories, period, currency, startDateEpoch, endDateEpoch ->
                         val route = buildString {
                             append("transactions")
                             val params = mutableListOf("categories=$categories")
                             period?.let { params.add("period=$it") }
                             currency?.let { params.add("currency=$it") }
+                            startDateEpoch?.let { params.add("startDateEpoch=$it") }
+                            endDateEpoch?.let { params.add("endDateEpoch=$it") }
                             append("?")
                             append(params.joinToString("&"))
                         }
                         navController.navigate(route) { launchSingleTop = true }
                     },
-                    onNavigateToTransactions = { category, merchant, period, currency, transactionType ->
+                    onNavigateToTransactions = { category, merchant, period, currency, transactionType, startDateEpoch, endDateEpoch ->
                         val route = buildString {
                             append("transactions")
                             val params = mutableListOf<String>()
@@ -359,6 +375,12 @@ fun MainScreen(
                             }
                             transactionType?.let {
                                 params.add("type=$it")
+                            }
+                            startDateEpoch?.let {
+                                params.add("startDateEpoch=$it")
+                            }
+                            endDateEpoch?.let {
+                                params.add("endDateEpoch=$it")
                             }
                             if (params.isNotEmpty()) {
                                 append("?")
