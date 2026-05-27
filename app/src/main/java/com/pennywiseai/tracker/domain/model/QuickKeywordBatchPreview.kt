@@ -26,6 +26,7 @@ data class QuickKeywordBatchChange(
     val categoryChanges: Boolean =
         !beforeCategory.equals(afterCategory, ignoreCase = true)
     val typeChanges: Boolean = beforeType != afterType
+    val tagsChanges: Boolean = before.tags != after.tags
 }
 
 data class QuickKeywordBatchPreview(
@@ -37,6 +38,7 @@ data class QuickKeywordBatchPreview(
     val alreadyLabeled: Int,
     val sampleChanges: List<QuickKeywordBatchChange>,
     val pendingChanges: List<QuickKeywordBatchChange>,
+    val matchStats: QuickKeywordMatchStats = QuickKeywordMatchStats(),
 )
 
 data class PendingKeywordBatchApply(

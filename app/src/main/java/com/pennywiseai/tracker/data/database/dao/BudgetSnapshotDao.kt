@@ -22,6 +22,12 @@ interface BudgetSnapshotDao {
     @Query("DELETE FROM budget_category_month_snapshots WHERE year = :year AND month = :month")
     suspend fun deleteCategorySnapshotsForMonth(year: Int, month: Int)
 
+    @Query("DELETE FROM budget_month_snapshots")
+    suspend fun deleteAllBudgetMonthSnapshots()
+
+    @Query("DELETE FROM budget_category_month_snapshots")
+    suspend fun deleteAllBudgetCategoryMonthSnapshots()
+
     @Transaction
     suspend fun replaceMonthSnapshots(
         year: Int,

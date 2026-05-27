@@ -51,4 +51,31 @@ class MerchantRenameMatcherTest {
 
         assertTrue(result.isEmpty())
     }
+
+    @Test
+    fun findCandidates_excludesPersonNameFalsePositiveForBrandRename() {
+        val result = MerchantRenameMatcher.findCandidates(
+            originalMerchant = "Amazon",
+            newMerchantName = "Amazon",
+            merchantDetails = listOf(
+                sampleDetails("Mayur Rahul Gosavi"),
+                sampleDetails("Anantkumar Kishor Bhange"),
+            ),
+        )
+
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun findCandidates_excludesUnrelatedMultiWordBusinessPhrase() {
+        val result = MerchantRenameMatcher.findCandidates(
+            originalMerchant = "Amazon",
+            newMerchantName = "Amazon",
+            merchantDetails = listOf(
+                sampleDetails("Hotel palm paradise pure"),
+            ),
+        )
+
+        assertTrue(result.isEmpty())
+    }
 }

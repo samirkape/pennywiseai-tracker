@@ -34,13 +34,18 @@ object Chat
 data class TransactionDetail(val transactionId: Long)
 
 @Serializable
-object AddTransaction
+data class AddTransaction(
+    val unrecognizedSmsId: Long = -1L,
+)
 
 @Serializable
 data class AccountDetail(val bankName: String, val accountLast4: String)
 
 @Serializable
 object UnrecognizedSms
+
+@Serializable
+object MerchantAliases
 
 @Serializable
 object Faq

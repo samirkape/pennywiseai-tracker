@@ -68,6 +68,9 @@ interface LoanDao {
     @Query("UPDATE transactions SET loan_id = NULL WHERE loan_id = :loanId")
     suspend fun unlinkAllTransactions(loanId: Long)
 
+    @Query("DELETE FROM loans")
+    suspend fun deleteAllLoans()
+
     @Query("""
         SELECT * FROM transactions
         WHERE loan_id IS NULL AND is_deleted = 0

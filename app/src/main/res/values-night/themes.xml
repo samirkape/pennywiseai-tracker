@@ -5,8 +5,8 @@
     
     <!-- Splash Screen theme for dark mode -->
     <style name="Theme.PennyWise.SplashScreen" parent="Theme.SplashScreen">
-        <!-- Dark background color matching Material Design 3 dark theme -->
-        <item name="windowSplashScreenBackground">#000000</item>
+        <!-- Spendly brand dark indigo for dark mode -->
+        <item name="windowSplashScreenBackground">#1E1B4B</item>
         
         <!-- Use the app icon as splash icon -->
         <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>

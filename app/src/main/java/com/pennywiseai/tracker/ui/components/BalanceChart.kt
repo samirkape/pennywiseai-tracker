@@ -68,7 +68,7 @@ fun BalanceChart(
             smoothedHistory.first().timestamp.year != smoothedHistory.last().timestamp.year
         } else false
 
-        smoothedHistory.map {
+        val allLabels = smoothedHistory.map {
             val date = it.timestamp
             when {
                 isYearly -> date.format(DateTimeFormatter.ofPattern("yyyy"))
@@ -76,6 +76,16 @@ fun BalanceChart(
                 isMonthly -> date.format(DateTimeFormatter.ofPattern("MMM"))
                 else -> date.format(DateTimeFormatter.ofPattern("dd MMM"))
             }
+        }
+
+        val skipFactor = when {
+            allLabels.size > 20 -> allLabels.size / 6
+            allLabels.size > 10 -> 2
+            else -> 1
+        }.coerceAtLeast(1)
+
+        allLabels.mapIndexed { i, label ->
+            if (i % skipFactor == 0 || i == allLabels.lastIndex) label else ""
         }
     }
 

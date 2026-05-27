@@ -42,12 +42,12 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavHostController
 import com.pennywiseai.tracker.data.preferences.NavBarStyle
 import com.pennywiseai.tracker.presentation.navigation.BottomNavItem
-import com.pennywiseai.tracker.ui.effects.BlurredAnimatedVisibility
 import dev.chrisbanes.haze.HazeDefaults
 import dev.chrisbanes.haze.HazeEffectScope
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import androidx.compose.ui.draw.BlurredEdgeTreatment
+import android.util.Log
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -73,9 +73,13 @@ fun PennyWiseBottomNavigation(
     )
     val containerColor = MaterialTheme.colorScheme.surface
 
+    // #region agent log
+    Log.d("DBG_f852e3", "{\"sessionId\":\"f852e3\",\"runId\":\"post-fix\",\"hypothesisId\":\"H1\",\"location\":\"PennyWiseBottomNavigation:75\",\"message\":\"nav render\",\"navBarStyle\":\"$navBarStyle\",\"blurEffects\":$blurEffects}")
+    // #endregion
+
     Box(modifier = modifier) {
         // NORMAL style NavigationBar
-        BlurredAnimatedVisibility(
+        AnimatedVisibility(
             visible = visible && navBarStyle == NavBarStyle.NORMAL,
             enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
             exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),
@@ -102,7 +106,6 @@ fun PennyWiseBottomNavigation(
                                     blurRadius = 20.dp,
                                     noiseFactor = -1f,
                                 )
-                                blurredEdgeTreatment = BlurredEdgeTreatment.Unbounded
                             }
                         ) else Modifier
                     )
@@ -156,7 +159,7 @@ fun PennyWiseBottomNavigation(
         }
 
         // FLOATING style HorizontalFloatingToolbar
-        BlurredAnimatedVisibility(
+        AnimatedVisibility(
             visible = visible && navBarStyle == NavBarStyle.FLOATING,
             enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
             exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),

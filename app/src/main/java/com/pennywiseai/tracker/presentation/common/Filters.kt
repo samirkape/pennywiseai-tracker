@@ -3,6 +3,7 @@ package com.pennywiseai.tracker.presentation.common
 import com.pennywiseai.tracker.data.database.entity.AccountBalanceEntity
 import com.pennywiseai.tracker.data.database.entity.ProfileEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
+import com.pennywiseai.tracker.data.database.entity.TransactionType
 import com.pennywiseai.tracker.utils.DateRangeUtils
 import java.time.LocalDate
 import java.time.YearMonth
@@ -13,6 +14,39 @@ private val YEAR_MONTH_NAV_PATTERN = Regex("\\d{4}-\\d{2}")
  * Date range for a budget/analytics month key ([YearMonth] or "YYYY-MM" navigation param).
  * Uses pay-month boundaries when [useFinancialMonth] is true.
  */
+/**
+ * Date range for month scrubber navigation in Analytics / Transactions.
+ *
+ * @param useCalendarMonth When true, uses calendar month boundaries (1st through month-end, or today for current month).
+ * When false, uses pay-month boundaries via [getDateRangeForYearMonth].
+ */
+fun getDateRangeForYearMonthNavigation(
+    yearMonth: YearMonth,
+    useCalendarMonth: Boolean,
+    monthStartDay: Int = 1,
+    monthStartOverrides: Map<String, Int> = emptyMap(),
+    useFixedBudgetPeriodEnd: Boolean = false,
+    budgetPeriodEndDay: Int = 31,
+): Pair<LocalDate, LocalDate> {
+    if (useCalendarMonth) {
+        val start = yearMonth.atDay(1)
+        val end = if (yearMonth == YearMonth.now()) {
+            LocalDate.now()
+        } else {
+            yearMonth.atEndOfMonth()
+        }
+        return start to end
+    }
+    return getDateRangeForYearMonth(
+        yearMonth,
+        monthStartDay,
+        useFinancialMonth = true,
+        monthStartOverrides,
+        useFixedBudgetPeriodEnd,
+        budgetPeriodEndDay,
+    )
+}
+
 fun getDateRangeForYearMonth(
     yearMonth: YearMonth,
     monthStartDay: Int = 1,
@@ -60,13 +94,70 @@ enum class TimePeriod(val label: String) {
     CUSTOM("Custom Range")
 }
 
+/** Bank name used for manual / cash entries when no account is linked. */
+const val MANUAL_ENTRY_BANK_NAME = "Manual Entry"
+
+/** Matches Analytics "Expense" filter: debit spend plus card spend, excluding loan repayments. */
+fun TransactionEntity.matchesAnalyticsSpendingFilter(): Boolean =
+    (transactionType == TransactionType.EXPENSE || transactionType == TransactionType.CREDIT) &&
+        loanId == null
+
+enum class PaymentMode(val label: String) {
+    CREDIT_CARD("Credit Card"),
+    BANK_ACCOUNT("Bank Account"),
+    CASH("Cash"),
+}
+
+/** Combined credit-card and bank-account spend (excludes cash). */
+enum class PaymentModeGroup {
+    CARD_AND_BANK,
+}
+
+fun TransactionEntity.paymentMode(): PaymentMode? = when {
+    loanId != null -> null
+    transactionType == TransactionType.CREDIT -> PaymentMode.CREDIT_CARD
+    transactionType == TransactionType.EXPENSE ->
+        if (bankName == MANUAL_ENTRY_BANK_NAME) PaymentMode.CASH else PaymentMode.BANK_ACCOUNT
+    else -> null
+}
+
+fun TransactionEntity.matchesPaymentModeGroup(group: PaymentModeGroup): Boolean = when (group) {
+    PaymentModeGroup.CARD_AND_BANK ->
+        paymentMode() == PaymentMode.CREDIT_CARD || paymentMode() == PaymentMode.BANK_ACCOUNT
+}
+
 enum class TransactionTypeFilter(val label: String) {
     ALL("All"),
     INCOME("Income"),
-    EXPENSE("Expense"),
+    EXPENSE("Spending"),
     CREDIT("Credit Card"),
     TRANSFER("Transfer"),
     INVESTMENT("Investment")
+}
+
+/**
+ * Resolves the active analytics/transactions date window for [period] and optional [customRange].
+ */
+fun resolveDateRangeForSelection(
+    period: TimePeriod,
+    customRange: Pair<LocalDate, LocalDate>?,
+    monthStartDay: Int = 1,
+    useFinancialMonth: Boolean = true,
+    monthStartOverrides: Map<String, Int> = emptyMap(),
+    useFixedBudgetPeriodEnd: Boolean = false,
+    budgetPeriodEndDay: Int = 31,
+): Pair<LocalDate, LocalDate>? {
+    if (period == TimePeriod.CUSTOM) {
+        return customRange
+    }
+    return getDateRangeForPeriod(
+        period,
+        monthStartDay,
+        useFinancialMonth,
+        monthStartOverrides,
+        useFixedBudgetPeriodEnd,
+        budgetPeriodEndDay,
+    )
 }
 
 fun getDateRangeForPeriod(

@@ -176,7 +176,7 @@ private fun AccountCarouselCard(
                 color = MaterialTheme.colorScheme.secondaryContainer
             ) {
                 Text(
-                    text = if (isCreditCard) "Credit" else "Savings",
+                    text = if (isCreditCard) "Credit Card" else "Savings",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                     fontWeight = FontWeight.Medium,

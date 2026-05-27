@@ -75,7 +75,9 @@ interface TransactionDao {
         WHERE is_deleted = 0 
         AND (merchant_name LIKE '%' || :searchQuery || '%' 
         OR description LIKE '%' || :searchQuery || '%'
-        OR sms_body LIKE '%' || :searchQuery || '%') 
+        OR sms_body LIKE '%' || :searchQuery || '%'
+        OR tags LIKE '%' || :searchQuery || '%'
+        OR category LIKE '%' || :searchQuery || '%') 
         ORDER BY date_time DESC
     """)
     fun searchTransactions(searchQuery: String): Flow<List<TransactionEntity>>
@@ -124,6 +126,9 @@ interface TransactionDao {
     
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertTransaction(transaction: TransactionEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTransactionForRestore(transaction: TransactionEntity): Long
     
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertTransactions(transactions: List<TransactionEntity>)
@@ -139,6 +144,9 @@ interface TransactionDao {
     
     @Query("DELETE FROM transactions")
     suspend fun deleteAllTransactions()
+
+    @Query("UPDATE transactions SET linked_transaction_id = NULL")
+    suspend fun clearAllLinkedTransactionIds()
     
     @Query("UPDATE transactions SET category = :newCategory WHERE merchant_name = :merchantName")
     suspend fun updateCategoryForMerchant(merchantName: String, newCategory: String)
@@ -151,7 +159,7 @@ interface TransactionDao {
 
     @Query("""
         SELECT COUNT(*) FROM transactions
-        WHERE is_deleted = 0 AND merchant_name = :merchantName AND id != :excludeId
+        WHERE is_deleted = 0 AND LOWER(merchant_name) = LOWER(:merchantName) AND id != :excludeId
     """)
     suspend fun getActiveTransactionCountForMerchant(merchantName: String, excludeId: Long): Int
 
@@ -182,7 +190,7 @@ interface TransactionDao {
     @Query("""
         SELECT category FROM transactions
         WHERE is_deleted = 0
-        AND merchant_name = :merchantName
+        AND LOWER(merchant_name) = LOWER(:merchantName)
         AND id != :excludeTransactionId
         GROUP BY category
         ORDER BY COUNT(*) DESC, MAX(date_time) DESC
@@ -203,11 +211,12 @@ interface TransactionDao {
     @Query("UPDATE transactions SET is_excluded_from_tracking = :excluded, updated_at = :now WHERE id = :transactionId")
     suspend fun updateExcludedFromTracking(transactionId: Long, excluded: Boolean, now: LocalDateTime = LocalDateTime.now())
 
-    // Soft delete methods - also clear hash so it doesn't block new inserts with same details
-    @Query("UPDATE transactions SET is_deleted = 1, transaction_hash = 'DELETED_' || id || '_' || transaction_hash WHERE id = :transactionId")
+    // Soft delete methods - preserve hash so the deduplication check in the SMS worker
+    // can still find and skip this transaction on future scans
+    @Query("UPDATE transactions SET is_deleted = 1 WHERE id = :transactionId")
     suspend fun softDeleteTransaction(transactionId: Long)
 
-    @Query("UPDATE transactions SET is_deleted = 1, transaction_hash = 'DELETED_' || id || '_' || transaction_hash WHERE transaction_hash = :transactionHash")
+    @Query("UPDATE transactions SET is_deleted = 1 WHERE transaction_hash = :transactionHash")
     suspend fun softDeleteByHash(transactionHash: String)
 
     // Method to check if transaction exists by hash (including deleted)

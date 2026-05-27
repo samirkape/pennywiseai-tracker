@@ -589,7 +589,7 @@ private fun TransactionItem(
                 when (transaction.transactionType) {
                     TransactionType.CREDIT -> Icon(
                         Icons.Default.CreditCard,
-                        contentDescription = "Credit",
+                        contentDescription = "Credit card",
                         modifier = Modifier.size(Dimensions.Icon.small),
                         tint = amountColor
                     )

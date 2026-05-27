@@ -216,7 +216,7 @@ object ParserTestUtils {
             }
 
             dynamicTest(displayName) {
-                val parser = BankParserFactory.getParser(testCase.sender)
+                val parser = BankParserFactory.getParser(testCase.sender, testCase.message)
 
                 if (testCase.shouldParse) {
                     assertNotNull(parser, "Factory returned null for sender '${testCase.sender}'")

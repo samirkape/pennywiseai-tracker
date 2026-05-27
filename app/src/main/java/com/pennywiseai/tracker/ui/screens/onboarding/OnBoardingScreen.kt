@@ -8,7 +8,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -36,7 +35,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MailOutline
-import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -93,22 +91,16 @@ fun OnBoardingScreen(
                         OnBoardingStep.WELCOME -> viewModel.goToNextStep()
                         OnBoardingStep.PROFILE -> viewModel.goToNextStep()
                         OnBoardingStep.PERMISSIONS -> viewModel.goToNextStep()
-                        OnBoardingStep.SMS_SCAN -> viewModel.goToNextStep()
-                        OnBoardingStep.ACCOUNT_SETUP -> {
-                            viewModel.completeOnboarding(onOnboardingComplete)
-                        }
+                        OnBoardingStep.SMS_SCAN -> viewModel.completeOnboarding(onOnboardingComplete)
                     }
                 },
                 onSkip = {
                     when (uiState.currentStep) {
                         OnBoardingStep.PERMISSIONS -> {
                             viewModel.skipSmsPermission()
-                            viewModel.goToNextStep()
-                        }
-                        OnBoardingStep.SMS_SCAN -> viewModel.goToNextStep()
-                        OnBoardingStep.ACCOUNT_SETUP -> {
                             viewModel.completeOnboarding(onOnboardingComplete)
                         }
+                        OnBoardingStep.SMS_SCAN -> viewModel.completeOnboarding(onOnboardingComplete)
                         else -> viewModel.goToNextStep()
                     }
                 },
@@ -143,10 +135,6 @@ fun OnBoardingScreen(
                     onPermissionResult = { viewModel.onSmsPermissionResult(it) }
                 )
                 OnBoardingStep.SMS_SCAN -> SmsScanStep(uiState = uiState)
-                OnBoardingStep.ACCOUNT_SETUP -> AccountSetupStep(
-                    uiState = uiState,
-                    onSelectAccount = { viewModel.selectAccount(it) }
-                )
             }
         }
     }
@@ -163,7 +151,7 @@ private fun WelcomeStep() {
     ) {
         Image(
             painter = painterResource(id = R.mipmap.ic_launcher_foreground),
-            contentDescription = "SpendTracker PRO",
+            contentDescription = "Spendly",
             modifier = Modifier
                 .size(100.dp)
                 .clip(CircleShape),
@@ -173,7 +161,7 @@ private fun WelcomeStep() {
         Spacer(modifier = Modifier.height(Spacing.xl))
 
         Text(
-            text = "Welcome to SpendTracker PRO",
+            text = "Welcome to Spendly",
             style = MaterialTheme.typography.headlineLarge,
             textAlign = TextAlign.Center,
             fontWeight = FontWeight.Bold
@@ -205,7 +193,7 @@ private fun WelcomeStep() {
                 )
                 Spacer(modifier = Modifier.height(Spacing.sm))
                 Text(
-                    text = "1. Your profile\n2. SMS permissions for auto-detection\n3. Initial transaction scan\n4. Your main bank account",
+                    text = "1. Your profile\n2. SMS permissions for auto-detection\n3. Initial transaction scan",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
@@ -430,7 +418,7 @@ private fun PermissionsStep(
         Spacer(modifier = Modifier.height(Spacing.md))
 
         Text(
-            text = "SpendTracker PRO can automatically detect and categorize your bank transactions from SMS messages.",
+            text = "Spendly can automatically detect and categorize your bank transactions from SMS messages.",
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -637,126 +625,6 @@ private fun SmsScanStep(uiState: OnBoardingUiState) {
 }
 
 @Composable
-private fun AccountSetupStep(
-    uiState: OnBoardingUiState,
-    onSelectAccount: (String) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .overScrollVertical()
-            .verticalScroll(rememberScrollState())
-            .padding(Spacing.lg),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(modifier = Modifier.height(Spacing.xl))
-
-        if (uiState.accounts.isEmpty()) {
-            Icon(
-                imageVector = Icons.Filled.AccountBalance,
-                contentDescription = null,
-                modifier = Modifier.size(64.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-
-            Spacer(modifier = Modifier.height(Spacing.lg))
-
-            Text(
-                text = "You're all set!",
-                style = MaterialTheme.typography.headlineMedium,
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.height(Spacing.md))
-
-            Text(
-                text = "No accounts were detected yet. You can set up your main account later in Settings.",
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        } else {
-            Text(
-                text = "Select Your Main Account",
-                style = MaterialTheme.typography.headlineMedium,
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.height(Spacing.md))
-
-            Text(
-                text = "Choose the account you use most often. This will be shown on your home screen.",
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(Spacing.lg))
-
-            uiState.accounts.forEach { account ->
-                val accountKey = "${account.bankName}_${account.accountLast4}"
-                val isSelected = uiState.selectedAccountKey == accountKey
-
-                Card(
-                    onClick = { onSelectAccount(accountKey) },
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isSelected)
-                            MaterialTheme.colorScheme.primaryContainer
-                        else
-                            MaterialTheme.colorScheme.surfaceContainerHigh
-                    ),
-                    border = if (isSelected) BorderStroke(
-                        2.dp,
-                        MaterialTheme.colorScheme.primary
-                    ) else null,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = Spacing.xs)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(Spacing.md),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = account.bankName,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "****${account.accountLast4}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "${account.currency} ${account.balance}",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        if (isSelected) {
-                            Spacer(modifier = Modifier.width(Spacing.sm))
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "Selected",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun StepIndicator(
     currentStep: OnBoardingStep,
     modifier: Modifier = Modifier
@@ -873,26 +741,6 @@ private fun OnBoardingBottomBar(
                         }
                     } else if (uiState.scanCompleted) {
                         Button(onClick = onNext) {
-                            Text("Continue")
-                        }
-                    }
-                }
-
-                OnBoardingStep.ACCOUNT_SETUP -> {
-                    if (uiState.accounts.isEmpty()) {
-                        Button(onClick = onNext) {
-                            Text("Finish")
-                        }
-                    } else {
-                        if (uiState.selectedAccountKey == null) {
-                            TextButton(onClick = onSkip) {
-                                Text("Skip")
-                            }
-                        }
-                        Button(
-                            onClick = onNext,
-                            enabled = uiState.selectedAccountKey != null || uiState.accounts.isEmpty()
-                        ) {
                             if (uiState.isCompleting) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(Dimensions.Icon.medium),

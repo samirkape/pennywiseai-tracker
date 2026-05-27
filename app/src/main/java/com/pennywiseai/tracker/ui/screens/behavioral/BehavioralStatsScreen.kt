@@ -10,11 +10,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.TrendingDown
-import androidx.compose.material.icons.automirrored.filled.TrendingFlat
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -27,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pennywiseai.tracker.presentation.common.TimePeriod
@@ -223,31 +222,7 @@ fun BehavioralStatsScreen(
                         }
                     }
 
-                    // ── Section 2: Streaks ───────────────────────────────────────
-                    uiState.streakData?.let { streak ->
-                        item {
-                            SectionHeaderV2(title = "Spending Streaks")
-                        }
-                        item {
-                            StreakCard(streak = streak, isDark = isDark)
-                        }
-                    }
-
-                    // ── Section 3: Category Behavior ─────────────────────────────
-                    if (uiState.categoryTrends.isNotEmpty()) {
-                        item {
-                            SectionHeaderV2(title = "Category Behavior")
-                        }
-                        items(uiState.categoryTrends) { trend ->
-                            CategoryTrendItem(
-                                trend = trend,
-                                currency = uiState.currency,
-                                isDark = isDark
-                            )
-                        }
-                    }
-
-                    // ── Section 4: Merchant Loyalty ──────────────────────────────
+                    // ── Section 2: Merchant Loyalty ──────────────────────────────
                     if (uiState.topMerchants.isNotEmpty()) {
                         item {
                             SectionHeaderV2(title = "Merchant Loyalty")
@@ -569,144 +544,6 @@ private fun DayOfWeekRow(
             maxLines = 1
         )
     }
-}
-
-// ─── Streak Card ────────────────────────────────────────────────────────────────
-
-@Composable
-private fun StreakCard(streak: StreakData, isDark: Boolean) {
-    val streakColor = when {
-        streak.currentStreak >= 7 -> if (isDark) success_dark else success_light
-        streak.currentStreak >= 3 -> if (isDark) warning_dark else warning_light
-        else -> if (isDark) expense_dark else expense_light
-    }
-    val streakEmoji = when {
-        streak.currentStreak >= 7 -> "🔥"
-        streak.currentStreak >= 3 -> "⭐"
-        else -> "💪"
-    }
-    val motivational = when {
-        streak.currentStreak >= 7 -> "You're on fire! Keep it up."
-        streak.currentStreak >= 3 -> "Great discipline! Keep going."
-        streak.currentStreak >= 1 -> "Good start — build the habit!"
-        else -> "Start a streak today!"
-    }
-
-    PennyWiseCardV2(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Current streak
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "$streakEmoji ${streak.currentStreak}",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = streakColor
-                )
-                Text(
-                    text = "Current streak",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // Divider
-            VerticalDivider(
-                modifier = Modifier.height(48.dp),
-                color = MaterialTheme.colorScheme.outlineVariant
-            )
-
-            // Longest streak
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "${streak.longestStreak}",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "Best streak",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // Divider
-            VerticalDivider(
-                modifier = Modifier.height(48.dp),
-                color = MaterialTheme.colorScheme.outlineVariant
-            )
-
-            // Good days ratio
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "${streak.goodDaysCount}/${streak.totalDays}",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "Good days",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(Spacing.sm))
-
-        Text(
-            text = motivational,
-            style = MaterialTheme.typography.bodyMedium,
-            color = streakColor,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center
-        )
-    }
-}
-
-// ─── Category Trend Item ────────────────────────────────────────────────────────
-
-@Composable
-private fun CategoryTrendItem(
-    trend: CategoryTrend,
-    currency: String,
-    isDark: Boolean
-) {
-    val trendIcon = when (trend.direction) {
-        TrendDirection.GROWING   -> Icons.AutoMirrored.Filled.TrendingUp
-        TrendDirection.SHRINKING -> Icons.AutoMirrored.Filled.TrendingDown
-        TrendDirection.STABLE    -> Icons.AutoMirrored.Filled.TrendingFlat
-    }
-    val trendColor = when (trend.direction) {
-        TrendDirection.GROWING   -> if (isDark) expense_dark else expense_light
-        TrendDirection.SHRINKING -> if (isDark) success_dark else success_light
-        TrendDirection.STABLE    -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val trendLabel = when {
-        trend.trendPercent > 0f -> "+${String.format("%.0f", trend.trendPercent)}%"
-        trend.trendPercent < 0f -> "${String.format("%.0f", trend.trendPercent)}%"
-        else -> "—"
-    }
-
-    ListItemCardV2(
-        title = trend.name,
-        subtitle = "2nd half: ${CurrencyFormatter.formatCurrency(trend.secondHalfAmount, currency)}",
-        amount = trendLabel,
-        amountColor = trendColor,
-        leadingContent = {
-            Icon(
-                imageVector = trendIcon,
-                contentDescription = null,
-                tint = trendColor,
-                modifier = Modifier.size(Dimensions.Icon.medium)
-            )
-        }
-    )
 }
 
 // ─── Merchant Loyalty Item ──────────────────────────────────────────────────────

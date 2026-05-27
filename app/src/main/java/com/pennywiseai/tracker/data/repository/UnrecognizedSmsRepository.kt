@@ -71,6 +71,8 @@ class UnrecognizedSmsRepository @Inject constructor(
         dao.softDeleteById(id)
     }
     
+    suspend fun getById(id: Long): UnrecognizedSmsEntity? = dao.getById(id)
+
     /**
      * Check if a message already exists (including deleted ones)
      */

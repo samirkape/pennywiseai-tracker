@@ -12,8 +12,6 @@ import com.pennywiseai.tracker.ui.effects.overScrollVertical
 import com.pennywiseai.tracker.ui.effects.rememberOverscrollFlingBehavior
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
@@ -76,6 +74,7 @@ fun TransactionsScreen(
     initialEndDateEpochDay: Long? = null,
     initialCategories: String? = null,  // Comma-separated category names
     initialTransactionType: String? = null,
+    initialPaymentMode: String? = null,
     // Epoch days for a CUSTOM period from analytics (separate from budget date range)
     initialPeriodStartEpoch: Long? = null,
     initialPeriodEndEpoch: Long? = null,
@@ -101,6 +100,7 @@ fun TransactionsScreen(
     val sortOption by viewModel.sortOption.collectAsState()
     val availableCategories by viewModel.availableCategories.collectAsState()
     val smsScanMonths by viewModel.smsScanMonths.collectAsState()
+    val showSmsDataLimitBanner by viewModel.showSmsDataLimitBanner.collectAsState()
     val customDateRange by viewModel.customDateRange.collectAsState()
     val isUnifiedMode by viewModel.isUnifiedMode.collectAsState()
     val convertedAmounts by viewModel.convertedAmounts.collectAsState()
@@ -123,10 +123,9 @@ fun TransactionsScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val view = LocalView.current
     
-    // Calculate active filter count for advanced filters
+    // Active filter count only tracks filters inside the "More Filters" collapsible section
+    // (profile and include-excluded). Type filter is now always visible so is not counted here.
     val activeFilterCount = listOf(
-        transactionTypeFilter != TransactionTypeFilter.ALL,
-        categoryFilter != null,
         selectedProfileId != null,
         includeExcluded
     ).count { it }
@@ -174,32 +173,42 @@ fun TransactionsScreen(
         DateRangeUtils.formatDateRange(customDateRange)
     }
 
-    // Month being viewed for prev/next navigation (null for non-monthly periods like FY, All)
-    val viewingYearMonth: java.time.YearMonth? = remember(selectedPeriod, customDateRange) {
-        when (selectedPeriod) {
-            TimePeriod.THIS_MONTH, TimePeriod.CALENDAR_MONTH -> java.time.YearMonth.now()
-            TimePeriod.LAST_MONTH -> java.time.YearMonth.now().minusMonths(1)
-            TimePeriod.CUSTOM -> customDateRange?.first?.let { java.time.YearMonth.from(it) }
-            else -> null
-        }
-    }
+    val hasExplicitNavRange = initialPeriodStartEpoch != null && initialPeriodEndEpoch != null
 
-    // Apply initial filters only once when screen is first created
+    // Apply initial filters only when navigation does not carry an explicit date range
     LaunchedEffect(Unit) {
-        viewModel.applyInitialFilters(
-            initialCategory,
-            initialMerchant,
-            initialPeriod,
-            initialCurrency
-        )
+        if (!hasExplicitNavRange) {
+            viewModel.applyInitialFilters(
+                initialCategory,
+                initialMerchant,
+                initialPeriod,
+                initialCurrency
+            )
+        }
     }
 
     // Track if we've already processed these specific nav params
     var processedNavParams by rememberSaveable { mutableStateOf(false) }
 
     // Apply navigation filters only ONCE when actually navigating (not when returning from detail)
-    LaunchedEffect(initialCategory, initialMerchant, initialPeriod, initialCurrency, initialTransactionType, initialPeriodStartEpoch, initialPeriodEndEpoch) {
-        if (!processedNavParams && (initialCategory != null || initialMerchant != null || initialPeriod != null || initialCurrency != null || initialTransactionType != null)) {
+    LaunchedEffect(
+        initialCategory,
+        initialMerchant,
+        initialPeriod,
+        initialCurrency,
+        initialTransactionType,
+        initialPaymentMode,
+        initialPeriodStartEpoch,
+        initialPeriodEndEpoch,
+    ) {
+        val hasNavParams = initialCategory != null ||
+            initialMerchant != null ||
+            initialPeriod != null ||
+            initialCurrency != null ||
+            initialTransactionType != null ||
+            initialPaymentMode != null ||
+            hasExplicitNavRange
+        if (!processedNavParams && hasNavParams) {
             viewModel.applyNavigationFilters(
                 initialCategory,
                 initialMerchant,
@@ -207,7 +216,8 @@ fun TransactionsScreen(
                 initialCurrency,
                 initialTransactionType,
                 initialPeriodStartEpoch,
-                initialPeriodEndEpoch
+                initialPeriodEndEpoch,
+                initialPaymentMode,
             )
             processedNavParams = true
         }
@@ -271,6 +281,7 @@ fun TransactionsScreen(
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehaviorLarge.nestedScrollConnection),
+        containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             CustomTitleTopAppBar(
@@ -321,14 +332,15 @@ fun TransactionsScreen(
                 }
             }
         }
-    ) { paddingValues ->
+        ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .hazeSource(hazeState)
+                .background(MaterialTheme.colorScheme.background)
                 .padding(top = paddingValues.calculateTopPadding())
         ) {
-        // Search Bar with Sort Button
+        // Search Bar + Sort Button
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -438,10 +450,10 @@ fun TransactionsScreen(
                     },
                     label = {
                         Text(
-                            if (period == TimePeriod.CUSTOM && customRangeLabel != null) {
-                                customRangeLabel
-                            } else {
-                                period.label
+                            when {
+                                period == TimePeriod.CUSTOM && customRangeLabel != null -> customRangeLabel
+                                period == TimePeriod.THIS_MONTH && !useFinancialMonth -> "This Month"
+                                else -> period.label
                             }
                         )
                     },
@@ -452,49 +464,65 @@ fun TransactionsScreen(
                 )
             }
         }
-        
-        // Month navigation arrows — shown for monthly periods (THIS_MONTH, CALENDAR_MONTH, LAST_MONTH, CUSTOM single-month)
-        viewingYearMonth?.let { ym ->
-            val monthLabel = remember(ym) {
-                ym.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy"))
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Dimensions.Padding.content, vertical = Spacing.xs),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = { viewModel.navigateToMonth(ym.minusMonths(1)) }) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                        contentDescription = "Previous month",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+
+        // Transaction Type Filter Chips - Always visible second row
+        LazyRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = Spacing.xs),
+            contentPadding = PaddingValues(horizontal = Dimensions.Padding.content),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            items(TransactionTypeFilter.values().toList()) { typeFilter ->
+                FilterChip(
+                    selected = transactionTypeFilter == typeFilter,
+                    onClick = {
+                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                        viewModel.setTransactionTypeFilter(typeFilter)
+                    },
+                    label = { Text(typeFilter.label) },
+                    leadingIcon = if (transactionTypeFilter == typeFilter) {
+                        {
+                            when (typeFilter) {
+                                TransactionTypeFilter.INCOME -> Icon(
+                                    Icons.AutoMirrored.Filled.TrendingUp,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(Dimensions.Icon.small)
+                                )
+                                TransactionTypeFilter.EXPENSE -> Icon(
+                                    Icons.AutoMirrored.Filled.TrendingDown,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(Dimensions.Icon.small)
+                                )
+                                TransactionTypeFilter.CREDIT -> Icon(
+                                    Icons.Default.CreditCard,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(Dimensions.Icon.small)
+                                )
+                                TransactionTypeFilter.TRANSFER -> Icon(
+                                    Icons.Default.SwapHoriz,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(Dimensions.Icon.small)
+                                )
+                                TransactionTypeFilter.INVESTMENT -> Icon(
+                                    Icons.AutoMirrored.Filled.ShowChart,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(Dimensions.Icon.small)
+                                )
+                                else -> null
+                            }
+                        }
+                    } else null,
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                     )
-                }
-                Text(
-                    text = monthLabel,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface
                 )
-                IconButton(
-                    onClick = { viewModel.navigateToMonth(ym.plusMonths(1)) },
-                    enabled = ym < java.time.YearMonth.now()
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "Next month",
-                        tint = if (ym < java.time.YearMonth.now())
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        else
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                    )
-                }
             }
         }
 
         // Data scope info banner
-        if (viewModel.isShowingLimitedData()) {
+        if (showSmsDataLimitBanner) {
             PennyWiseCardV2(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -545,62 +573,6 @@ fun TransactionsScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column {
-            // Transaction Type Filter Chips
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = Dimensions.Padding.content),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                items(TransactionTypeFilter.values().toList()) { typeFilter ->
-                    FilterChip(
-                        selected = transactionTypeFilter == typeFilter,
-                        onClick = {
-                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                            viewModel.setTransactionTypeFilter(typeFilter)
-                        },
-                        label = { Text(typeFilter.label) },
-                        leadingIcon = if (transactionTypeFilter == typeFilter) {
-                            {
-                                when (typeFilter) {
-                                    TransactionTypeFilter.INCOME -> Icon(
-                                        Icons.AutoMirrored.Filled.TrendingUp,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(Dimensions.Icon.small)
-                                    )
-                                    TransactionTypeFilter.EXPENSE -> Icon(
-                                        Icons.AutoMirrored.Filled.TrendingDown,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(Dimensions.Icon.small)
-                                    )
-                                    TransactionTypeFilter.CREDIT -> Icon(
-                                        Icons.Default.CreditCard,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(Dimensions.Icon.small)
-                                    )
-                                    TransactionTypeFilter.TRANSFER -> Icon(
-                                        Icons.Default.SwapHoriz,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(Dimensions.Icon.small)
-                                    )
-                                    TransactionTypeFilter.INVESTMENT -> Icon(
-                                        Icons.AutoMirrored.Filled.ShowChart,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(Dimensions.Icon.small)
-                                    )
-                                    else -> null
-                                }
-                            }
-                        } else null,
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
-                        )
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(Spacing.xs))
-
             // Profile Filter Chips
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
@@ -887,8 +859,8 @@ private fun TransactionSearchBar(
         onValueChange = onQueryChange,
         placeholder = { 
             Text(
-                text = if (categoryFilter != null) "Search in $categoryFilter..." 
-                else "Search transactions...",
+                text = if (categoryFilter != null) "Search in $categoryFilter…"
+                else "Search merchant, description, tags…",
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             ) 

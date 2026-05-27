@@ -1,6 +1,7 @@
 package com.pennywiseai.parser.core.bank
 
 import com.pennywiseai.parser.core.CompiledPatterns
+import com.pennywiseai.parser.core.HdfcExplicitPayee
 import com.pennywiseai.parser.core.MandateInfo
 import com.pennywiseai.parser.core.TransactionType
 import java.math.BigDecimal
@@ -37,12 +38,12 @@ class HDFCBankParser : BaseIndianBankParser() {
     }
 
     override fun extractMerchant(message: String, sender: String): String? {
-        // Check for HDFC Bank Card debit transactions - "Spent Rs.xxx From HDFC Bank Card xxxx At [MERCHANT] On xxx"
-        if (message.contains("From HDFC Bank Card", ignoreCase = true) &&
+        // HDFC Bank Card spend: "... HDFC Bank Card x#### At [MERCHANT] On ..."
+        // e.g. "Spent Rs.xxx From HDFC Bank Card ..." or "Rs.xxx without OTP/PIN HDFC Bank Card ..."
+        if (message.contains("HDFC Bank Card", ignoreCase = true) &&
             message.contains(" At ", ignoreCase = true) &&
             message.contains(" On ", ignoreCase = true)
         ) {
-            // Extract merchant between "At" and "On" using string operations for reliability
             val atIndex = message.indexOf(" At ", ignoreCase = true)
             val onIndex = message.indexOf(" On ", ignoreCase = true)
             if (atIndex != -1 && onIndex != -1 && onIndex > atIndex) {
@@ -124,7 +125,28 @@ class HDFCBankParser : BaseIndianBankParser() {
 
         // Try HDFC specific patterns
 
-        // Pattern 0: NEFT/RTGS credit - "for NEFT Cr-IFSCCODE-COMPANY NAME-BENEFICIARY-REF"
+        // Pattern 0: IMPS credit/refund — "For IMPS -**MERCHANT NAME-**" (Received! format)
+        if (message.contains("IMPS", ignoreCase = true)) {
+            CompiledPatterns.HDFC.IMPS_CREDIT_MERCHANT.find(message)?.let { match ->
+                val merchant = match.groupValues[1].trim()
+                if (merchant.isNotEmpty() && !merchant.all { it.isDigit() }) {
+                    return cleanMerchantName(merchant)
+                }
+            }
+        }
+
+        // Pattern 0b: Sent UPI debit — "Sent Rs.X ... To PAYEE On date" (multiline or single-line)
+        if (message.contains("Sent", ignoreCase = true) &&
+            message.contains("From HDFC", ignoreCase = true)
+        ) {
+            HdfcExplicitPayee.extract(message)?.let { payee ->
+                if (payee.isNotEmpty() && payee.any { ch -> ch.isLetter() }) {
+                    return cleanMerchantName(payee)
+                }
+            }
+        }
+
+        // Pattern 1: NEFT/RTGS credit - "for NEFT Cr-IFSCCODE-COMPANY NAME-BENEFICIARY-REF"
         if (message.contains("NEFT", ignoreCase = true) || message.contains("RTGS", ignoreCase = true)) {
             val neftPattern = Regex(
                 """(?:NEFT|RTGS)\s+Cr-[A-Z]{4}0[A-Z0-9]{6}-([^-]+)""",
@@ -481,15 +503,14 @@ class HDFCBankParser : BaseIndianBankParser() {
         //   2. can be linked to the matching debit leg, and
         //   3. correctly reduce the credit card outstanding balance.
 
+        // Narrow exception: completed card charge that mentions "without OTP/PIN"
+        // (e.g. autopay insurance). Still requires amount + At merchant + On date + fraud footer.
+        if (isHdfcWithoutOtpCardChargeAlert(message)) {
+            return true
+        }
+
         // Skip OTP and promotional messages
-        if (lowerMessage.contains("otp") ||
-            lowerMessage.contains("one time password") ||
-            lowerMessage.contains("verification code") ||
-            lowerMessage.contains("offer") ||
-            lowerMessage.contains("discount") ||
-            lowerMessage.contains("cashback offer") ||
-            lowerMessage.contains("win ")
-        ) {
+        if (isOtpOrPromotionalMessage(message)) {
             return false
         }
 
@@ -503,6 +524,39 @@ class HDFCBankParser : BaseIndianBankParser() {
         )
 
         return hdfcTransactionKeywords.any { lowerMessage.contains(it) }
+    }
+
+    /**
+     * HDFC card charge SMS where the word "OTP" appears only in "without OTP/PIN"
+     * (successful charge / mandate), not as a login OTP delivery.
+     *
+     * Example: "Rs.3151 without OTP/PIN HDFC Bank Card x1655 At TALIC On 2026-05-23:..."
+     */
+    private fun isHdfcWithoutOtpCardChargeAlert(message: String): Boolean {
+        val lower = message.lowercase()
+        if (!lower.contains("without otp")) return false
+        if (!lower.contains("hdfc bank card")) return false
+        if (!lower.contains(" at ") || !lower.contains(" on ")) return false
+        if (!CompiledPatterns.Amount.RS_PATTERN.containsMatchIn(message)) return false
+        // Fraud-report footer present on real HDFC card charge alerts
+        return lower.contains("not u?") ||
+            lower.contains("block&reissue") ||
+            lower.contains("block cc") ||
+            lower.contains("block pcc")
+    }
+
+    /** OTP delivery / promo SMS — not a posted transaction. */
+    private fun isOtpOrPromotionalMessage(message: String): Boolean {
+        val lower = message.lowercase()
+        // "without OTP/PIN" on a charge alert is not an OTP login message
+        if (lower.contains("without otp")) return false
+        return lower.contains("otp") ||
+            lower.contains("one time password") ||
+            lower.contains("verification code") ||
+            lower.contains("offer") ||
+            lower.contains("discount") ||
+            lower.contains("cashback offer") ||
+            lower.contains("win ")
     }
 
     // ==========================================

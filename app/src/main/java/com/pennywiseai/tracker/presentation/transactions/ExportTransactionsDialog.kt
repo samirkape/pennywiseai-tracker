@@ -287,7 +287,7 @@ fun ExportTransactionsDialog(
                                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                         type = "text/csv"
                                         putExtra(Intent.EXTRA_STREAM, (exportState as ExportState.Success).uri)
-                                        putExtra(Intent.EXTRA_SUBJECT, "SpendTracker PRO Transactions Export")
+                                        putExtra(Intent.EXTRA_SUBJECT, "Spendly Transactions Export")
                                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                     }
                                     context.startActivity(Intent.createChooser(shareIntent, "Share CSV"))

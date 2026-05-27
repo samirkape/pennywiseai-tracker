@@ -78,8 +78,9 @@ class BackupImporter @Inject constructor(
      * Check if backup version is compatible
      */
     private fun isCompatibleVersion(backup: PennyWiseBackup): Boolean {
-        // For now, accept all v1.x backups
-        return backup.format.startsWith("PennyWise Backup v1")
+        // Accept v1.x backups from both old PennyWise and new Spendly branding
+        return backup.format.startsWith("PennyWise Backup v1") ||
+               backup.format.startsWith("Spendly Backup v1")
     }
     
     /**
@@ -91,32 +92,16 @@ class BackupImporter @Inject constructor(
         
         return database.withTransaction {
             try {
-                // Clear existing data
-                database.transactionDao().deleteAllTransactions()
-                database.categoryDao().deleteAllCategories()
-                database.cardDao().deleteAllCards()
-                database.accountBalanceDao().deleteAllBalances()
-                database.subscriptionDao().deleteAllSubscriptions()
-                database.merchantMappingDao().deleteAllMappings()
-                database.unrecognizedSmsDao().deleteAll()
-                database.chatDao().deleteAllMessages()
-                database.ruleDao().deleteAllRules()
-                database.ruleApplicationDao().deleteAllApplications()
-                database.budgetDao().deleteAllBudgets()
-                database.exchangeRateDao().deleteAllRates()
-                database.bankNotificationDao().deleteAllNotifications()
-                // Note: budget categories and transaction splits are deleted via cascade (budget categories via budget deletion, transaction splits via transaction deletion)
+                clearAllDataForRestore()
                 
                 // Import all data
                 backup.database.categories.forEach { category ->
-                    database.categoryDao().insertCategory(category)
+                    database.categoryDao().insertCategoryForRestore(category)
                     importedCategories++
                 }
                 
-                backup.database.transactions.forEach { transaction ->
-                    database.transactionDao().insertTransaction(transaction)
-                    importedTransactions++
-                }
+                importTransactionsForRestore(backup.database.transactions)
+                importedTransactions = backup.database.transactions.size
                 
                 backup.database.cards.forEach { card ->
                     database.cardDao().insertCard(card)
@@ -183,6 +168,64 @@ class BackupImporter @Inject constructor(
             } catch (e: Exception) {
                 throw e
             }
+        }
+    }
+
+    /**
+     * Deletes backup-covered tables in FK-safe order before a full restore.
+     */
+    private suspend fun clearAllDataForRestore() {
+        // Child tables that reference transactions or rules must go first.
+        database.ruleApplicationDao().deleteAllApplications()
+        database.transactionReceiptDao().deleteAllReceipts()
+        database.transactionSplitDao().deleteAllSplits()
+        database.transactionDao().clearAllLinkedTransactionIds()
+        database.transactionDao().deleteAllTransactions()
+
+        database.ruleDao().deleteAllRules()
+        database.budgetSnapshotDao().deleteAllBudgetCategoryMonthSnapshots()
+        database.budgetSnapshotDao().deleteAllBudgetMonthSnapshots()
+        database.budgetDao().deleteAllBudgets()
+
+        database.categoryDao().deleteAllCategories()
+        database.cardDao().deleteAllCards()
+        database.accountBalanceDao().deleteAllBalances()
+        database.subscriptionDao().deleteAllSubscriptions()
+        database.merchantMappingDao().deleteAllMappings()
+        database.merchantAliasDao().deleteAllAliases()
+        database.unrecognizedSmsDao().deleteAll()
+        database.chatDao().deleteAllMessages()
+        database.exchangeRateDao().deleteAllRates()
+        database.bankNotificationDao().deleteAllNotifications()
+        database.salaryMonthOverrideDao().deleteAllOverrides()
+        database.loanDao().deleteAllLoans()
+        database.transactionGroupDao().deleteAllGroups()
+    }
+
+    /**
+     * Inserts transactions preserving backup IDs, then restores linked-transaction pointers.
+     */
+    private suspend fun importTransactionsForRestore(transactions: List<TransactionEntity>) {
+        val transactionDao = database.transactionDao()
+        val linksToRestore = mutableListOf<Pair<Long, Long>>()
+
+        transactions.forEach { transaction ->
+            val linkedId = transaction.linkedTransactionId
+            if (linkedId != null) {
+                linksToRestore += transaction.id to linkedId
+            }
+            transactionDao.insertTransactionForRestore(
+                transaction.copy(linkedTransactionId = null),
+            )
+        }
+
+        val transferKindById = transactions.associate { it.id to it.transferKind }
+        linksToRestore.forEach { (transactionId, linkedId) ->
+            transactionDao.setLinkedTransaction(
+                transactionId = transactionId,
+                linkedId = linkedId,
+                transferKind = transferKindById[transactionId],
+            )
         }
     }
     

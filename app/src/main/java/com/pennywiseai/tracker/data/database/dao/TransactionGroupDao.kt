@@ -52,6 +52,9 @@ interface TransactionGroupDao {
     @Query("UPDATE transactions SET group_id = NULL WHERE group_id = :groupId")
     suspend fun unlinkAllTransactions(groupId: Long)
 
+    @Query("DELETE FROM transaction_groups")
+    suspend fun deleteAllGroups()
+
     @Query("""
         SELECT * FROM transactions
         WHERE group_id IS NULL AND is_deleted = 0
@@ -63,7 +66,10 @@ interface TransactionGroupDao {
     @Query("""
         SELECT * FROM transactions
         WHERE group_id IS NULL AND is_deleted = 0
-        AND (merchant_name LIKE '%' || :query || '%' OR category LIKE '%' || :query || '%' OR description LIKE '%' || :query || '%')
+        AND (merchant_name LIKE '%' || :query || '%'
+        OR category LIKE '%' || :query || '%'
+        OR description LIKE '%' || :query || '%'
+        OR tags LIKE '%' || :query || '%')
         ORDER BY date_time DESC
         LIMIT :limit
     """)

@@ -86,7 +86,7 @@ fun ChatScreen(
             CustomTitleTopAppBar(
                 scrollBehaviorSmall = scrollBehaviorSmall,
                 scrollBehaviorLarge = scrollBehaviorLarge,
-                title = "SpendTracker PRO AI",
+                title = "Spendly AI",
                 hazeState = hazeState
             )
         }

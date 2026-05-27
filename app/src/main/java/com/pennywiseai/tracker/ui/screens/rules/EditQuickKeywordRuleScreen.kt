@@ -2,6 +2,7 @@ package com.pennywiseai.tracker.ui.screens.rules
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,12 +17,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import kotlinx.coroutines.delay
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -52,7 +55,11 @@ import com.pennywiseai.tracker.data.database.entity.TransactionType
 import com.pennywiseai.tracker.data.database.entity.TransferKind
 import com.pennywiseai.tracker.domain.model.QuickKeywordApplyScope
 import com.pennywiseai.tracker.domain.model.QuickKeywordExpenseChannel
+import com.pennywiseai.tracker.domain.model.QuickKeywordMatchField
 import com.pennywiseai.tracker.domain.model.QuickKeywordTextMatchMode
+import com.pennywiseai.tracker.ui.components.QuickKeywordCategoryPicker
+import com.pennywiseai.tracker.ui.components.QuickKeywordMatchFieldChips
+import com.pennywiseai.tracker.ui.components.QuickKeywordTagsPicker
 import com.pennywiseai.tracker.ui.components.QuickKeywordTextMatchModeSelector
 import com.pennywiseai.tracker.ui.components.TransactionTypeFilterChips
 import com.pennywiseai.tracker.domain.service.QuickKeywordRuleCompiler
@@ -63,7 +70,7 @@ import com.pennywiseai.tracker.ui.theme.Spacing
 import com.pennywiseai.tracker.ui.viewmodel.QuickKeywordRulesViewModel
 import com.pennywiseai.tracker.ui.viewmodel.SaveQuickRuleOutcome
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EditQuickKeywordRuleScreen(
     ruleId: String?,
@@ -74,6 +81,10 @@ fun EditQuickKeywordRuleScreen(
     val applyState by viewModel.applyState.collectAsStateWithLifecycle()
     val batchPreview by viewModel.batchPreview.collectAsStateWithLifecycle()
     val undoSession by viewModel.undoSession.collectAsStateWithLifecycle()
+    val categoryEntities by viewModel.categoryEntities.collectAsStateWithLifecycle()
+    val usedCategoryNames by viewModel.usedCategoryNames.collectAsStateWithLifecycle()
+    val usedTags by viewModel.usedTags.collectAsStateWithLifecycle()
+    val liveMatchStats by viewModel.liveMatchStats.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -84,8 +95,11 @@ fun EditQuickKeywordRuleScreen(
     var name by remember { mutableStateOf("") }
     var keywordsText by remember { mutableStateOf("") }
     var textMatchMode by remember { mutableStateOf(QuickKeywordTextMatchMode.DEFAULT) }
+    var matchField by remember { mutableStateOf(QuickKeywordMatchField.DEFAULT) }
     var merchantLabel by remember { mutableStateOf("") }
     var categoryLabel by remember { mutableStateOf("") }
+    var pendingTags by remember { mutableStateOf<List<String>>(emptyList()) }
+    var overwriteTags by remember { mutableStateOf(false) }
     var matchType by remember { mutableStateOf<TransactionType?>(null) }
     var matchExpenseChannel by remember { mutableStateOf<QuickKeywordExpenseChannel?>(null) }
     var matchTransferKind by remember { mutableStateOf<String?>(null) }
@@ -149,8 +163,11 @@ fun EditQuickKeywordRuleScreen(
             name = existingInput.name
             keywordsText = existingInput.keywords.joinToString("\n")
             textMatchMode = existingInput.textMatchMode
+            matchField = existingInput.matchField
             merchantLabel = existingInput.merchantLabel
             categoryLabel = existingInput.categoryLabel
+            pendingTags = existingInput.tags
+            overwriteTags = existingInput.overwriteTags
             matchType = existingInput.matchType
             matchExpenseChannel = existingInput.matchExpenseChannel
             matchTransferKind = existingInput.matchTransferKind
@@ -170,8 +187,11 @@ fun EditQuickKeywordRuleScreen(
         name = name,
         keywords = QuickKeywordRuleCompiler.parseKeywords(keywordsText),
         textMatchMode = textMatchMode,
+        matchField = matchField,
         merchantLabel = merchantLabel,
         categoryLabel = categoryLabel,
+        tags = pendingTags,
+        overwriteTags = overwriteTags,
         matchType = matchType,
         matchExpenseChannel = matchExpenseChannel,
         matchTransferKind = matchTransferKind,
@@ -213,6 +233,27 @@ fun EditQuickKeywordRuleScreen(
             isSaving = false
             handleSaveOutcome(outcome)
         }
+    }
+
+    LaunchedEffect(
+        keywordsText,
+        textMatchMode,
+        matchField,
+        matchType,
+        matchExpenseChannel,
+        matchTransferKind,
+        applyUncategorizedOnly,
+        overwriteMerchant,
+        overwriteCategory,
+        overwriteTransactionType,
+        forceOverwriteExisting,
+        merchantLabel,
+        categoryLabel,
+        pendingTags,
+        overwriteTags,
+    ) {
+        delay(400)
+        viewModel.refreshLiveMatchStats(buildInput())
     }
 
     fun save(forceRunNow: Boolean) {
@@ -399,12 +440,6 @@ fun EditQuickKeywordRuleScreen(
                 }
             }
 
-            Text(
-                text = stringResource(R.string.quick_keyword_form_hint),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
             OutlinedTextField(
                 value = name,
                 onValueChange = {
@@ -418,112 +453,169 @@ fun EditQuickKeywordRuleScreen(
                 enabled = !isRunningApply,
             )
 
-            OutlinedTextField(
-                value = keywordsText,
-                onValueChange = { keywordsText = it },
-                label = { Text(stringResource(R.string.quick_keyword_keywords_label)) },
-                placeholder = { Text(stringResource(R.string.quick_keyword_keywords_hint)) },
-                supportingText = {
-                    Text(stringResource(R.string.quick_keyword_keywords_supporting))
-                },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 4,
-                enabled = !isRunningApply,
-            )
-
-            QuickKeywordTextMatchModeSelector(
-                selected = textMatchMode,
-                onSelected = { textMatchMode = it },
-                enabled = !isRunningApply,
-            )
-
-            OutlinedTextField(
-                value = merchantLabel,
-                onValueChange = { new ->
-                    merchantLabel = new
-                    if (syncNameWithLabel) {
-                        categoryLabel = new
-                        if (!nameManuallyEdited) {
-                            name = new
-                        }
-                    }
-                },
-                label = { Text(stringResource(R.string.quick_keyword_merchant_label)) },
-                placeholder = { Text(stringResource(R.string.quick_keyword_merchant_hint)) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                enabled = !isRunningApply,
-            )
-
-            OutlinedTextField(
-                value = categoryLabel,
-                onValueChange = { categoryLabel = it },
-                label = { Text(stringResource(R.string.quick_keyword_category_label)) },
-                placeholder = { Text(stringResource(R.string.quick_keyword_category_hint)) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                enabled = !isRunningApply,
-            )
-
-            val previewInput = buildInput()
-            if (previewInput.keywords.isNotEmpty() && previewInput.merchantLabel.isNotBlank()) {
-                val typeLine = if (previewInput.matchType == null) {
-                    stringResource(R.string.quick_keyword_type_any)
-                } else {
-                    QuickKeywordRuleMatcher.matchTypeDescription(previewInput)
-                }
-                PennyWiseCard(modifier = Modifier.fillMaxWidth()) {
-                    Column {
+            PennyWiseCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                    Text(
+                        text = stringResource(R.string.quick_keyword_section_when_matches),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    OutlinedTextField(
+                        value = keywordsText,
+                        onValueChange = { keywordsText = it },
+                        label = { Text(stringResource(R.string.quick_keyword_keywords_label)) },
+                        placeholder = { Text(stringResource(R.string.quick_keyword_keywords_hint)) },
+                        supportingText = {
+                            Text(stringResource(R.string.quick_keyword_keywords_supporting))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        enabled = !isRunningApply,
+                    )
+                    QuickKeywordTextMatchModeSelector(
+                        selected = textMatchMode,
+                        onSelected = { textMatchMode = it },
+                        enabled = !isRunningApply,
+                    )
+                    QuickKeywordMatchFieldChips(
+                        selected = matchField,
+                        onSelected = { matchField = it },
+                        enabled = !isRunningApply,
+                    )
+                    TransactionTypeFilterChips(
+                        matchType = matchType,
+                        matchExpenseChannel = matchExpenseChannel,
+                        matchTransferKind = matchTransferKind,
+                        onMatchTypeChange = { matchType = it },
+                        onExpenseChannelChange = { matchExpenseChannel = it },
+                        onTransferKindChange = { matchTransferKind = it },
+                        enabled = !isRunningApply,
+                        showAnyType = true,
+                        title = stringResource(R.string.quick_keyword_type_filter_title),
+                    )
+                    if (matchExpenseChannel == QuickKeywordExpenseChannel.ACCOUNT) {
                         Text(
-                            text = stringResource(R.string.quick_keyword_effect_preview_title),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Medium,
+                            text = stringResource(R.string.quick_keyword_type_account_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
                         )
+                    }
+                    liveMatchStats?.let { stats ->
                         Text(
                             text = stringResource(
-                                R.string.quick_keyword_effect_preview_body,
-                                previewInput.merchantLabel,
-                                previewInput.categoryLabel.ifBlank { previewInput.merchantLabel },
-                                typeLine,
-                            ) + "\n" + QuickKeywordRuleMatcher.humanEffectSummary(previewInput),
+                                R.string.quick_keyword_live_match_stats,
+                                stats.keywordMatched,
+                                stats.poolSize,
+                                stats.wouldUpdate,
+                                stats.typeRejected,
+                                stats.noKeywordHit,
+                                stats.alreadyLabeled,
+                            ),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (stats.keywordMatched == 0) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
                         )
+                        if (stats.keywordMatched == 0 && stats.rejectionSamples.isNotEmpty()) {
+                            Text(
+                                text = stringResource(
+                                    R.string.quick_keyword_live_match_debug_hint,
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
 
             PennyWiseCard(modifier = Modifier.fillMaxWidth()) {
-                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                     Text(
-                        text = stringResource(R.string.quick_keyword_overwrite_title),
+                        text = stringResource(R.string.quick_keyword_section_set_on_match),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Medium,
                     )
                     Text(
-                        text = stringResource(R.string.quick_keyword_overwrite_hint),
+                        text = stringResource(R.string.quick_keyword_section_set_on_match_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    QuickKeywordToggleRow(
-                        title = stringResource(R.string.quick_keyword_overwrite_merchant),
-                        checked = overwriteMerchant,
-                        onCheckedChange = { overwriteMerchant = it },
-                        enabled = !isRunningApply,
-                    )
-                    QuickKeywordToggleRow(
-                        title = stringResource(R.string.quick_keyword_overwrite_category),
-                        checked = overwriteCategory,
-                        onCheckedChange = { overwriteCategory = it },
-                        enabled = !isRunningApply,
-                    )
-                    QuickKeywordToggleRow(
-                        title = stringResource(R.string.quick_keyword_overwrite_type),
-                        subtitle = stringResource(R.string.quick_keyword_overwrite_type_hint),
-                        checked = overwriteTransactionType,
-                        onCheckedChange = { overwriteTransactionType = it },
-                        enabled = !isRunningApply && matchType != null,
-                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    ) {
+                        FilterChip(
+                            selected = overwriteMerchant,
+                            onClick = { overwriteMerchant = !overwriteMerchant },
+                            label = { Text(stringResource(R.string.quick_keyword_set_merchant_chip)) },
+                            enabled = !isRunningApply,
+                        )
+                        FilterChip(
+                            selected = overwriteCategory,
+                            onClick = { overwriteCategory = !overwriteCategory },
+                            label = { Text(stringResource(R.string.quick_keyword_set_category_chip)) },
+                            enabled = !isRunningApply,
+                        )
+                        FilterChip(
+                            selected = overwriteTransactionType,
+                            onClick = {
+                                overwriteTransactionType = !overwriteTransactionType
+                            },
+                            label = { Text(stringResource(R.string.quick_keyword_set_type_chip)) },
+                            enabled = !isRunningApply && matchType != null,
+                        )
+                        FilterChip(
+                            selected = overwriteTags,
+                            onClick = { overwriteTags = !overwriteTags },
+                            label = { Text(stringResource(R.string.quick_keyword_set_tags_chip)) },
+                            enabled = !isRunningApply,
+                        )
+                    }
+                    if (overwriteMerchant) {
+                        OutlinedTextField(
+                            value = merchantLabel,
+                            onValueChange = { new ->
+                                merchantLabel = new
+                                if (syncNameWithLabel && !nameManuallyEdited) {
+                                    name = new
+                                }
+                            },
+                            label = { Text(stringResource(R.string.quick_keyword_merchant_label)) },
+                            placeholder = { Text(stringResource(R.string.quick_keyword_merchant_hint)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            enabled = !isRunningApply,
+                        )
+                    }
+                    if (overwriteCategory) {
+                        QuickKeywordCategoryPicker(
+                            categoryLabel = categoryLabel,
+                            onCategorySelected = { categoryLabel = it },
+                            categoryEntities = categoryEntities,
+                            usedCategoryNames = usedCategoryNames,
+                            enabled = !isRunningApply,
+                        )
+                    }
+                    if (overwriteTags) {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        )
+                        QuickKeywordTagsPicker(
+                            pendingTags = pendingTags,
+                            onAddTag = { tag ->
+                                val trimmed = tag.trim()
+                                if (trimmed.isNotBlank() && trimmed !in pendingTags) {
+                                    pendingTags = pendingTags + trimmed
+                                }
+                            },
+                            onRemoveTag = { tag -> pendingTags = pendingTags - tag },
+                            usedTags = usedTags,
+                            enabled = !isRunningApply,
+                        )
+                    }
                     QuickKeywordToggleRow(
                         title = stringResource(R.string.quick_keyword_overwrite_force),
                         subtitle = stringResource(R.string.quick_keyword_overwrite_force_hint),
@@ -531,11 +623,6 @@ fun EditQuickKeywordRuleScreen(
                         onCheckedChange = { forceOverwriteExisting = it },
                         enabled = !isRunningApply,
                     )
-                }
-            }
-
-            PennyWiseCard(modifier = Modifier.fillMaxWidth()) {
-                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -563,18 +650,6 @@ fun EditQuickKeywordRuleScreen(
                             enabled = !isRunningApply,
                         )
                     }
-
-                    TransactionTypeFilterChips(
-                        matchType = matchType,
-                        matchExpenseChannel = matchExpenseChannel,
-                        matchTransferKind = matchTransferKind,
-                        onMatchTypeChange = { matchType = it },
-                        onExpenseChannelChange = { matchExpenseChannel = it },
-                        onTransferKindChange = { matchTransferKind = it },
-                        enabled = !isRunningApply,
-                        showAnyType = true,
-                        title = stringResource(R.string.quick_keyword_type_filter_title),
-                    )
                 }
             }
 

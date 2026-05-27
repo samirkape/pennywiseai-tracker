@@ -37,8 +37,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pennywiseai.tracker.presentation.common.PaymentMode
+import com.pennywiseai.tracker.presentation.common.PaymentModeGroup
 import com.pennywiseai.tracker.presentation.common.TimePeriod
 import com.pennywiseai.tracker.presentation.common.TransactionTypeFilter
+import com.pennywiseai.tracker.ui.components.PeriodRangeNavigator
 import com.pennywiseai.tracker.ui.components.*
 import com.pennywiseai.tracker.ui.components.cards.ListItemCardV2
 import com.pennywiseai.tracker.ui.components.cards.SectionHeaderV2
@@ -47,22 +50,11 @@ import com.pennywiseai.tracker.ui.icons.CategoryMapping
 import com.pennywiseai.tracker.ui.theme.*
 import com.pennywiseai.tracker.utils.CurrencyFormatter
 import com.pennywiseai.tracker.utils.DateRangeUtils
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.unit.sp
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
-import ir.ehsannarmani.compose_charts.LineChart
-import ir.ehsannarmani.compose_charts.models.AnimationMode
-import ir.ehsannarmani.compose_charts.models.DotProperties
-import ir.ehsannarmani.compose_charts.models.DrawStyle
-import ir.ehsannarmani.compose_charts.models.GridProperties
-import ir.ehsannarmani.compose_charts.models.LabelHelperProperties
-import ir.ehsannarmani.compose_charts.models.LabelProperties
-import ir.ehsannarmani.compose_charts.models.Line
 import java.math.BigDecimal
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
 private enum class CategoryViewType { CHART, LIST }
@@ -72,7 +64,16 @@ private enum class CategoryViewType { CHART, LIST }
 fun AnalyticsScreen(
     viewModel: AnalyticsViewModel = hiltViewModel(),
     onNavigateToChat: () -> Unit = {},
-    onNavigateToTransactions: (category: String?, merchant: String?, period: String?, currency: String?, transactionType: String?, startDateEpochDay: Long?, endDateEpochDay: Long?) -> Unit = { _, _, _, _, _, _, _ -> },
+    onNavigateToTransactions: (
+        category: String?,
+        merchant: String?,
+        period: String?,
+        currency: String?,
+        transactionType: String?,
+        startDateEpochDay: Long?,
+        endDateEpochDay: Long?,
+        paymentMode: String?,
+    ) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onNavigateToTransactionsMultiCategory: (categories: String, period: String?, currency: String?, startDateEpochDay: Long?, endDateEpochDay: Long?) -> Unit = { _, _, _, _, _ -> },
     onNavigateToTransaction: (Long) -> Unit = {},
     onNavigateToHome: () -> Unit = {},
@@ -86,12 +87,13 @@ fun AnalyticsScreen(
     val customDateRange by viewModel.customDateRange.collectAsStateWithLifecycle()
     val isUnifiedMode by viewModel.isUnifiedMode.collectAsStateWithLifecycle()
     val useFinancialMonth by viewModel.useFinancialMonth.collectAsStateWithLifecycle()
+    val periodAnchorMonth by viewModel.periodAnchorMonth.collectAsStateWithLifecycle()
     val chartType by viewModel.selectedChartType.collectAsStateWithLifecycle()
     val categoryFilter by viewModel.categoryFilter.collectAsStateWithLifecycle()
     // Use rememberSaveable to preserve UI state across navigation
     var showAdvancedFilters by rememberSaveable { mutableStateOf(false) }
     var showDateRangePicker by rememberSaveable { mutableStateOf(false) }
-    var categoryViewType by rememberSaveable { mutableStateOf(CategoryViewType.CHART) }
+    var categoryViewType by rememberSaveable { mutableStateOf(CategoryViewType.LIST) }
     var showChartTypeSelector by remember { mutableStateOf(false) }
 
     // Remember scroll position across navigation
@@ -99,8 +101,9 @@ fun AnalyticsScreen(
         LazyListState()
     }
 
-    // Calculate active filter count
-    val activeFilterCount = if (transactionTypeFilter != TransactionTypeFilter.EXPENSE) 1 else 0
+    // Calculate active filter count (transaction type + category filter)
+    val activeFilterCount = (if (transactionTypeFilter != TransactionTypeFilter.EXPENSE) 1 else 0) +
+        (if (categoryFilter != null) 1 else 0)
 
     // Cache expensive operations — include CALENDAR_MONTH only when financial month is enabled
     val timePeriods = remember(useFinancialMonth) {
@@ -125,6 +128,56 @@ fun AnalyticsScreen(
     }
     val customRangeLabel = remember(customDateRange) {
         DateRangeUtils.formatDateRange(customDateRange)
+    }
+
+    val activePeriodRange = remember(uiState.periodStart, uiState.periodEnd) {
+        if (uiState.periodStart != null && uiState.periodEnd != null) {
+            uiState.periodStart!! to uiState.periodEnd!!
+        } else {
+            null
+        }
+    }
+    val periodRangeLabel = remember(activePeriodRange) {
+        activePeriodRange?.let { (start, end) -> DateRangeUtils.formatDateRange(start, end) }
+    }
+
+    val showPeriodNavigator = remember(selectedPeriod, periodAnchorMonth) {
+        periodAnchorMonth != null &&
+            selectedPeriod != TimePeriod.ALL &&
+            selectedPeriod != TimePeriod.CURRENT_FY
+    }
+
+    val drillDownPeriodEpochs: Pair<Long?, Long?> = remember(activePeriodRange) {
+        val range = activePeriodRange
+        if (range == null) null to null else range.first.toEpochDay() to range.second.toEpochDay()
+    }
+
+    fun drillDownToTransactions(
+        category: String? = null,
+        merchant: String? = null,
+        transactionType: String? = transactionTypeFilter.name,
+        paymentMode: String? = null,
+    ) {
+        onNavigateToTransactions(
+            category,
+            merchant,
+            TimePeriod.CUSTOM.name,
+            selectedCurrency,
+            transactionType,
+            drillDownPeriodEpochs.first,
+            drillDownPeriodEpochs.second,
+            paymentMode,
+        )
+    }
+
+    fun drillDownMultiCategory(encodedCategories: String) {
+        onNavigateToTransactionsMultiCategory(
+            encodedCategories,
+            TimePeriod.CUSTOM.name,
+            selectedCurrency,
+            drillDownPeriodEpochs.first,
+            drillDownPeriodEpochs.second,
+        )
     }
 
     // Scroll behaviors for collapsible TopAppBar
@@ -209,6 +262,19 @@ fun AnalyticsScreen(
             }
         }
 
+        periodAnchorMonth?.let { anchorMonth ->
+            if (showPeriodNavigator && periodRangeLabel != null) {
+                item {
+                    PeriodRangeNavigator(
+                        rangeLabel = periodRangeLabel,
+                        onPrevious = { viewModel.navigateToMonth(anchorMonth.minusMonths(1)) },
+                        onNext = { viewModel.navigateToMonth(anchorMonth.plusMonths(1)) },
+                        canGoNext = anchorMonth < YearMonth.now(),
+                    )
+                }
+            }
+        }
+
         // Currency Selector (if multiple currencies available and not in unified mode)
         if (availableCurrencies.size > 1 && !isUnifiedMode) {
             item {
@@ -221,7 +287,7 @@ fun AnalyticsScreen(
             }
         }
 
-        // Collapsible Transaction Type Filter
+        // Collapsible Transaction Type + Category Filter
         item {
             CollapsibleFilterRow(
                 isExpanded = showAdvancedFilters,
@@ -229,124 +295,170 @@ fun AnalyticsScreen(
                 onToggle = { showAdvancedFilters = !showAdvancedFilters },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                ) {
-                    items(TransactionTypeFilter.values().toList()) { typeFilter ->
-                        FilterChip(
-                            selected = transactionTypeFilter == typeFilter,
-                            onClick = { viewModel.setTransactionTypeFilter(typeFilter) },
-                            label = { Text(typeFilter.label) },
-                            leadingIcon = if (transactionTypeFilter == typeFilter) {
-                                {
-                                    when (typeFilter) {
-                                        TransactionTypeFilter.INCOME -> Icon(
-                                            Icons.AutoMirrored.Filled.TrendingUp,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(Dimensions.Icon.small)
-                                        )
-                                        TransactionTypeFilter.EXPENSE -> Icon(
-                                            Icons.AutoMirrored.Filled.TrendingDown,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(Dimensions.Icon.small)
-                                        )
-                                        TransactionTypeFilter.CREDIT -> Icon(
-                                            Icons.Default.CreditCard,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(Dimensions.Icon.small)
-                                        )
-                                        TransactionTypeFilter.TRANSFER -> Icon(
-                                            Icons.Default.SwapHoriz,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(Dimensions.Icon.small)
-                                        )
-                                        TransactionTypeFilter.INVESTMENT -> Icon(
-                                            Icons.AutoMirrored.Filled.ShowChart,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(Dimensions.Icon.small)
-                                        )
-                                        else -> null
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    // Transaction Type chips
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    ) {
+                        items(TransactionTypeFilter.values().toList()) { typeFilter ->
+                            FilterChip(
+                                selected = transactionTypeFilter == typeFilter,
+                                onClick = { viewModel.setTransactionTypeFilter(typeFilter) },
+                                label = { Text(typeFilter.label) },
+                                leadingIcon = if (transactionTypeFilter == typeFilter) {
+                                    {
+                                        when (typeFilter) {
+                                            TransactionTypeFilter.INCOME -> Icon(
+                                                Icons.AutoMirrored.Filled.TrendingUp,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(Dimensions.Icon.small)
+                                            )
+                                            TransactionTypeFilter.EXPENSE -> Icon(
+                                                Icons.AutoMirrored.Filled.TrendingDown,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(Dimensions.Icon.small)
+                                            )
+                                            TransactionTypeFilter.CREDIT -> Icon(
+                                                Icons.Default.CreditCard,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(Dimensions.Icon.small)
+                                            )
+                                            TransactionTypeFilter.TRANSFER -> Icon(
+                                                Icons.Default.SwapHoriz,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(Dimensions.Icon.small)
+                                            )
+                                            TransactionTypeFilter.INVESTMENT -> Icon(
+                                                Icons.AutoMirrored.Filled.ShowChart,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(Dimensions.Icon.small)
+                                            )
+                                            else -> null
+                                        }
                                     }
-                                }
-                            } else null,
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                } else null,
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
                             )
-                        )
+                        }
+                    }
+
+                    // Category filter chips (shown only when categories are available)
+                    if (uiState.availableCategories.isNotEmpty()) {
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                        ) {
+                            item {
+                                FilterChip(
+                                    selected = categoryFilter == null,
+                                    onClick = { viewModel.clearCategoryFilter() },
+                                    label = { Text("All") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                )
+                            }
+                            items(uiState.availableCategories) { category ->
+                                FilterChip(
+                                    selected = categoryFilter == category,
+                                    onClick = {
+                                        if (categoryFilter == category) viewModel.clearCategoryFilter()
+                                        else viewModel.setCategoryFilter(category)
+                                    },
+                                    label = { Text(category) },
+                                    leadingIcon = {
+                                        CategoryIcon(
+                                            category = category,
+                                            size = Dimensions.Icon.small
+                                        )
+                                    },
+                                    trailingIcon = if (categoryFilter == category) {
+                                        {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "Clear category filter",
+                                                modifier = Modifier.size(Dimensions.Icon.small)
+                                            )
+                                        }
+                                    } else null,
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // Category Filter Chips
-        if (uiState.availableCategories.isNotEmpty()) {
+        if (
+            uiState.totalSpending > BigDecimal.ZERO ||
+            uiState.transactionCount > 0 ||
+            uiState.periodOutflow != null ||
+            uiState.investmentInsights != null ||
+            uiState.paymentModeBreakdown != null
+        ) {
             item {
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(horizontal = Dimensions.Padding.content),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                ) {
-                    item {
-                        FilterChip(
-                            selected = categoryFilter == null,
-                            onClick = { viewModel.clearCategoryFilter() },
-                            label = { Text("All") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
+                AnalyticsSummaryTilesRow(
+                    spendingTotal = uiState.totalSpending,
+                    spendingTransactionCount = uiState.transactionCount,
+                    spendingAverage = uiState.averageAmount,
+                    spendingTopCategory = uiState.topCategory,
+                    spendingTopCategoryPercentage = uiState.topCategoryPercentage,
+                    currency = uiState.currency,
+                    periodOutflow = uiState.periodOutflow,
+                    investmentInsights = uiState.investmentInsights,
+                    paymentModeBreakdown = uiState.paymentModeBreakdown,
+                    onSpendingClick = { drillDownToTransactions(category = categoryFilter) },
+                    onInvestmentClick = {
+                        drillDownToTransactions(
+                            transactionType = TransactionTypeFilter.INVESTMENT.name,
                         )
-                    }
-                    items(uiState.availableCategories) { category ->
-                        FilterChip(
-                            selected = categoryFilter == category,
+                    },
+                    onCardAndBankClick = {
+                        drillDownToTransactions(
+                            transactionType = TransactionTypeFilter.EXPENSE.name,
+                            paymentMode = PaymentModeGroup.CARD_AND_BANK.name,
+                        )
+                    },
+                    onCashClick = {
+                        drillDownToTransactions(
+                            transactionType = TransactionTypeFilter.EXPENSE.name,
+                            paymentMode = PaymentMode.CASH.name,
+                        )
+                    },
+                )
+            }
+        }
+
+        uiState.investmentInsights?.takeIf { it.topMerchants.isNotEmpty() }?.let { insights ->
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    SectionHeaderV2(title = "Top Investment Merchants")
+                    ExpandableList(
+                        items = insights.topMerchants,
+                        visibleItemCount = 3,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { merchant ->
+                        AnalyticsMerchantListItem(
+                            merchant = merchant,
+                            currency = insights.currency,
                             onClick = {
-                                if (categoryFilter == category) viewModel.clearCategoryFilter()
-                                else viewModel.setCategoryFilter(category)
-                            },
-                            label = { Text(category) },
-                            leadingIcon = {
-                                CategoryIcon(
-                                    category = category,
-                                    size = Dimensions.Icon.small
+                                drillDownToTransactions(
+                                    merchant = merchant.name,
+                                    transactionType = TransactionTypeFilter.INVESTMENT.name,
                                 )
                             },
-                                trailingIcon = if (categoryFilter == category) {
-                                {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Clear category filter",
-                                        modifier = Modifier.size(Dimensions.Icon.small)
-                                    )
-                                }
-                            } else null,
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
                         )
                     }
                 }
-            }
-        }
-
-        // Analytics Summary Card
-        if (uiState.totalSpending > BigDecimal.ZERO || uiState.transactionCount > 0) {
-            item {
-                AnalyticsSummaryCard(
-                    totalAmount = uiState.totalSpending,
-                    transactionCount = uiState.transactionCount,
-                    averageAmount = uiState.averageAmount,
-                    topCategory = uiState.topCategory,
-                    topCategoryPercentage = uiState.topCategoryPercentage,
-                    currency = uiState.currency,
-                    isLoading = uiState.isLoading,
-                    onClick = {
-                        onNavigateToTransactions(categoryFilter, null, selectedPeriod.name, selectedCurrency, transactionTypeFilter.name, customDateRange?.first?.toEpochDay(), customDateRange?.second?.toEpochDay())
-                    }
-                )
             }
         }
 
@@ -522,14 +634,14 @@ fun AnalyticsScreen(
                                 categories = uiState.categoryBreakdown,
                                 currency = selectedCurrency,
                                 onCategoryClick = { category ->
-                                    onNavigateToTransactions(category.name, null, selectedPeriod.name, selectedCurrency, transactionTypeFilter.name, customDateRange?.first?.toEpochDay(), customDateRange?.second?.toEpochDay())
+                                    drillDownToTransactions(category = category.name)
                                 }
                             )
                             CategoryViewType.LIST -> CategoryBreakdownCard(
                                 categories = uiState.categoryBreakdown,
                                 currency = selectedCurrency,
                                 onCategoryClick = { category ->
-                                    onNavigateToTransactions(category.name, null, selectedPeriod.name, selectedCurrency, transactionTypeFilter.name, customDateRange?.first?.toEpochDay(), customDateRange?.second?.toEpochDay())
+                                    drillDownToTransactions(category = category.name)
                                 }
                             )
                         }
@@ -538,36 +650,19 @@ fun AnalyticsScreen(
             }
         }
 
-        // Category Trends (multi-month only)
-        if (uiState.categoryTrends.isNotEmpty() && uiState.categoryTrends.values.any { it.size >= 2 }) {
+        // Tag Insights: Top Tags + Co-occurrence + Multi-Tagged in a single pager tile
+        if (uiState.topTags.isNotEmpty() || uiState.categoryOverlaps.isNotEmpty() || uiState.multiCategoryTransactions.isNotEmpty()) {
             item {
-                CategoryTrendsSection(
-                    trends = uiState.categoryTrends,
-                    currency = selectedCurrency
-                )
-            }
-        }
-
-        // Category Co-occurrence
-        if (uiState.categoryOverlaps.isNotEmpty()) {
-            item {
-                CategoryOverlapCard(
+                TagInsightsCard(
+                    topTags = uiState.topTags,
                     overlaps = uiState.categoryOverlaps,
+                    multiTaggedTransactions = uiState.multiCategoryTransactions,
+                    currency = selectedCurrency,
                     onOverlapClick = { overlap ->
                         val encoded = listOf(overlap.categoryA, overlap.categoryB)
                             .joinToString(",") { java.net.URLEncoder.encode(it, "UTF-8") }
-                        onNavigateToTransactionsMultiCategory(encoded, selectedPeriod.name, selectedCurrency, customDateRange?.first?.toEpochDay(), customDateRange?.second?.toEpochDay())
-                    }
-                )
-            }
-        }
-
-        // Multi-category transactions
-        if (uiState.multiCategoryTransactions.isNotEmpty()) {
-            item {
-                MultiCategoryTransactionsCard(
-                    transactions = uiState.multiCategoryTransactions,
-                    currency = selectedCurrency,
+                        drillDownMultiCategory(encoded)
+                    },
                     onTransactionClick = onNavigateToTransaction
                 )
             }
@@ -588,12 +683,10 @@ fun AnalyticsScreen(
                     visibleItemCount = 3,
                     modifier = Modifier.fillMaxWidth()
                 ) { merchant ->
-                    MerchantListItem(
+                    AnalyticsMerchantListItem(
                         merchant = merchant,
                         currency = selectedCurrency,
-                        onClick = {
-                            onNavigateToTransactions(null, merchant.name, selectedPeriod.name, selectedCurrency, transactionTypeFilter.name, customDateRange?.first?.toEpochDay(), customDateRange?.second?.toEpochDay())
-                        }
+                        onClick = { drillDownToTransactions(merchant = merchant.name) },
                     )
                 }
             }
@@ -660,35 +753,6 @@ private fun CategoryListItem(
 }
 
 @Composable
-private fun MerchantListItem(
-    merchant: MerchantData,
-    currency: String,
-    onClick: () -> Unit = {}
-) {
-    val subtitle = buildString {
-        append("${merchant.transactionCount} ")
-        append(if (merchant.transactionCount == 1) "transaction" else "transactions")
-        if (merchant.isSubscription) {
-            append(" • Subscription")
-        }
-    }
-
-    ListItemCardV2(
-        leadingContent = {
-            BrandIcon(
-                merchantName = merchant.name,
-                size = 48.dp,
-                showBackground = true
-            )
-        },
-        title = merchant.name,
-        subtitle = subtitle,
-        amount = CurrencyFormatter.formatCurrency(merchant.amount, currency),
-        onClick = onClick
-    )
-}
-
-@Composable
 private fun EmptyAnalyticsState(
     onScanSmsClick: () -> Unit = {}
 ) {
@@ -708,153 +772,97 @@ private fun EmptyAnalyticsState(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CategoryTrendsSection(
-    trends: Map<String, List<com.pennywiseai.tracker.ui.components.BalancePoint>>,
+private fun TagInsightsCard(
+    topTags: List<TagData>,
+    overlaps: List<CategoryOverlapData>,
+    multiTaggedTransactions: List<MultiCategoryTransactionData>,
     currency: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOverlapClick: (CategoryOverlapData) -> Unit = {},
+    onTransactionClick: (Long) -> Unit = {}
 ) {
-    val categoryColors = remember(trends) {
-        trends.keys.associateWith { name ->
-            CategoryMapping.categories[name]?.color
-                ?: CategoryMapping.categories["Others"]!!.color
+    data class TagPage(val title: String, val subtitle: String)
+
+    val pages = remember(topTags, overlaps, multiTaggedTransactions) {
+        buildList {
+            if (topTags.isNotEmpty()) add(TagPage("Top Tags", "${topTags.size} tags used"))
+            if (overlaps.isNotEmpty()) add(TagPage("Co-occurrence", "${overlaps.size} tag pairs"))
+            if (multiTaggedTransactions.isNotEmpty()) add(TagPage("Multi-Tagged", "${multiTaggedTransactions.size} transactions"))
         }
     }
+    if (pages.isEmpty()) return
 
-    val sortedMonths = remember(trends) {
-        trends.values.firstOrNull()
-            ?.sortedBy { it.timestamp }
-            ?.map { it.timestamp.format(DateTimeFormatter.ofPattern("MMM yy")) }
-            ?: emptyList()
-    }
-
-    val lines = remember(trends) {
-        trends.map { (catName, points) ->
-            Line(
-                label = catName,
-                values = points.sortedBy { it.timestamp }.map { it.balance.toDouble() },
-                color = SolidColor(categoryColors[catName] ?: Color.Gray),
-                drawStyle = DrawStyle.Stroke(width = 2.dp),
-                dotProperties = DotProperties(enabled = true, radius = 3.dp)
-            )
-        }
-    }
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState { pages.size }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        SectionHeaderV2(title = "Category Trends")
-        PennyWiseCard(modifier = Modifier.fillMaxWidth()) {
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                LineChart(
-                    data = lines,
+        SectionHeaderV2(title = "Tag Insights")
+
+        // Pager sits outside the card so swipe gestures are not intercepted
+        androidx.compose.foundation.pager.HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(end = Dimensions.Padding.content),
+            pageSpacing = Spacing.sm
+        ) { pageIndex ->
+            val page = pages[pageIndex]
+            PennyWiseCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp),
-                    animationMode = AnimationMode.Together(delayBuilder = { it * 100L }),
-                    gridProperties = GridProperties(enabled = false),
-                    labelProperties = LabelProperties(
-                        enabled = true,
-                        labels = sortedMonths,
-                        textStyle = androidx.compose.ui.text.TextStyle(
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    ),
-                    labelHelperProperties = LabelHelperProperties(enabled = false)
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        .heightIn(min = 240.dp),
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
-                    trends.keys.forEach { catName ->
-                        val color = categoryColors[catName] ?: Color.Gray
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(color)
-                            )
-                            Text(
-                                text = catName,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CategoryOverlapCard(
-    overlaps: List<CategoryOverlapData>,
-    modifier: Modifier = Modifier,
-    onOverlapClick: (CategoryOverlapData) -> Unit = {}
-) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        SectionHeaderV2(title = "Category Co-occurrence")
-        PennyWiseCard(modifier = Modifier.fillMaxWidth()) {
-            ExpandableList(items = overlaps, visibleItemCount = 5) { overlap ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { onOverlapClick(overlap) }
-                        .padding(vertical = Spacing.xs),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                ) {
-                    Box(modifier = Modifier.size(40.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background((CategoryMapping.categories[overlap.categoryA]?.color ?: Color.Gray).copy(alpha = 0.15f))
-                                .align(Alignment.TopStart),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CategoryIcon(category = overlap.categoryA, size = 16.dp)
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clip(CircleShape)
-                                .background((CategoryMapping.categories[overlap.categoryB]?.color ?: Color.Gray).copy(alpha = 0.15f))
-                                .align(Alignment.BottomEnd),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CategoryIcon(category = overlap.categoryB, size = 14.dp)
-                        }
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
+                    // Per-page header
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            text = "${overlap.categoryA} + ${overlap.categoryB}",
-                            style = MaterialTheme.typography.bodyMedium
+                            text = page.title,
+                            style = MaterialTheme.typography.titleSmall
                         )
                         Text(
-                            text = "${overlap.coOccurrenceCount} transactions together",
+                            text = page.subtitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = Spacing.xs),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    when (page.title) {
+                        "Top Tags" -> TopTagsPageContent(tags = topTags, currency = currency)
+                        "Co-occurrence" -> CoOccurrencePageContent(overlaps = overlaps, onOverlapClick = onOverlapClick)
+                        "Multi-Tagged" -> MultiTaggedPageContent(transactions = multiTaggedTransactions, currency = currency, onTransactionClick = onTransactionClick)
+                    }
+                }
+            }
+        }
+
+        // Pill dot indicators — centered below pager
+        if (pages.size > 1) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                pages.indices.forEach { index ->
+                    val isActive = pagerState.currentPage == index
+                    val width by androidx.compose.animation.core.animateDpAsState(
+                        targetValue = if (isActive) 16.dp else 6.dp,
+                        animationSpec = androidx.compose.animation.core.tween(200),
+                        label = "tag_dot_$index"
+                    )
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.tertiaryContainer)
-                            .padding(horizontal = Spacing.sm, vertical = Spacing.xs)
-                    ) {
-                        Text(
-                            text = "${overlap.coOccurrenceCount}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer
-                        )
-                    }
+                            .padding(horizontal = 3.dp)
+                            .width(width)
+                            .height(6.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isActive) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+                            )
+                    )
                 }
             }
         }
@@ -862,58 +870,176 @@ private fun CategoryOverlapCard(
 }
 
 @Composable
-private fun MultiCategoryTransactionsCard(
+private fun TopTagsPageContent(
+    tags: List<TagData>,
+    currency: String
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+    ) {
+        tags.take(6).forEach { tag ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                        .padding(horizontal = Spacing.sm, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = tag.name,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = "${tag.transactionCount} txn${if (tag.transactionCount != 1) "s" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = " · ",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = CurrencyFormatter.formatAbbreviated(tag.totalAmount.toDouble(), currency),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CoOccurrencePageContent(
+    overlaps: List<CategoryOverlapData>,
+    onOverlapClick: (CategoryOverlapData) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+    ) {
+        overlaps.take(5).forEach { overlap ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onOverlapClick(overlap) }
+                    .padding(vertical = Spacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                Box(modifier = Modifier.size(40.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background((CategoryMapping.categories[overlap.categoryA]?.color ?: Color.Gray).copy(alpha = 0.15f))
+                            .align(Alignment.TopStart),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CategoryIcon(category = overlap.categoryA, size = 16.dp)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background((CategoryMapping.categories[overlap.categoryB]?.color ?: Color.Gray).copy(alpha = 0.15f))
+                            .align(Alignment.BottomEnd),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CategoryIcon(category = overlap.categoryB, size = 14.dp)
+                    }
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "${overlap.categoryA} + ${overlap.categoryB}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "${overlap.coOccurrenceCount} transactions together",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.tertiaryContainer)
+                        .padding(horizontal = Spacing.sm, vertical = Spacing.xs)
+                ) {
+                    Text(
+                        text = "${overlap.coOccurrenceCount}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MultiTaggedPageContent(
     transactions: List<MultiCategoryTransactionData>,
     currency: String,
-    modifier: Modifier = Modifier,
-    onTransactionClick: (Long) -> Unit = {}
+    onTransactionClick: (Long) -> Unit
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        SectionHeaderV2(title = "Multi-Tagged Transactions")
-        PennyWiseCard(modifier = Modifier.fillMaxWidth()) {
-            ExpandableList(items = transactions, visibleItemCount = 3) { tx ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { onTransactionClick(tx.transactionId) }
-                        .padding(vertical = Spacing.xs),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+    ) {
+        transactions.take(4).forEach { tx ->
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onTransactionClick(tx.transactionId) }
+                    .padding(vertical = Spacing.xs),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                    ) {
-                        BrandIcon(merchantName = tx.merchantName, size = 40.dp, showBackground = true)
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = tx.merchantName,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Text(
-                                text = tx.dateTime.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                    BrandIcon(merchantName = tx.merchantName, size = 36.dp, showBackground = true)
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = CurrencyFormatter.formatCurrency(tx.amount, tx.currency.ifEmpty { currency }),
+                            text = tx.merchantName,
                             style = MaterialTheme.typography.bodyMedium
                         )
+                        Text(
+                            text = tx.dateTime.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                        items(tx.categories) { cat ->
-                            SuggestionChip(
-                                onClick = {},
-                                label = { Text(cat, style = MaterialTheme.typography.labelSmall) },
-                                icon = { CategoryIcon(category = cat, size = 12.dp) },
-                                border = null,
-                                colors = SuggestionChipDefaults.suggestionChipColors(
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                                )
+                    Text(
+                        text = CurrencyFormatter.formatCurrency(tx.amount, tx.currency.ifEmpty { currency }),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                    items(tx.categories) { cat ->
+                        SuggestionChip(
+                            onClick = {},
+                            label = { Text(cat, style = MaterialTheme.typography.labelSmall) },
+                            icon = { CategoryIcon(category = cat, size = 12.dp) },
+                            border = null,
+                            colors = SuggestionChipDefaults.suggestionChipColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer
                             )
-                        }
+                        )
                     }
                 }
             }

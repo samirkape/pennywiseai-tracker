@@ -60,7 +60,8 @@ enum class TransactionField {
     TRANSACTION_DAY_OF_WEEK, // 1=Monday .. 7=Sunday
     TRANSACTION_DAY_OF_MONTH,// 01-31
     TRANSACTION_DATE,        // yyyy-MM-dd
-    SEARCHABLE_TEXT          // SMS + merchant + description (rule evaluation only)
+    SEARCHABLE_TEXT,         // SMS + merchant + description (rule evaluation only)
+    TAGS                     // Comma-separated tags on the transaction
 }
 
 @Serializable

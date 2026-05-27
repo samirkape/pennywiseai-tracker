@@ -25,6 +25,7 @@ import com.pennywiseai.tracker.data.backup.BackupImporter
 import com.pennywiseai.tracker.data.backup.ExportResult
 import com.pennywiseai.tracker.data.backup.ImportResult
 import com.pennywiseai.tracker.data.backup.ImportStrategy
+import com.pennywiseai.tracker.R
 import com.pennywiseai.tracker.data.repository.SalaryMonthOverrideRepository
 import com.pennywiseai.tracker.data.repository.TransactionRepository
 import com.pennywiseai.tracker.utils.CurrencyUtils
@@ -365,7 +366,7 @@ class SettingsViewModel @Inject constructor(
                 // Create download request
                 val request = DownloadManager.Request(Uri.parse(modelUrl))
                     .setTitle("AI Chat Model")
-                    .setDescription("Downloading AI chat assistant for PennyWise")
+                    .setDescription("Downloading AI chat assistant for Spendly")
                     .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                     .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, Constants.ModelDownload.MODEL_FILE_NAME)
                     .setAllowedOverMetered(true) // Allow mobile data downloads
@@ -635,7 +636,7 @@ class SettingsViewModel @Inject constructor(
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/octet-stream"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "SpendTracker PRO Backup")
+                putExtra(Intent.EXTRA_SUBJECT, "Spendly Backup")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
@@ -648,14 +649,26 @@ class SettingsViewModel @Inject constructor(
         }
     }
     
-    fun importBackup(uri: android.net.Uri) {
+    fun importBackup(uri: android.net.Uri, strategy: ImportStrategy = ImportStrategy.MERGE) {
         viewModelScope.launch {
             try {
-                _importExportMessage.value = "Importing backup..."
-                val result = backupImporter.importBackup(uri, ImportStrategy.MERGE)
+                _importExportMessage.value = context.getString(R.string.backup_restore_importing)
+                val result = backupImporter.importBackup(uri, strategy)
                 when (result) {
                     is ImportResult.Success -> {
-                        _importExportMessage.value = "Import successful! Imported ${result.importedTransactions} transactions, ${result.importedCategories} categories. Skipped ${result.skippedDuplicates} duplicates."
+                        _importExportMessage.value = when (strategy) {
+                            ImportStrategy.REPLACE_ALL -> context.getString(
+                                R.string.backup_restore_success_overwrite,
+                                result.importedTransactions,
+                                result.importedCategories,
+                            )
+                            else -> context.getString(
+                                R.string.backup_restore_success_merge,
+                                result.importedTransactions,
+                                result.importedCategories,
+                                result.skippedDuplicates,
+                            )
+                        }
                     }
                     is ImportResult.Error -> {
                         _importExportMessage.value = "Import failed: ${result.message}"

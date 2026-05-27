@@ -46,7 +46,8 @@ import java.time.format.DateTimeFormatter
 fun UnrecognizedSmsScreen(
     modifier: Modifier = Modifier,
     onNavigateBack: () -> Unit,
-    viewModel: UnrecognizedSmsViewModel = hiltViewModel()
+    onAddAsTransaction: (Long) -> Unit = {},
+    viewModel: UnrecognizedSmsViewModel = hiltViewModel(),
 ) {
     val unrecognizedMessages by viewModel.unrecognizedMessages.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
@@ -143,7 +144,7 @@ fun UnrecognizedSmsScreen(
 
                             Text(
                                 text = "These messages from potential banks couldn't be automatically parsed. " +
-                                        "Help improve PennyWise by reporting them so we can add support for more banks.",
+                                    "Add one as a transaction manually, or report it to help improve bank support.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -225,6 +226,7 @@ fun UnrecognizedSmsScreen(
                     ) {
                         UnrecognizedSmsItem(
                             message = message,
+                            onAddAsTransaction = { onAddAsTransaction(message.id) },
                             onReport = {
                                 viewModel.reportMessage(message)
                             },
@@ -281,6 +283,7 @@ fun UnrecognizedSmsScreen(
 @Composable
 private fun UnrecognizedSmsItem(
     message: UnrecognizedSmsEntity,
+    onAddAsTransaction: () -> Unit,
     onReport: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
@@ -337,49 +340,43 @@ private fun UnrecognizedSmsItem(
             // Action buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                Button(
+                    onClick = onAddAsTransaction,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(Dimensions.Icon.small),
+                    )
+                    Spacer(modifier = Modifier.width(Spacing.xs))
+                    Text("Add as transaction")
+                }
                 if (!message.reported) {
-                    TextButton(
-                        onClick = onDelete
-                    ) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete",
-                            modifier = Modifier.size(Dimensions.Icon.small)
-                        )
-                        Spacer(modifier = Modifier.width(Spacing.xs))
-                        Text("Delete")
-                    }
-
-                    Spacer(modifier = Modifier.width(Spacing.sm))
-
-                    FilledTonalButton(
-                        onClick = onReport
-                    ) {
+                    FilledTonalButton(onClick = onReport) {
                         Icon(
                             Icons.Default.BugReport,
                             contentDescription = "Report",
-                            modifier = Modifier.size(Dimensions.Icon.small)
+                            modifier = Modifier.size(Dimensions.Icon.small),
                         )
-                        Spacer(modifier = Modifier.width(Spacing.xs))
-                        Text("Report")
                     }
-                } else {
-                    TextButton(
-                        onClick = onDelete,
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
+                    IconButton(onClick = onDelete) {
                         Icon(
                             Icons.Default.Delete,
                             contentDescription = "Delete",
-                            modifier = Modifier.size(Dimensions.Icon.small)
+                            tint = MaterialTheme.colorScheme.error,
                         )
-                        Spacer(modifier = Modifier.width(Spacing.xs))
-                        Text("Delete")
+                    }
+                } else {
+                    IconButton(onClick = onDelete) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
             }

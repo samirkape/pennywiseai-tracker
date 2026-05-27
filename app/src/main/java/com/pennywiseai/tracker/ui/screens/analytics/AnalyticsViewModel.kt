@@ -3,6 +3,8 @@ package com.pennywiseai.tracker.ui.screens.analytics
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pennywiseai.tracker.data.currency.CurrencyConversionService
+import com.pennywiseai.tracker.data.database.entity.TransactionEntity
+import com.pennywiseai.tracker.data.database.entity.TransactionType
 import com.pennywiseai.tracker.data.database.entity.TransactionWithSplits
 import com.pennywiseai.tracker.data.preferences.UserPreferencesRepository
 import com.pennywiseai.tracker.data.repository.SalaryMonthOverrideRepository
@@ -11,7 +13,12 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.pennywiseai.tracker.presentation.common.TimePeriod
 import com.pennywiseai.tracker.presentation.common.TransactionTypeFilter
 import com.pennywiseai.tracker.presentation.common.defaultTimePeriod
+import com.pennywiseai.tracker.presentation.common.PaymentMode
+import com.pennywiseai.tracker.presentation.common.matchesAnalyticsSpendingFilter
+import com.pennywiseai.tracker.presentation.common.paymentMode
 import com.pennywiseai.tracker.presentation.common.getDateRangeForPeriod
+import com.pennywiseai.tracker.presentation.common.getDateRangeForYearMonthNavigation
+import com.pennywiseai.tracker.presentation.common.resolveDateRangeForSelection
 import com.pennywiseai.tracker.utils.CurrencyUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -56,11 +63,21 @@ class AnalyticsViewModel @Inject constructor(
     private val _selectedChartType = MutableStateFlow(ChartType.LINE)
     val selectedChartType: StateFlow<ChartType> = _selectedChartType.asStateFlow()
 
+    private val _periodAnchorMonthKey = savedStateHandle.getStateFlow<String?>("periodAnchorMonth", null)
+
+    /** True when month scrubber follows calendar months; false for pay-month boundaries. */
+    private val periodNavUsesCalendarKey = "periodNavUsesCalendar"
+
+    /** Nominal month key for pay-month / calendar-month scrubbing (may span two calendar months). */
+    val periodAnchorMonth: StateFlow<YearMonth?> = _periodAnchorMonthKey
+        .map { key -> key?.let { YearMonth.parse(it) } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     init {
         viewModelScope.launch {
-            _selectedPeriod.value = defaultTimePeriod(
-                userPreferencesRepository.useFinancialMonth.first()
-            )
+            val default = defaultTimePeriod(userPreferencesRepository.useFinancialMonth.first())
+            _selectedPeriod.value = default
+            updatePeriodAnchorForChip(default)
         }
 
         viewModelScope.launch {
@@ -158,34 +175,30 @@ class AnalyticsViewModel @Inject constructor(
             budgetPeriodEndDay = pr[3] as Int,
         )
     }.flatMapLatest { filterState ->
-        // Determine date range based on selected period
-        val dateRange = if (filterState.period == TimePeriod.CUSTOM) {
-            val customRange = filterState.customRange
-            // Guard against invalid state: CUSTOM period must have a date range
-            if (customRange == null) {
-                val fallbackPeriod = defaultTimePeriod(filterState.useFinancialMonth)
-                android.util.Log.e("AnalyticsViewModel",
-                    "CUSTOM period selected but no date range set - falling back to $fallbackPeriod")
-                _selectedPeriod.value = fallbackPeriod
-                getDateRangeForPeriod(
-                    fallbackPeriod,
-                    filterState.monthStartDay,
-                    filterState.useFinancialMonth,
-                    filterState.monthStartOverrides,
-                    filterState.useFixedBudgetPeriodEnd,
-                    filterState.budgetPeriodEndDay
-                )
-            } else {
-                customRange
-            }
-        } else {
-            getDateRangeForPeriod(
-                filterState.period,
-                filterState.monthStartDay,
-                filterState.useFinancialMonth,
-                filterState.monthStartOverrides,
-                filterState.useFixedBudgetPeriodEnd,
-                filterState.budgetPeriodEndDay
+        var dateRange = resolveDateRangeForSelection(
+            period = filterState.period,
+            customRange = filterState.customRange,
+            monthStartDay = filterState.monthStartDay,
+            useFinancialMonth = filterState.useFinancialMonth,
+            monthStartOverrides = filterState.monthStartOverrides,
+            useFixedBudgetPeriodEnd = filterState.useFixedBudgetPeriodEnd,
+            budgetPeriodEndDay = filterState.budgetPeriodEndDay,
+        )
+        if (dateRange == null && filterState.period == TimePeriod.CUSTOM) {
+            val fallbackPeriod = defaultTimePeriod(filterState.useFinancialMonth)
+            android.util.Log.e(
+                "AnalyticsViewModel",
+                "CUSTOM period selected but no date range set - falling back to $fallbackPeriod",
+            )
+            _selectedPeriod.value = fallbackPeriod
+            dateRange = resolveDateRangeForSelection(
+                period = fallbackPeriod,
+                customRange = null,
+                monthStartDay = filterState.monthStartDay,
+                useFinancialMonth = filterState.useFinancialMonth,
+                monthStartOverrides = filterState.monthStartOverrides,
+                useFixedBudgetPeriodEnd = filterState.useFixedBudgetPeriodEnd,
+                budgetPeriodEndDay = filterState.budgetPeriodEndDay,
             )
         }
 
@@ -233,8 +246,7 @@ class AnalyticsViewModel @Inject constructor(
                 val filteredTransactionsWithSplits = (when (transactionTypeFilter) {
                     TransactionTypeFilter.ALL -> allTransactionsWithSplits
                     TransactionTypeFilter.EXPENSE -> allTransactionsWithSplits.filter {
-                        it.transaction.transactionType == com.pennywiseai.tracker.data.database.entity.TransactionType.EXPENSE ||
-                        it.transaction.transactionType == com.pennywiseai.tracker.data.database.entity.TransactionType.CREDIT
+                        it.transaction.matchesAnalyticsSpendingFilter()
                     }
                     TransactionTypeFilter.INCOME -> allTransactionsWithSplits.filter {
                         it.transaction.transactionType == com.pennywiseai.tracker.data.database.entity.TransactionType.INCOME
@@ -342,49 +354,6 @@ class AnalyticsViewModel @Inject constructor(
                 // Get top category info
                 val topCategory = categoryBreakdown.firstOrNull()
 
-                // ---- Insight 3: Category trends over time (from splits data) ----
-                val categoryTrends: Map<String, List<BalancePoint>> = run {
-                    val monthsBetween = ChronoUnit.MONTHS.between(
-                        dateRange.first.withDayOfMonth(1),
-                        dateRange.second.withDayOfMonth(1)
-                    )
-                    if (monthsBetween < 1) {
-                        emptyMap()
-                    } else {
-                        val topCatNames = categoryAmounts.entries
-                            .sortedByDescending { it.value }
-                            .take(5)
-                            .map { it.key }
-
-                        val monthMap = mutableMapOf<YearMonth, MutableMap<String, BigDecimal>>()
-                        for (txWithSplits in categoryFilteredWithSplits) {
-                            val ym = YearMonth.from(txWithSplits.transaction.dateTime)
-                            val perMonth = monthMap.getOrPut(ym) { mutableMapOf() }
-                            txWithSplits.getAmountByCategory().forEach { (cat, amt) ->
-                                val catName = cat.ifEmpty { "Others" }
-                                if (catName in topCatNames) {
-                                    val converted = if (isUnified) {
-                                        currencyConversionService.convertAmount(amt, txWithSplits.transaction.currency, displayCurrency)
-                                    } else amt
-                                    perMonth[catName] = (perMonth[catName] ?: BigDecimal.ZERO) + converted
-                                }
-                            }
-                        }
-
-                        topCatNames.associateWith { catName ->
-                            monthMap.entries
-                                .sortedBy { it.key }
-                                .map { (ym, catAmts) ->
-                                    BalancePoint(
-                                        timestamp = ym.atDay(1).atStartOfDay(),
-                                        balance = catAmts[catName] ?: BigDecimal.ZERO,
-                                        currency = displayCurrency
-                                    )
-                                }
-                        }.filter { (_, points) -> points.any { it.balance > BigDecimal.ZERO } }
-                    }
-                }
-
                 // Tags on transactions (for filter/insights only — not budget accounting).
                 val categoriesByTx: Map<Long, List<String>> = categoryFilteredWithSplits
                     .filter { it.transaction.tags.isNotBlank() }
@@ -428,6 +397,70 @@ class AnalyticsViewModel @Inject constructor(
                     .sortedByDescending { it.dateTime }
                     .take(20)
 
+                // Insight 3: Top tags by transaction count and total amount
+                val tagCountMap = mutableMapOf<String, Int>()
+                val tagAmountMap = mutableMapOf<String, BigDecimal>()
+                for ((txId, tags) in categoriesByTx) {
+                    val tx = categoryFilteredWithSplits.find { it.transaction.id == txId }?.transaction
+                    val txAmount = tx?.amount ?: BigDecimal.ZERO
+                    val txCurrency = tx?.currency ?: displayCurrency
+                    val converted = if (isUnified) {
+                        currencyConversionService.convertAmount(txAmount, txCurrency, displayCurrency)
+                    } else txAmount
+                    for (tag in tags) {
+                        tagCountMap[tag] = (tagCountMap[tag] ?: 0) + 1
+                        tagAmountMap[tag] = (tagAmountMap[tag] ?: BigDecimal.ZERO) + converted
+                    }
+                }
+                val topTags = tagCountMap.entries
+                    .sortedByDescending { it.value }
+                    .take(10)
+                    .map { (tag, count) ->
+                        TagData(
+                            name = tag,
+                            transactionCount = count,
+                            totalAmount = tagAmountMap[tag] ?: BigDecimal.ZERO
+                        )
+                    }
+
+                val previousRange = previousDateRange(dateRange.first, dateRange.second)
+                val previousPeriodTxs = if (filterState.isUnifiedMode) {
+                    transactionRepository.getTransactionsWithSplitsFiltered(
+                        startDate = previousRange.first,
+                        endDate = previousRange.second,
+                    ).first()
+                } else {
+                    transactionRepository.getTransactionsWithSplitsFiltered(
+                        startDate = previousRange.first,
+                        endDate = previousRange.second,
+                        currency = filterState.currency,
+                    ).first()
+                }
+
+                val periodOutflow = computePeriodOutflow(
+                    allTransactionsWithSplits = allTransactionsWithSplits,
+                    isUnified = isUnified,
+                    displayCurrency = displayCurrency,
+                )
+
+                val investmentInsights = computeInvestmentInsights(
+                    allTransactionsWithSplits = allTransactionsWithSplits,
+                    previousPeriodTxs = previousPeriodTxs,
+                    isUnified = isUnified,
+                    displayCurrency = displayCurrency,
+                )
+
+                val paymentModeBreakdown = if (transactionTypeFilter == TransactionTypeFilter.EXPENSE) {
+                    computePaymentModeBreakdown(
+                        transactions = allTransactionsWithSplits.map { it.transaction },
+                        totalSpending = totalSpending,
+                        isUnified = isUnified,
+                        displayCurrency = displayCurrency,
+                    )
+                } else {
+                    null
+                }
+
                 AnalyticsUiState(
                     totalSpending = totalSpending,
                     categoryBreakdown = categoryBreakdown,
@@ -440,9 +473,14 @@ class AnalyticsViewModel @Inject constructor(
                     isLoading = false,
                     spendingTrend = calculateSpendingTrend(filteredTransactions, dateRange.first, dateRange.second),
                     availableCategories = allCategoryNames,
-                    categoryTrends = categoryTrends,
                     categoryOverlaps = categoryOverlaps,
-                    multiCategoryTransactions = multiCategoryTransactions
+                    multiCategoryTransactions = multiCategoryTransactions,
+                    topTags = topTags,
+                    periodStart = dateRange.first,
+                    periodEnd = dateRange.second,
+                    periodOutflow = periodOutflow,
+                    investmentInsights = investmentInsights,
+                    paymentModeBreakdown = paymentModeBreakdown,
                 )
             }
         }
@@ -455,8 +493,30 @@ class AnalyticsViewModel @Inject constructor(
     fun selectPeriod(period: TimePeriod) {
         if (period != TimePeriod.CUSTOM) {
             savedStateHandle["customDateRange"] = null
+            updatePeriodAnchorForChip(period)
         }
         _selectedPeriod.value = period
+    }
+
+    private fun updatePeriodAnchorForChip(period: TimePeriod) {
+        val anchor = when (period) {
+            TimePeriod.THIS_MONTH, TimePeriod.CALENDAR_MONTH -> YearMonth.now()
+            TimePeriod.LAST_MONTH -> YearMonth.now().minusMonths(1)
+            TimePeriod.ALL, TimePeriod.CURRENT_FY, TimePeriod.CUSTOM -> null
+        }
+        savedStateHandle["periodAnchorMonth"] = anchor?.toString()
+        when (period) {
+            TimePeriod.CALENDAR_MONTH -> savedStateHandle[periodNavUsesCalendarKey] = true
+            TimePeriod.THIS_MONTH, TimePeriod.LAST_MONTH -> savedStateHandle[periodNavUsesCalendarKey] = false
+            TimePeriod.ALL, TimePeriod.CURRENT_FY -> savedStateHandle.remove<Boolean>(periodNavUsesCalendarKey)
+            TimePeriod.CUSTOM -> Unit
+        }
+    }
+
+    /** Whether scrubber steps calendar months vs pay months (from chip or persisted nav mode). */
+    private fun resolveUsesCalendarMonthNavigation(): Boolean {
+        savedStateHandle.get<Boolean>(periodNavUsesCalendarKey)?.let { return it }
+        return _selectedPeriod.value == TimePeriod.CALENDAR_MONTH
     }
 
     fun setTransactionTypeFilter(filter: TransactionTypeFilter) {
@@ -490,12 +550,22 @@ class AnalyticsViewModel @Inject constructor(
      * @param endDate The end date (inclusive)
      * @throws IllegalArgumentException if startDate > endDate
      */
-    fun setCustomDateRange(startDate: LocalDate, endDate: LocalDate) {
+    /**
+     * @param anchorMonth When set (month scrubber), keeps prev/next navigation. Null for manual date-picker ranges.
+     */
+    fun setCustomDateRange(
+        startDate: LocalDate,
+        endDate: LocalDate,
+        anchorMonth: YearMonth? = null,
+    ) {
         require(startDate <= endDate) {
             "Start date ($startDate) must be before or equal to end date ($endDate)"
         }
-        // Store as epoch days for process death survival
         savedStateHandle["customDateRange"] = startDate.toEpochDay() to endDate.toEpochDay()
+        savedStateHandle["periodAnchorMonth"] = anchorMonth?.toString()
+        if (anchorMonth == null) {
+            savedStateHandle.remove<Boolean>(periodNavUsesCalendarKey)
+        }
         _selectedPeriod.value = TimePeriod.CUSTOM
     }
 
@@ -507,9 +577,42 @@ class AnalyticsViewModel @Inject constructor(
         savedStateHandle["customDateRange"] = null
         if (_selectedPeriod.value == TimePeriod.CUSTOM) {
             viewModelScope.launch {
-                _selectedPeriod.value = defaultTimePeriod(
-                    userPreferencesRepository.useFinancialMonth.first()
-                )
+                val default = defaultTimePeriod(userPreferencesRepository.useFinancialMonth.first())
+                _selectedPeriod.value = default
+                updatePeriodAnchorForChip(default)
+            }
+        }
+    }
+
+    /**
+     * Steps to an adjacent pay-month or calendar-month anchor ([yearMonth] key).
+     */
+    fun navigateToMonth(yearMonth: YearMonth) {
+        viewModelScope.launch {
+            val monthStartDay = userPreferencesRepository.monthStartDay.first()
+            val payPeriodEnabled = userPreferencesRepository.useFinancialMonth.first()
+            val useFixedEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
+            val endDom = userPreferencesRepository.budgetPeriodEndDay.first()
+            val overrides = salaryMonthOverrideRepository.overridesMap.first()
+            val usesCalendar = resolveUsesCalendarMonthNavigation()
+            when {
+                yearMonth == YearMonth.now() && usesCalendar ->
+                    selectPeriod(TimePeriod.CALENDAR_MONTH)
+                yearMonth == YearMonth.now() && !usesCalendar && payPeriodEnabled ->
+                    selectPeriod(TimePeriod.THIS_MONTH)
+                yearMonth == YearMonth.now() && !usesCalendar && !payPeriodEnabled ->
+                    selectPeriod(TimePeriod.CALENDAR_MONTH)
+                else -> {
+                    val range = getDateRangeForYearMonthNavigation(
+                        yearMonth = yearMonth,
+                        useCalendarMonth = usesCalendar,
+                        monthStartDay = monthStartDay,
+                        monthStartOverrides = overrides,
+                        useFixedBudgetPeriodEnd = useFixedEnd,
+                        budgetPeriodEndDay = endDom,
+                    )
+                    setCustomDateRange(range.first, range.second, anchorMonth = yearMonth)
+                }
             }
         }
     }
@@ -560,17 +663,282 @@ class AnalyticsViewModel @Inject constructor(
                 }
             }
             else -> {
+                val rangeDays = ChronoUnit.DAYS.between(startDate, endDate).toInt() + 1
                 val transactionsByDate = transactions.groupBy { it.dateTime.toLocalDate() }
-                var currentDate = startDate
-                while (!currentDate.isAfter(endDate) && !currentDate.isAfter(LocalDate.now())) {
-                    val totalAmount = (transactionsByDate[currentDate] ?: emptyList()).sumOf { it.amount.toDouble() }.toBigDecimal()
-                    trend.add(BalancePoint(timestamp = currentDate.atStartOfDay(), balance = totalAmount, currency = currency))
-                    currentDate = currentDate.plusDays(1)
+                if (rangeDays > 14) {
+                    // Aggregate into weekly buckets when range exceeds 2 weeks
+                    val weekStart = startDate.minusDays(startDate.dayOfWeek.value.toLong() - 1)
+                    var currentWeek = weekStart
+                    while (!currentWeek.isAfter(endDate) && !currentWeek.isAfter(LocalDate.now())) {
+                        val weekEnd = currentWeek.plusDays(6).coerceAtMost(endDate).coerceAtMost(LocalDate.now())
+                        var d = currentWeek.coerceAtLeast(startDate)
+                        var weekTotal = java.math.BigDecimal.ZERO
+                        while (!d.isAfter(weekEnd)) {
+                            weekTotal += (transactionsByDate[d] ?: emptyList()).sumOf { it.amount.toDouble() }.toBigDecimal()
+                            d = d.plusDays(1)
+                        }
+                        trend.add(BalancePoint(timestamp = currentWeek.coerceAtLeast(startDate).atStartOfDay(), balance = weekTotal, currency = currency))
+                        currentWeek = currentWeek.plusWeeks(1)
+                    }
+                } else {
+                    var currentDate = startDate
+                    while (!currentDate.isAfter(endDate) && !currentDate.isAfter(LocalDate.now())) {
+                        val totalAmount = (transactionsByDate[currentDate] ?: emptyList()).sumOf { it.amount.toDouble() }.toBigDecimal()
+                        trend.add(BalancePoint(timestamp = currentDate.atStartOfDay(), balance = totalAmount, currency = currency))
+                        currentDate = currentDate.plusDays(1)
+                    }
                 }
             }
         }
         return trend
     }
+
+    private suspend fun convertAmount(
+        amount: BigDecimal,
+        fromCurrency: String,
+        toCurrency: String,
+        isUnified: Boolean,
+    ): BigDecimal = if (isUnified) {
+        currencyConversionService.convertAmount(amount, fromCurrency, toCurrency)
+    } else {
+        amount
+    }
+
+    private suspend fun computePeriodOutflow(
+        allTransactionsWithSplits: List<TransactionWithSplits>,
+        isUnified: Boolean,
+        displayCurrency: String,
+    ): PeriodOutflowSummary? {
+        var spending = BigDecimal.ZERO
+        var invested = BigDecimal.ZERO
+        var spendingCount = 0
+        var investmentCount = 0
+
+        for (item in allTransactionsWithSplits) {
+            val tx = item.transaction
+            if (tx.isExcludedFromTracking) continue
+            val amount = convertAmount(tx.amount, tx.currency, displayCurrency, isUnified)
+            when {
+                tx.matchesAnalyticsSpendingFilter() -> {
+                    spending += amount
+                    spendingCount++
+                }
+                tx.transactionType == TransactionType.INVESTMENT -> {
+                    invested += amount
+                    investmentCount++
+                }
+            }
+        }
+
+        val total = spending + invested
+        if (total <= BigDecimal.ZERO) return null
+
+        return PeriodOutflowSummary(
+            total = total,
+            spending = spending,
+            invested = invested,
+            transactionCount = spendingCount + investmentCount,
+            spendingTransactionCount = spendingCount,
+            investmentTransactionCount = investmentCount,
+            currency = displayCurrency,
+        )
+    }
+
+    private suspend fun computeInvestmentInsights(
+        allTransactionsWithSplits: List<TransactionWithSplits>,
+        previousPeriodTxs: List<TransactionWithSplits>,
+        isUnified: Boolean,
+        displayCurrency: String,
+    ): InvestmentInsights? {
+        val investmentTxs = allTransactionsWithSplits.filter {
+            it.transaction.transactionType == TransactionType.INVESTMENT &&
+                !it.transaction.isExcludedFromTracking
+        }
+        if (investmentTxs.isEmpty()) return null
+
+        var totalInvested = BigDecimal.ZERO
+        for (item in investmentTxs) {
+            val tx = item.transaction
+            totalInvested += convertAmount(tx.amount, tx.currency, displayCurrency, isUnified)
+        }
+        val count = investmentTxs.size
+
+        var previousTotal = BigDecimal.ZERO
+        for (item in previousPeriodTxs) {
+            val tx = item.transaction
+            if (tx.transactionType == TransactionType.INVESTMENT && !tx.isExcludedFromTracking) {
+                previousTotal += convertAmount(tx.amount, tx.currency, displayCurrency, isUnified)
+            }
+        }
+
+        val deltaPercent = if (previousTotal > BigDecimal.ZERO) {
+            val delta = totalInvested.subtract(previousTotal)
+            (delta.divide(previousTotal, 4, java.math.RoundingMode.HALF_UP) * BigDecimal(100)).toFloat()
+        } else {
+            null
+        }
+
+        val topMerchants = investmentTxs
+            .groupBy { it.transaction.merchantName }
+            .map { (merchant, txns) ->
+                var merchantTotal = BigDecimal.ZERO
+                for (item in txns) {
+                    val tx = item.transaction
+                    merchantTotal += convertAmount(tx.amount, tx.currency, displayCurrency, isUnified)
+                }
+                MerchantData(
+                    name = merchant,
+                    amount = merchantTotal,
+                    transactionCount = txns.size,
+                    isSubscription = txns.any { it.transaction.isRecurring },
+                )
+            }
+            .sortedByDescending { it.amount }
+            .take(10)
+
+        val recurringCount = investmentTxs.count { it.transaction.isRecurring }
+
+        var largestInvestment = BigDecimal.ZERO
+        for (item in investmentTxs) {
+            val tx = item.transaction
+            val converted = convertAmount(tx.amount, tx.currency, displayCurrency, isUnified)
+            if (converted > largestInvestment) largestInvestment = converted
+        }
+
+        val categoryAmounts = mutableMapOf<String, BigDecimal>()
+        val categoryCounts = mutableMapOf<String, Int>()
+        for (item in investmentTxs) {
+            val tx = item.transaction
+            val splits = item.splits
+            val amountsByCategory = if (splits.isNotEmpty()) {
+                splits.associate { split ->
+                    val cat = split.category.ifEmpty { "Others" }
+                    cat to convertAmount(split.amount, tx.currency, displayCurrency, isUnified)
+                }
+            } else {
+                val cat = tx.category.ifEmpty { "Others" }
+                mapOf(cat to convertAmount(tx.amount, tx.currency, displayCurrency, isUnified))
+            }
+            amountsByCategory.forEach { (category, amount) ->
+                categoryAmounts[category] = (categoryAmounts[category] ?: BigDecimal.ZERO) + amount
+                categoryCounts[category] = (categoryCounts[category] ?: 0) + 1
+            }
+        }
+        val topCategoryEntry = categoryAmounts.maxByOrNull { it.value }
+        val topCategory = topCategoryEntry?.key
+        val topCategoryPercentage = if (topCategory != null && totalInvested > BigDecimal.ZERO) {
+            (topCategoryEntry.value.divide(totalInvested, 4, java.math.RoundingMode.HALF_UP) * BigDecimal(100)).toFloat()
+        } else {
+            0f
+        }
+
+        return InvestmentInsights(
+            totalInvested = totalInvested,
+            transactionCount = count,
+            recurringCount = recurringCount,
+            largestInvestment = largestInvestment,
+            topCategory = topCategory,
+            topCategoryPercentage = topCategoryPercentage,
+            previousPeriodTotal = previousTotal,
+            deltaPercent = deltaPercent,
+            topMerchants = topMerchants,
+            currency = displayCurrency,
+        )
+    }
+
+    private suspend fun computePaymentModeBreakdown(
+        transactions: List<TransactionEntity>,
+        totalSpending: BigDecimal,
+        isUnified: Boolean,
+        displayCurrency: String,
+    ): PaymentModeBreakdown? {
+        val spendingTxs = transactions.filter {
+            !it.isExcludedFromTracking && it.matchesAnalyticsSpendingFilter()
+        }
+        if (spendingTxs.isEmpty()) return null
+
+        var creditTotal = BigDecimal.ZERO
+        var creditCount = 0
+        var bankTotal = BigDecimal.ZERO
+        var bankCount = 0
+        var cashTotal = BigDecimal.ZERO
+        var cashCount = 0
+
+        for (tx in spendingTxs) {
+            val mode = tx.paymentMode() ?: continue
+            val converted = convertAmount(tx.amount, tx.currency, displayCurrency, isUnified)
+            when (mode) {
+                PaymentMode.CREDIT_CARD -> {
+                    creditTotal += converted
+                    creditCount++
+                }
+                PaymentMode.BANK_ACCOUNT -> {
+                    bankTotal += converted
+                    bankCount++
+                }
+                PaymentMode.CASH -> {
+                    cashTotal += converted
+                    cashCount++
+                }
+            }
+        }
+
+        fun stat(mode: PaymentMode, total: BigDecimal, count: Int): PaymentModeStat? {
+            if (total <= BigDecimal.ZERO) return null
+            return PaymentModeStat(
+                mode = mode,
+                total = total,
+                transactionCount = count,
+                percentOfTotal = if (totalSpending > BigDecimal.ZERO) {
+                    (total.divide(totalSpending, 4, java.math.RoundingMode.HALF_UP) * BigDecimal(100)).toFloat()
+                } else {
+                    0f
+                },
+            )
+        }
+
+        val creditCard = stat(PaymentMode.CREDIT_CARD, creditTotal, creditCount)
+        val bankAccount = stat(PaymentMode.BANK_ACCOUNT, bankTotal, bankCount)
+        val cash = stat(PaymentMode.CASH, cashTotal, cashCount)
+
+        val cardAndBank = if (creditCard != null || bankAccount != null) {
+            val creditTotal = creditCard?.total ?: BigDecimal.ZERO
+            val bankTotal = bankAccount?.total ?: BigDecimal.ZERO
+            val combined = creditTotal + bankTotal
+            if (combined <= BigDecimal.ZERO) null else {
+                CardAndBankSpendSummary(
+                    total = combined,
+                    transactionCount = (creditCard?.transactionCount ?: 0) + (bankAccount?.transactionCount ?: 0),
+                    creditTotal = creditTotal,
+                    creditCount = creditCard?.transactionCount ?: 0,
+                    bankTotal = bankTotal,
+                    bankCount = bankAccount?.transactionCount ?: 0,
+                    percentOfSpending = if (totalSpending > BigDecimal.ZERO) {
+                        (combined.divide(totalSpending, 4, java.math.RoundingMode.HALF_UP) * BigDecimal(100)).toFloat()
+                    } else {
+                        0f
+                    },
+                )
+            }
+        } else {
+            null
+        }
+
+        if (cardAndBank == null && cash == null) return null
+
+        return PaymentModeBreakdown(
+            cardAndBank = cardAndBank,
+            cash = cash,
+            currency = displayCurrency,
+        )
+    }
+}
+
+private fun previousDateRange(start: LocalDate, end: LocalDate): Pair<LocalDate, LocalDate> {
+    val days = ChronoUnit.DAYS.between(start, end) + 1
+    val prevEnd = start.minusDays(1)
+    val prevStart = prevEnd.minusDays(days - 1)
+    return prevStart to prevEnd
 }
 
 /**
@@ -603,9 +971,61 @@ data class AnalyticsUiState(
     val isLoading: Boolean = true,
     val spendingTrend: List<BalancePoint> = emptyList(),
     val availableCategories: List<String> = emptyList(),
-    val categoryTrends: Map<String, List<BalancePoint>> = emptyMap(),
     val categoryOverlaps: List<CategoryOverlapData> = emptyList(),
-    val multiCategoryTransactions: List<MultiCategoryTransactionData> = emptyList()
+    val multiCategoryTransactions: List<MultiCategoryTransactionData> = emptyList(),
+    val topTags: List<TagData> = emptyList(),
+    val periodStart: LocalDate? = null,
+    val periodEnd: LocalDate? = null,
+    val periodOutflow: PeriodOutflowSummary? = null,
+    val investmentInsights: InvestmentInsights? = null,
+    val paymentModeBreakdown: PaymentModeBreakdown? = null,
+)
+
+/** Spending plus investments for the active period (independent of type filter). */
+data class PeriodOutflowSummary(
+    val total: BigDecimal,
+    val spending: BigDecimal,
+    val invested: BigDecimal,
+    val transactionCount: Int,
+    val spendingTransactionCount: Int,
+    val investmentTransactionCount: Int,
+    val currency: String,
+)
+
+data class InvestmentInsights(
+    val totalInvested: BigDecimal,
+    val transactionCount: Int,
+    val recurringCount: Int,
+    val largestInvestment: BigDecimal,
+    val topCategory: String?,
+    val topCategoryPercentage: Float,
+    val previousPeriodTotal: BigDecimal,
+    val deltaPercent: Float?,
+    val topMerchants: List<MerchantData>,
+    val currency: String,
+)
+
+data class PaymentModeStat(
+    val mode: PaymentMode,
+    val total: BigDecimal,
+    val transactionCount: Int,
+    val percentOfTotal: Float,
+)
+
+data class CardAndBankSpendSummary(
+    val total: BigDecimal,
+    val transactionCount: Int,
+    val creditTotal: BigDecimal,
+    val creditCount: Int,
+    val bankTotal: BigDecimal,
+    val bankCount: Int,
+    val percentOfSpending: Float,
+)
+
+data class PaymentModeBreakdown(
+    val cardAndBank: CardAndBankSpendSummary?,
+    val cash: PaymentModeStat?,
+    val currency: String,
 )
 
 data class CategoryData(
@@ -635,5 +1055,11 @@ data class MultiCategoryTransactionData(
     val dateTime: java.time.LocalDateTime,
     val categories: List<String>,
     val currency: String
+)
+
+data class TagData(
+    val name: String,
+    val transactionCount: Int,
+    val totalAmount: BigDecimal
 )
 

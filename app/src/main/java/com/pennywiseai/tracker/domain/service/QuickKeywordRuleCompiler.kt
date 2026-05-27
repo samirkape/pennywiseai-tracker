@@ -3,6 +3,7 @@ package com.pennywiseai.tracker.domain.service
 import com.pennywiseai.tracker.data.database.entity.TransactionType
 import com.pennywiseai.tracker.data.database.entity.TransferKind
 import com.pennywiseai.tracker.domain.model.QuickKeywordExpenseChannel
+import com.pennywiseai.tracker.domain.model.QuickKeywordMatchField
 import com.pennywiseai.tracker.domain.model.QuickKeywordTextMatchMode
 import com.pennywiseai.tracker.domain.model.rule.ActionType
 import com.pennywiseai.tracker.domain.model.rule.ConditionOperator
@@ -24,6 +25,7 @@ object QuickKeywordRuleCompiler {
         val name: String,
         val keywords: List<String>,
         val textMatchMode: QuickKeywordTextMatchMode = QuickKeywordTextMatchMode.DEFAULT,
+        val matchField: QuickKeywordMatchField = QuickKeywordMatchField.DEFAULT,
         /** Shown as the transaction merchant name in lists and detail. */
         val merchantLabel: String,
         /** Budget / analytics category bucket. */
@@ -39,6 +41,9 @@ object QuickKeywordRuleCompiler {
         val overwriteMerchant: Boolean = true,
         /** When true, set category on keyword-matched transactions. */
         val overwriteCategory: Boolean = true,
+        /** Tags to add (merged with existing tags, comma-separated storage). */
+        val tags: List<String> = emptyList(),
+        val overwriteTags: Boolean = false,
         /**
          * When true, set transaction type from the type filter (income → INCOME, expense → EXPENSE).
          * Matching uses keywords only so misclassified rows (e.g. salary as INVESTMENT) can be fixed.
@@ -53,10 +58,11 @@ object QuickKeywordRuleCompiler {
             name.isNotBlank() &&
                 keywords.isNotEmpty() &&
                 keywords.all { it.isNotBlank() } &&
-                merchantLabel.isNotBlank() &&
-                categoryLabel.isNotBlank() &&
-                (overwriteMerchant || overwriteCategory || overwriteTransactionType) &&
-                (!overwriteTransactionType || matchType != null)
+                (overwriteMerchant || overwriteCategory || overwriteTransactionType || overwriteTags) &&
+                (!overwriteMerchant || merchantLabel.isNotBlank()) &&
+                (!overwriteCategory || categoryLabel.isNotBlank()) &&
+                (!overwriteTransactionType || matchType != null) &&
+                (!overwriteTags || tags.isNotEmpty())
 
         /** Resolved type written when [overwriteTransactionType] is enabled. */
         fun resolvedOverwriteType(): TransactionType? = matchType
@@ -114,7 +120,9 @@ object QuickKeywordRuleCompiler {
 
     fun isQuickKeywordRule(rule: TransactionRule): Boolean =
         rule.description?.startsWith(MARKER) == true ||
-            rule.conditions.any { it.field == TransactionField.SEARCHABLE_TEXT }
+            rule.conditions.any {
+                QuickKeywordTextMatchMode.fromConditionOperator(it.operator) != null
+            }
 
     fun decompile(rule: TransactionRule): QuickKeywordRuleInput? {
         val metaLine = rule.description
@@ -139,6 +147,9 @@ object QuickKeywordRuleCompiler {
         var overwriteTransactionType = false
         var forceOverwriteExisting = false
         var textMatchMode = QuickKeywordTextMatchMode.DEFAULT
+        var matchField = QuickKeywordMatchField.DEFAULT
+        var tags = emptyList<String>()
+        var overwriteTags = false
         segments.drop(1).forEach { flag ->
             when {
                 flag.startsWith("matchType=", ignoreCase = true) -> {
@@ -168,6 +179,12 @@ object QuickKeywordRuleCompiler {
                 flag.equals("owMerchant=false", ignoreCase = true) -> overwriteMerchant = false
                 flag.equals("owCategory=true", ignoreCase = true) -> overwriteCategory = true
                 flag.equals("owCategory=false", ignoreCase = true) -> overwriteCategory = false
+                flag.equals("owTags=true", ignoreCase = true) -> overwriteTags = true
+                flag.equals("owTags=false", ignoreCase = true) -> overwriteTags = false
+                flag.startsWith("ruleTags=", ignoreCase = true) -> {
+                    val value = flag.substringAfter('=')
+                    tags = decodeKeywordsFromStorage(value)
+                }
                 flag.equals("owType=true", ignoreCase = true) -> overwriteTransactionType = true
                 flag.equals("owType=false", ignoreCase = true) -> overwriteTransactionType = false
                 flag.equals("forceOw=true", ignoreCase = true) -> forceOverwriteExisting = true
@@ -178,16 +195,37 @@ object QuickKeywordRuleCompiler {
                         QuickKeywordTextMatchMode.valueOf(value)
                     }.getOrDefault(QuickKeywordTextMatchMode.DEFAULT)
                 }
+                flag.startsWith("matchField=", ignoreCase = true) -> {
+                    val value = flag.substringAfter('=')
+                    matchField = runCatching {
+                        QuickKeywordMatchField.valueOf(value)
+                    }.getOrDefault(QuickKeywordMatchField.DEFAULT)
+                }
             }
         }
 
-        val keywordCondition = rule.conditions.firstOrNull {
-            it.field == TransactionField.SEARCHABLE_TEXT
+        val keywordCondition = rule.conditions.firstOrNull { condition ->
+            QuickKeywordTextMatchMode.fromConditionOperator(condition.operator) != null
         }
         keywordCondition?.let { condition ->
             QuickKeywordTextMatchMode.fromConditionOperator(condition.operator)?.let {
                 textMatchMode = it
             }
+            matchField = when (condition.field) {
+                TransactionField.MERCHANT -> QuickKeywordMatchField.MERCHANT
+                TransactionField.SMS_TEXT -> QuickKeywordMatchField.SMS_TEXT
+                TransactionField.NARRATION -> QuickKeywordMatchField.DESCRIPTION
+                TransactionField.TAGS -> QuickKeywordMatchField.TAGS
+                else -> QuickKeywordMatchField.ALL_TEXT
+            }
+        }
+
+        val tagActions = rule.actions.filter {
+            it.field == TransactionField.TAGS && it.actionType == ActionType.ADD_TAG
+        }
+        if (tagActions.isNotEmpty()) {
+            tags = tagActions.map { it.value.trim() }.filter { it.isNotEmpty() }
+            overwriteTags = true
         }
 
         val merchantLabel = rule.actions.firstOrNull {
@@ -201,8 +239,11 @@ object QuickKeywordRuleCompiler {
             name = rule.name,
             keywords = keywords,
             textMatchMode = textMatchMode,
+            matchField = matchField,
             merchantLabel = merchantLabel,
             categoryLabel = categoryLabel,
+            tags = tags,
+            overwriteTags = overwriteTags,
             matchType = matchType,
             matchExpenseChannel = matchExpenseChannel,
             matchTransferKind = matchTransferKind,
@@ -281,7 +322,7 @@ object QuickKeywordRuleCompiler {
             }
             add(
                 RuleCondition(
-                    field = TransactionField.SEARCHABLE_TEXT,
+                    field = input.matchField.toTransactionField(),
                     operator = input.textMatchMode.toConditionOperator(),
                     value = encodeKeywordsForStorage(input.keywords),
                 )
@@ -318,12 +359,26 @@ object QuickKeywordRuleCompiler {
                     )
                 }
             }
+            if (input.overwriteTags) {
+                input.tags.forEach { tag ->
+                    add(
+                        RuleAction(
+                            field = TransactionField.TAGS,
+                            actionType = ActionType.ADD_TAG,
+                            value = tag.trim(),
+                        ),
+                    )
+                }
+            }
         }
 
         val metaDescription = buildMetaDescription(input)
         val humanDescription = buildString {
             append("Keywords: ${input.keywords.joinToString(", ")}\n")
-            append("Match: ${QuickKeywordRuleMatcher.textMatchModeDescription(input.textMatchMode)}\n")
+            append(
+                "Match: ${QuickKeywordRuleMatcher.textMatchModeDescription(input.textMatchMode)} " +
+                    "in ${QuickKeywordRuleMatcher.matchFieldDescription(input.matchField)}\n",
+            )
             append("Sets merchant=\"${input.merchantLabel.trim()}\" category=\"${input.categoryLabel.trim()}\"")
         }
 
@@ -346,6 +401,9 @@ object QuickKeywordRuleCompiler {
             if (input.textMatchMode != QuickKeywordTextMatchMode.DEFAULT) {
                 add("textMatchMode=${input.textMatchMode.name}")
             }
+            if (input.matchField != QuickKeywordMatchField.DEFAULT) {
+                add("matchField=${input.matchField.name}")
+            }
             input.matchType?.let { add("matchType=${it.name}") }
             input.matchExpenseChannel?.let { add("matchExpenseChannel=${it.name}") }
             input.matchTransferKind?.let { add("matchTransferKind=$it") }
@@ -355,6 +413,10 @@ object QuickKeywordRuleCompiler {
             else add("uncategorizedOnly=false")
             if (input.overwriteMerchant) add("owMerchant=true") else add("owMerchant=false")
             if (input.overwriteCategory) add("owCategory=true") else add("owCategory=false")
+            if (input.overwriteTags) add("owTags=true") else add("owTags=false")
+            if (input.tags.isNotEmpty()) {
+                add("ruleTags=${encodeKeywordsForStorage(input.tags)}")
+            }
             if (input.overwriteTransactionType) add("owType=true") else add("owType=false")
             if (input.forceOverwriteExisting) add("forceOw=true") else add("forceOw=false")
         }

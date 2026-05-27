@@ -76,4 +76,49 @@ class MerchantNameMatcherTest {
             )
         )
     }
+
+    @Test
+    fun findSuggestions_returnsUpToThreeSortedByScore() {
+        val result = MerchantNameMatcher.findSuggestions(
+            query = "fss4firstcry",
+            aliasCandidates = listOf("fss4FIRSTCRY" to "Firstcry"),
+            merchantLabels = listOf("fss4firstcry", "Firstcry", "Swiggy", "Amazon"),
+        )
+
+        assertTrue(result.size <= MerchantNameMatcher.MAX_EDIT_SUGGESTIONS)
+        assertTrue(result.isNotEmpty())
+        assertEquals("Firstcry", result.first())
+        assertTrue(result.none { it.equals("fss4firstcry", ignoreCase = true) })
+    }
+
+    @Test
+    fun findSuggestions_excludesBelowSuggestionThreshold() {
+        val result = MerchantNameMatcher.findSuggestions(
+            query = "fss4firstcry",
+            aliasCandidates = emptyList(),
+            merchantLabels = listOf("Amazon"),
+        )
+
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun autocompleteMatches_prefersPrefixAndExcludesExactQuery() {
+        val result = MerchantNameMatcher.autocompleteMatches(
+            query = "ama",
+            knownMerchants = listOf("Amazon", "Amazon Pay", "Swiggy", "ama"),
+        )
+
+        assertEquals(listOf("Amazon", "Amazon Pay"), result)
+    }
+
+    @Test
+    fun autocompleteMatches_returnsEmptyForBlankQuery() {
+        assertTrue(
+            MerchantNameMatcher.autocompleteMatches(
+                query = "  ",
+                knownMerchants = listOf("Amazon"),
+            ).isEmpty()
+        )
+    }
 }

@@ -70,7 +70,7 @@ class FreeExchangeRateProvider @Inject constructor() : ExchangeRateProvider {
         return try {
             withContext(Dispatchers.IO) {
                 val response = client.get("https://open.er-api.com/v6/latest/${baseCurrency.uppercase()}") {
-                    header("User-Agent", "PennyWise/1.0")
+                    header("User-Agent", "Spendly/1.0")
                 }
 
                 val exchangeRateResponse: ExchangeRateApiResponse = response.body()

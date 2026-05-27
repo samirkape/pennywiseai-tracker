@@ -199,7 +199,7 @@ class BackupExporter @Inject constructor(
         val timestamp = LocalDateTime.now().format(
             DateTimeFormatter.ofPattern("yyyy_MM_dd_HHmmss")
         )
-        val fileName = "SpendTracker_PRO_Backup_$timestamp.pennywisebackup"
+        val fileName = "Spendly_Backup_$timestamp.pennywisebackup"
         
         return File(exportDir, fileName)
     }

@@ -1,5 +1,6 @@
 package com.pennywiseai.tracker.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
@@ -295,7 +296,7 @@ private fun RegularTopAppBar(
     hazeState: HazeState,
     blurEffects: Boolean = true
 ) {
-    BlurredAnimatedVisibility(
+    AnimatedVisibility(
         visible = collapsedFraction > 0.01f,
         enter = fadeIn(),
         exit = fadeOut()
@@ -352,7 +353,7 @@ private fun RegularTopAppBar(
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = userName.ifBlank { "SpendTracker PRO" },
+                            text = userName.ifBlank { "Spendly" },
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Start,

@@ -52,8 +52,8 @@ fun BlurredAnimatedVisibility(
     val blurRadius by transition.animateFloat(
         label = "blurRadius",
         transitionSpec = { tween(durationMillis = 300) }
-    ) { state ->
-        if (state && transition.currentState == transition.targetState) 0f else 5f
+    ) {
+        if (transition.isRunning) 5f else 0f
     }
 
     // For Android 12+, use the native RenderEffect
@@ -65,14 +65,14 @@ fun BlurredAnimatedVisibility(
             modifier = modifier
         ) {
             Box(
-                modifier = Modifier.graphicsLayer {
+                modifier = if (blurRadius > 0f) Modifier.graphicsLayer {
                     renderEffect = BlurEffect(
                         radiusX = blurRadius,
                         radiusY = blurRadius,
                         edgeTreatment = TileMode.Decal
                     )
                     alpha = 0.95f + (0.05f * (1f - blurRadius / 5f))
-                }
+                } else Modifier
             ) {
                 content()
             }

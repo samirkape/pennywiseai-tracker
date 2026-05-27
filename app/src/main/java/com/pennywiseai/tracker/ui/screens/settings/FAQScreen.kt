@@ -84,7 +84,7 @@ fun FAQScreen(
                     ),
                     FAQItem(
                         question = "What happens to unrecognized SMS?",
-                        answer = "They're saved in 'Unrecognized Messages' where you can manually review them or report them to help us improve parsing."
+                        answer = "They're saved in 'Unrecognized Messages'. Tap Add as transaction to create one manually from the SMS text, or report the message to help improve parsing."
                     ),
                     FAQItem(
                         question = "Why are some transactions duplicated?",

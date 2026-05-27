@@ -71,73 +71,71 @@ class SmsBroadcastReceiver : BroadcastReceiver() {
             }
         }
 
-        // Get the processor via Hilt EntryPoint
-        val entryPoint = EntryPointAccessors.fromApplication(
-            context.applicationContext,
-            SmsBroadcastReceiverEntryPoint::class.java
-        )
-        val processor = entryPoint.smsTransactionProcessor()
+        // Keep the process alive until async processing finishes (required on Android 8+).
+        val pendingResult = goAsync()
 
-        // Process each unique SMS
-        for ((sender, smsData) in smsMap) {
-            val body = smsData.body.toString()
-            val timestamp = smsData.timestamp
-            Log.d(TAG, "Received SMS from: $sender at timestamp: $timestamp")
+        receiverScope.launch {
+            try {
+                val entryPoint = EntryPointAccessors.fromApplication(
+                    context.applicationContext,
+                    SmsBroadcastReceiverEntryPoint::class.java
+                )
+                val processor = entryPoint.smsTransactionProcessor()
 
-            processIncomingSms(context, processor, sender, body, timestamp)
+                for ((sender, smsData) in smsMap) {
+                    val body = smsData.body.toString()
+                    val timestamp = smsData.timestamp
+                    Log.d(TAG, "Received SMS from: $sender at timestamp: $timestamp")
+                    processIncomingSms(context, processor, sender, body, timestamp)
+                }
+            } finally {
+                pendingResult.finish()
+            }
         }
     }
 
-    private fun processIncomingSms(
+    private suspend fun processIncomingSms(
         context: Context,
         processor: SmsTransactionProcessor,
         sender: String,
         body: String,
-        timestamp: Long
+        timestamp: Long,
     ) {
-        receiverScope.launch {
-            try {
-                // Use the shared processor to parse and save the transaction
-                val result = processor.processAndSaveTransaction(sender, body, timestamp)
+        try {
+            val result = processor.processAndSaveTransaction(sender, body, timestamp)
 
-                if (result.success && result.transactionId != null) {
-                    Log.d(TAG, "Transaction saved with ID: ${result.transactionId}")
+            if (result.success && result.transactionId != null) {
+                Log.d(TAG, "Transaction saved with ID: ${result.transactionId}")
 
-                    // Show notification if app is not in foreground
-                    if (!isAppInForeground(context)) {
-                        // Get transaction details for notification
-                        val parser = com.pennywiseai.parser.core.bank.BankParserFactory.getParser(sender)
-                        val parsedTransaction = parser?.parse(body, sender, timestamp)
+                if (!isAppInForeground(context)) {
+                    val parser = com.pennywiseai.parser.core.bank.BankParserFactory.getParser(sender, body)
+                    val parsedTransaction = parser?.parse(body, sender, timestamp)
 
-                        if (parsedTransaction != null) {
-                            // Get entry point to access repository
-                            val entryPoint = EntryPointAccessors.fromApplication(
-                                context.applicationContext,
-                                SmsBroadcastReceiverEntryPoint::class.java
-                            )
-                            val repository = entryPoint.transactionRepository()
+                    if (parsedTransaction != null) {
+                        val entryPoint = EntryPointAccessors.fromApplication(
+                            context.applicationContext,
+                            SmsBroadcastReceiverEntryPoint::class.java
+                        )
+                        val repository = entryPoint.transactionRepository()
+                        val savedTransaction = repository.getTransactionById(result.transactionId)
 
-                            // Fetch the saved transaction to get its category
-                            val savedTransaction = repository.getTransactionById(result.transactionId)
-
-                            showTransactionNotification(
-                                context = context,
-                                transactionId = result.transactionId,
-                                amount = parsedTransaction.amount.toString(),
-                                merchant = parsedTransaction.merchant ?: "Unknown",
-                                type = parsedTransaction.type.name,
-                                bankName = parsedTransaction.bankName ?: "Bank",
-                                category = savedTransaction?.category ?: "Others",
-                                repository = repository
-                            )
-                        }
+                        showTransactionNotification(
+                            context = context,
+                            transactionId = result.transactionId,
+                            amount = parsedTransaction.amount.toString(),
+                            merchant = parsedTransaction.merchant ?: "Unknown",
+                            type = parsedTransaction.type.name,
+                            bankName = parsedTransaction.bankName ?: "Bank",
+                            category = savedTransaction?.category ?: "Others",
+                            repository = repository,
+                        )
                     }
-                } else {
-                    Log.d(TAG, "Transaction not saved: ${result.reason}")
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error processing SMS", e)
+            } else {
+                Log.d(TAG, "Transaction not saved: ${result.reason}")
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error processing SMS", e)
         }
     }
 

@@ -78,12 +78,18 @@ class UnionBankParser : BaseIndianBankParser() {
     }
 
     override fun extractMerchant(message: String, sender: String): String? {
-        // Pattern 1: Mobile Banking - "by Mob Bk"
+        // Pattern 1: Beneficiary — "Fvg sRide" (favouring / payee on Mob Bk debits)
+        val fvgPattern = Regex("""Fvg\s+([^.\n]+?)(?:\s+Avl|\s*\.|$)""", RegexOption.IGNORE_CASE)
+        fvgPattern.find(message)?.let { match ->
+            return cleanMerchantName(match.groupValues[1].trim())
+        }
+
+        // Pattern 2: Mobile Banking - "by Mob Bk" (no named beneficiary)
         if (message.contains("Mob Bk", ignoreCase = true)) {
             return "Mobile Banking Transfer"
         }
 
-        // Pattern 2: ATM transactions
+        // Pattern 3: ATM transactions
         if (message.contains("ATM", ignoreCase = true)) {
             val atmPattern = Regex(
                 """at\s+([^.\s]+(?:\s+[^.\s]+)*)(?:\s+on|\s+Avl|$)""",

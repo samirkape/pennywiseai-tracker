@@ -5,7 +5,10 @@ package com.pennywiseai.tracker.utils
  */
 object MerchantNameMatcher {
 
-    const val MATCH_THRESHOLD = 0.90
+    const val MATCH_THRESHOLD = 0.75
+    const val SUGGESTION_THRESHOLD = 0.60
+    const val MAX_EDIT_SUGGESTIONS = 3
+    const val MAX_AUTOCOMPLETE_SUGGESTIONS = 8
 
     private const val WEIGHT_JARO_WINKLER = 0.45
     private const val WEIGHT_CONTAINMENT = 0.35
@@ -87,6 +90,76 @@ object MerchantNameMatcher {
             }
         }
         return bestLabel
+    }
+
+    /**
+     * Returns known merchant labels whose name contains [query] (case-insensitive),
+     * preferring prefix matches, then shorter names.
+     */
+    fun autocompleteMatches(
+        query: String,
+        knownMerchants: List<String>,
+        limit: Int = MAX_AUTOCOMPLETE_SUGGESTIONS,
+    ): List<String> {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return emptyList()
+
+        return knownMerchants
+            .asSequence()
+            .filter { !it.equals(trimmed, ignoreCase = true) }
+            .filter { it.contains(trimmed, ignoreCase = true) }
+            .sortedWith(
+                compareBy<String>(
+                    { !it.startsWith(trimmed, ignoreCase = true) },
+                    { it.length },
+                    { it.lowercase() },
+                )
+            )
+            .distinctBy { it.lowercase() }
+            .take(limit)
+            .toList()
+    }
+
+    /**
+     * Returns up to [MAX_EDIT_SUGGESTIONS] display names from alias pairs and merchant labels
+     * with weighted score >= [SUGGESTION_THRESHOLD], best match first.
+     */
+    fun findSuggestions(
+        query: String,
+        aliasCandidates: List<Pair<String, String>>,
+        merchantLabels: List<String>,
+        limit: Int = MAX_EDIT_SUGGESTIONS,
+        minScore: Double = SUGGESTION_THRESHOLD,
+    ): List<String> {
+        val source = query.trim()
+        if (source.isEmpty()) return emptyList()
+
+        val scored = mutableListOf<Pair<String, Double>>()
+
+        for ((candidateSource, displayName) in aliasCandidates) {
+            if (displayName.equals(source, ignoreCase = true)) continue
+            val score = weightedSimilarity(source, candidateSource)
+            if (score >= minScore) {
+                scored.add(displayName to score)
+            }
+        }
+
+        for (merchant in merchantLabels) {
+            if (merchant.equals(source, ignoreCase = true)) continue
+            val score = weightedSimilarity(source, merchant)
+            if (score >= minScore) {
+                scored.add(merchant to score)
+            }
+        }
+
+        return scored
+            .sortedWith(
+                compareByDescending<Pair<String, Double>> { it.second }
+                    .thenBy { it.first.lowercase() }
+            )
+            .distinctBy { it.first.lowercase() }
+            .take(limit)
+            .map { it.first }
     }
 
     private fun normalizeAlphanumeric(value: String): String =

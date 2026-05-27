@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">SpendTracker PRO</string>
+    <string name="app_name">Spendly</string>
     <string name="widget_name_budget">Budget Overview</string>
     <string name="widget_description_budget">Shows your monthly budget progress, savings, and daily allowance at a glance.</string>
     <string name="widget_loading">Loading widget…</string>
@@ -69,13 +69,57 @@
     <string name="merchant_rename_review_apply_all">Apply to all remaining (%1$d)</string>
     <string name="merchant_rename_review_applying">Updating transactions…</string>
 
+    <!-- Merchant alias settings -->
+    <string name="merchant_alias_edit_title">Edit mapping</string>
+    <string name="merchant_alias_add_title">Add mapping</string>
+    <string name="merchant_alias_source_label">SMS label</string>
+    <string name="merchant_alias_source_hint">Text from bank SMS before renaming</string>
+    <string name="merchant_alias_display_label">Display name</string>
+    <string name="merchant_alias_display_hint">Name shown on transactions</string>
+    <string name="merchant_alias_save">Save</string>
+    <string name="merchant_alias_edit_cd">Edit mapping</string>
+    <string name="merchant_alias_add_cd">Add mapping</string>
+
+    <string name="future_parsing_prompt_title">Remember for future SMS?</string>
+    <string name="future_parsing_prompt_both">When SMS looks like \"%1$s\", use merchant \"%2$s\" and category \"%3$s\".</string>
+    <string name="future_parsing_prompt_merchant">When SMS looks like \"%1$s\", use merchant \"%2$s\" (category: %3$s).</string>
+    <string name="future_parsing_prompt_category">For \"%1$s\", always use category \"%2$s\" on new SMS transactions.</string>
+    <string name="future_parsing_prompt_confirm">Yes, remember</string>
+    <string name="future_parsing_prompt_dismiss">Not now</string>
+
     <!-- Quick keyword rules -->
     <string name="quick_keyword_rules_title">Keyword rules</string>
     <string name="quick_keyword_rules_entry_subtitle">Match any text in SMS or merchant to a label</string>
     <string name="quick_keyword_add_title">Add keyword rule</string>
     <string name="quick_keyword_edit_title">Edit keyword rule</string>
     <string name="quick_keyword_save">Save</string>
-    <string name="quick_keyword_form_hint">Keywords are matched using your chosen text match mode against the full SMS from scan, merchant, bank, sender, reference, and description.</string>
+    <string name="quick_keyword_section_when_matches">When text matches</string>
+    <string name="quick_keyword_section_set_on_match">Set on matched transaction</string>
+    <string name="quick_keyword_section_set_on_match_hint">Same fields as transaction edit — choose what to update.</string>
+    <string name="quick_keyword_set_merchant_chip">Merchant</string>
+    <string name="quick_keyword_set_category_chip">Category</string>
+    <string name="quick_keyword_set_type_chip">Type</string>
+    <string name="quick_keyword_match_field_title">Search in</string>
+    <string name="quick_keyword_match_field_all">All fields</string>
+    <string name="quick_keyword_match_field_sms">SMS only</string>
+    <string name="quick_keyword_match_field_merchant">Merchant only</string>
+    <string name="quick_keyword_match_field_description">Description only</string>
+    <string name="quick_keyword_match_field_tags">Tags only</string>
+    <string name="quick_keyword_your_categories">Your categories</string>
+    <string name="quick_keyword_category_picker_hint">Tap a category you already use, or type a new one.</string>
+    <string name="quick_keyword_category_list">List</string>
+    <string name="quick_keyword_set_tags_chip">Tags</string>
+    <string name="quick_keyword_tags_title">Tags</string>
+    <string name="quick_keyword_tags_hint">Free-form labels for search and organization. They do not affect budgets.</string>
+    <string name="quick_keyword_tags_used_label">Tags you have used before</string>
+    <string name="quick_keyword_tags_add_placeholder">Add tag…</string>
+    <string name="quick_keyword_tags_add_button">Add</string>
+    <string name="quick_keyword_remove_tag">Remove tag</string>
+    <string name="quick_keyword_type_account_hint">Account expense excludes credit card transactions — try Any type or Credit card under Expense.</string>
+    <string name="quick_keyword_live_match_stats">%1$d of %2$d match keywords (%3$d would update). Rejected: type %4$d, no keyword %5$d, already labeled %6$d. Logcat: QuickKeywordRule</string>
+    <string name="quick_keyword_live_match_debug_hint">Filter adb logcat by QuickKeywordRule for sample rejection reasons.</string>
+    <string name="quick_keyword_batch_confirm_zero_matches">No keyword matches in %1$d transactions (type filter: %2$d, no keyword: %3$d, empty text: %4$d, already labeled: %5$d).</string>
+    <string name="quick_keyword_batch_confirm_zero_logcat">Check Logcat tag QuickKeywordRule for scanPool sample lines.</string>
     <string name="quick_keyword_rule_name">Rule name (for you)</string>
     <string name="quick_keyword_rule_name_hint">e.g. Salary rule</string>
     <string name="quick_keyword_merchant_label">Merchant name on transaction</string>
@@ -84,7 +128,7 @@
     <string name="quick_keyword_category_hint">Used for budgets and charts — e.g. Salary</string>
     <string name="quick_keyword_effect_preview_title">When a keyword matches</string>
     <string name="quick_keyword_effect_preview_body">Merchant name → %1$s\nCategory → %2$s\n%3$s</string>
-    <string name="quick_keyword_type_income">Income or credit</string>
+    <string name="quick_keyword_type_income">Income or credit card</string>
     <string name="quick_keyword_keywords_label">Keywords</string>
     <string name="quick_keyword_keywords_hint">swiggy\nAMZN\nUPI/123456789</string>
     <string name="quick_keyword_keywords_supporting">Separate with commas, semicolons, or new lines. Quote a phrase that contains a comma.</string>
@@ -117,14 +161,14 @@
     <string name="quick_keyword_type_expense">Expense only</string>
     <string name="quick_keyword_type_filter_hint">Leave on Any type unless you need to narrow matches (e.g. income-only for payroll keywords).</string>
     <string name="quick_keyword_active_title">Enable rule</string>
-    <string name="quick_keyword_validation_error">Enter a rule name, at least one keyword, merchant name, and category.</string>
+    <string name="quick_keyword_validation_error">Enter a rule name, at least one keyword, and at least one field to set (merchant, category, or type).</string>
     <string name="quick_keyword_info_title">Keyword matching</string>
     <string name="quick_keyword_info_body">Choose how keywords match SMS and parsed fields—contains, starts with, is exactly, and more. New SMS transactions are labeled automatically.</string>
     <string name="quick_keyword_empty">No keyword rules yet. Tap + to add one.</string>
     <string name="quick_keyword_section_active">Your keyword rules</string>
     <string name="quick_keyword_footer">Keyword rules run with Smart Rules. Higher priority (lower number) runs first.</string>
     <string name="quick_keyword_card_summary">Keywords: %1$s → merchant %2$s, category %3$s</string>
-    <string name="quick_keyword_badge_income_only">Income or credit only</string>
+    <string name="quick_keyword_badge_income_only">Income or credit card only</string>
     <string name="quick_keyword_badge_expense_only">Expense transactions only</string>
     <string name="quick_keyword_menu_edit">Edit</string>
     <string name="quick_keyword_menu_apply">Apply to past transactions</string>
@@ -190,10 +234,62 @@
     <string name="quick_keyword_batch_field_merchant">Merchant</string>
     <string name="quick_keyword_batch_field_category">Category</string>
     <string name="quick_keyword_batch_field_type">Type</string>
+    <string name="quick_keyword_batch_field_tags">Tags</string>
     <string name="quick_keyword_batch_preparing">Scanning transactions…</string>
     <string name="quick_keyword_undo_snackbar">Updated %1$d transactions. Undo available for %2$d min.</string>
     <string name="quick_keyword_undo_action">Undo</string>
     <string name="quick_keyword_undo_success">Changes reverted</string>
     <string name="quick_keyword_undo_expired">Undo window expired</string>
     <string name="quick_keyword_run_result_undo">Undo (%1$d min left)</string>
+
+    <!-- Backup restore -->
+    <string name="backup_restore_dialog_title">Restore backup</string>
+    <string name="backup_restore_dialog_hint">Choose how to apply this backup file.</string>
+    <string name="backup_restore_merge_title">Merge with existing data</string>
+    <string name="backup_restore_merge_hint">Adds new records and skips duplicates. Keeps your current data.</string>
+    <string name="backup_restore_overwrite_title">Overwrite all data</string>
+    <string name="backup_restore_overwrite_hint">Replaces all local data with the backup. This cannot be undone.</string>
+    <string name="backup_restore_confirm">Restore</string>
+    <string name="backup_restore_importing">Importing backup…</string>
+    <string name="backup_restore_success_merge">Import successful! Added %1$d transactions and %2$d categories. Skipped %3$d duplicates.</string>
+    <string name="backup_restore_success_overwrite">Restore complete! Replaced local data with %1$d transactions and %2$d categories from the backup.</string>
+
+    <!-- Home hero & summary -->
+    <string name="home_spent_so_far">Spent so far</string>
+    <string name="home_percent_of_income">%1$d%% of income</string>
+    <string name="home_remaining">%1$s left</string>
+    <string name="home_currency_section">Currency</string>
+    <string name="home_summary_income">Income</string>
+    <string name="home_summary_pace">Pace</string>
+    <string name="home_pace_on_track">on track</string>
+    <string name="home_pace_above_last">above last</string>
+    <string name="home_income_today_none">this period</string>
+    <string name="home_income_today_one">+1 today</string>
+    <string name="home_income_today_many">+%1$d today</string>
+    <string name="home_top_category_unknown">—</string>
+    <string name="home_top_category_empty">no spend yet</string>
+    <string name="home_top_category_sub">%1$d%% · %2$s</string>
+    <string name="home_search">Search</string>
+    <string name="home_period_day">Day %1$d of %2$d</string>
+    <string name="home_hero_page_spend">Spend</string>
+    <string name="home_hero_page_outflow">Outflow</string>
+    <string name="home_total_outflow">Total outflow</string>
+    <string name="home_incl_investments">incl. investments</string>
+    <string name="home_spending_portion_label">Spending</string>
+    <string name="home_invested_portion_label">Invested</string>
+    <string name="home_actions_title">Quick actions</string>
+    <string name="home_action_refresh">Refresh</string>
+    <string name="home_action_refresh_subtitle">Scan SMS for new transactions</string>
+    <string name="home_action_add">Add transaction</string>
+    <string name="home_action_search">Search transactions</string>
+    <string name="home_action_budgets">Budgets</string>
+    <string name="home_action_analytics">Analytics</string>
+    <string name="home_action_full_resync">Full resync</string>
+    <string name="home_action_full_resync_subtitle">Reprocess all SMS from scratch</string>
+    <string name="home_actions_fab">Quick actions</string>
+
+    <!-- Home activity feed -->
+    <string name="home_feed_today">Today</string>
+    <string name="home_feed_empty_today_headline">No transactions today</string>
+    <string name="home_feed_empty_today_description">No transactions recorded yet today. Scan your SMS to import them automatically.</string>
 </resources>

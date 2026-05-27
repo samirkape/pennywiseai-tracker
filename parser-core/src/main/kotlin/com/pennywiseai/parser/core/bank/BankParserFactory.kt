@@ -110,9 +110,17 @@ object BankParserFactory {
 
     /**
      * Returns the appropriate bank parser for the given sender.
-     * Returns null if no specific parser is found.
+     * When [smsBody] is provided, falls back to body signatures for banks whose DLT sender
+     * id may not match (e.g. Union Bank of India footer in message text).
      */
-    fun getParser(sender: String): BankParser? {
+    fun getParser(sender: String, smsBody: String? = null): BankParser? {
+        // Body signatures first — some banks use numeric senders that other parsers
+        // also claim (e.g. Everest Bank matches any 7–10 digit sender id).
+        if (!smsBody.isNullOrBlank()) {
+            if (smsBody.contains("Union Bank of India", ignoreCase = true)) {
+                parsers.filterIsInstance<UnionBankParser>().firstOrNull()?.let { return it }
+            }
+        }
         return parsers.firstOrNull { it.canHandle(sender) }
     }
 

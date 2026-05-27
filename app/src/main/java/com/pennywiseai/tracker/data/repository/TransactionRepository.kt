@@ -194,7 +194,9 @@ class TransactionRepository @Inject constructor(
     }
     
     suspend fun getOtherTransactionCountForMerchant(merchantName: String, excludeId: Long): Int {
-        return transactionDao.getTransactionCountForMerchant(merchantName, excludeId)
+        val trimmed = merchantName.trim()
+        if (trimmed.isEmpty()) return 0
+        return transactionDao.getActiveTransactionCountForMerchant(trimmed, excludeId)
     }
 
     suspend fun findSimilarTransactionsForRename(

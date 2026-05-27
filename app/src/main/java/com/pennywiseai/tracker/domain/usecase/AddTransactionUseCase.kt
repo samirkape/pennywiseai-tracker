@@ -9,6 +9,9 @@ import com.pennywiseai.tracker.data.database.entity.TransactionType
 import com.pennywiseai.tracker.data.repository.AccountBalanceRepository
 import com.pennywiseai.tracker.data.repository.SubscriptionRepository
 import com.pennywiseai.tracker.data.repository.TransactionRepository
+import com.pennywiseai.tracker.domain.repository.RuleRepository
+import com.pennywiseai.tracker.domain.service.RuleEngine
+import com.pennywiseai.tracker.utils.UnrecognizedSmsPrefillParser
 import java.math.BigDecimal
 import java.security.MessageDigest
 import java.time.LocalDateTime
@@ -18,7 +21,9 @@ class AddTransactionUseCase @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val subscriptionRepository: SubscriptionRepository,
     private val accountBalanceRepository: AccountBalanceRepository,
-    private val creditCardPaymentLinker: CreditCardPaymentLinker
+    private val creditCardPaymentLinker: CreditCardPaymentLinker,
+    private val ruleRepository: RuleRepository,
+    private val ruleEngine: RuleEngine,
 ) {
     suspend fun execute(
         amount: BigDecimal,
@@ -33,15 +38,25 @@ class AddTransactionUseCase @Inject constructor(
         currency: String = "INR",
         receiptPaths: List<String> = emptyList(),
         budgetCategory: String? = null,
-        budgetImpactType: BudgetImpactType? = null
+        budgetImpactType: BudgetImpactType? = null,
+        smsBody: String? = null,
+        smsSender: String? = null,
     ): Long {
-        // Generate a unique hash for manual transactions
-        val transactionHash = generateManualTransactionHash(
-            amount = amount,
-            merchant = merchant,
-            date = date
-        )
-        
+        val transactionHash = if (!smsBody.isNullOrBlank() && !smsSender.isNullOrBlank()) {
+            generateSmsBackedTransactionHash(smsSender, smsBody)
+        } else {
+            generateManualTransactionHash(
+                amount = amount,
+                merchant = merchant,
+                date = date,
+            )
+        }
+
+        val existing = transactionRepository.getTransactionByHash(transactionHash)
+        if (existing != null && !existing.isDeleted) {
+            return existing.id
+        }
+
         // Create the transaction entity
         val transaction = TransactionEntity(
             amount = amount,
@@ -50,9 +65,10 @@ class AddTransactionUseCase @Inject constructor(
             transactionType = type,
             dateTime = date,
             description = notes,
-            smsBody = null, // null indicates manual entry
-            bankName = bankName ?: "Manual Entry",
-            smsSender = null, // null indicates manual entry
+            smsBody = smsBody,
+            bankName = bankName ?: smsSender?.let { UnrecognizedSmsPrefillParser.inferBankFromSender(it) }
+                ?: "Manual Entry",
+            smsSender = smsSender,
             accountNumber = accountLast4,
             balanceAfter = null,
             transactionHash = transactionHash,
@@ -62,11 +78,20 @@ class AddTransactionUseCase @Inject constructor(
             updatedAt = LocalDateTime.now(),
             receiptPath = null,
             budgetCategory = budgetCategory,
-            budgetImpactType = budgetImpactType
+            budgetImpactType = budgetImpactType,
         )
 
         // Insert the transaction
-        val transactionId = transactionRepository.insertTransaction(transaction)
+        var transactionId = transactionRepository.insertTransaction(transaction)
+
+        if (transactionId != -1L && !smsBody.isNullOrBlank()) {
+            val saved = transaction.copy(id = transactionId)
+            val activeRules = ruleRepository.getActiveRulesByType(saved.transactionType)
+            val (withRules, _) = ruleEngine.evaluateRules(saved, smsBody, activeRules)
+            if (withRules != saved) {
+                transactionRepository.updateTransaction(withRules)
+            }
+        }
 
         // Insert receipt images into the new receipts table
         if (transactionId != -1L && receiptPaths.isNotEmpty()) {
@@ -147,6 +172,13 @@ class AddTransactionUseCase @Inject constructor(
                 )
             )
         }
+    }
+
+    private fun generateSmsBackedTransactionHash(sender: String, smsBody: String): String {
+        val data = "SMS_${sender}_${smsBody}"
+        return MessageDigest.getInstance("MD5")
+            .digest(data.toByteArray())
+            .joinToString("") { "%02x".format(it) }
     }
 
     private fun generateManualTransactionHash(

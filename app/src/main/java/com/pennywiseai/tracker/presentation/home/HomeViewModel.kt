@@ -1,15 +1,15 @@
 package com.pennywiseai.tracker.presentation.home
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.util.Log
+import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkInfo
-import androidx.work.workDataOf
 import com.pennywiseai.tracker.data.database.entity.AccountBalanceEntity
 import com.pennywiseai.tracker.data.database.entity.ProfileEntity
 import com.pennywiseai.tracker.data.database.entity.SubscriptionEntity
@@ -30,6 +30,7 @@ import com.pennywiseai.tracker.data.repository.LoanRepository
 import com.pennywiseai.tracker.data.repository.SubscriptionRepository
 import com.pennywiseai.tracker.data.repository.TransactionGroupRepository
 import com.pennywiseai.tracker.data.repository.SalaryMonthOverrideRepository
+import com.pennywiseai.tracker.data.manager.SmsScanManager
 import com.pennywiseai.tracker.data.repository.TransactionRepository
 import com.pennywiseai.tracker.worker.OptimizedSmsReaderWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -48,6 +49,9 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import com.pennywiseai.tracker.R
+import com.pennywiseai.tracker.domain.service.SalaryPayPeriodDetector
+import com.pennywiseai.tracker.utils.CurrencyFormatter
 import com.pennywiseai.tracker.utils.DateRangeUtils
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -71,6 +75,7 @@ class HomeViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val inAppUpdateManager: InAppUpdateManager,
     private val inAppReviewManager: InAppReviewManager,
+    private val smsScanManager: SmsScanManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     
@@ -148,6 +153,26 @@ class HomeViewModel @Inject constructor(
         loadBaseCurrency()
         observeSelectedProfile()
         observeProfiles()
+        observePayPeriodSuggestion()
+    }
+
+    fun acceptPayPeriodSuggestion() {
+        val suggestion = _uiState.value.payPeriodSuggestion ?: return
+        viewModelScope.launch {
+            salaryMonthOverrideRepository.setOverride(
+                suggestion.yearMonth.toString(),
+                suggestion.suggestedDay,
+            )
+            _uiState.value = _uiState.value.copy(payPeriodSuggestion = null)
+        }
+    }
+
+    fun dismissPayPeriodSuggestion() {
+        val suggestion = _uiState.value.payPeriodSuggestion ?: return
+        viewModelScope.launch {
+            userPreferencesRepository.dismissSalarySuggestion(suggestion.dismissToken)
+            _uiState.value = _uiState.value.copy(payPeriodSuggestion = null)
+        }
     }
 
     fun toggleSpendingMonthMode() {
@@ -155,6 +180,47 @@ class HomeViewModel @Inject constructor(
             userPreferencesRepository.updateUseFinancialMonth(!_uiState.value.useFinancialMonth)
         }
     }
+
+    private fun observePayPeriodSuggestion() {
+        combine(
+            userPreferencesRepository.useFinancialMonth,
+            userPreferencesRepository.monthStartDay,
+            userPreferencesRepository.useFixedBudgetPeriodEnd,
+            salaryMonthOverrideRepository.overridesMap,
+            userPreferencesRepository.dismissedSalarySuggestions,
+        ) { useFinancial, startDay, useFixedEnd, overrides, dismissed ->
+            PayPeriodSuggestionInputs(useFinancial, startDay, useFixedEnd, overrides, dismissed)
+        }.flatMapLatest { inputs ->
+            if (!inputs.useFinancialMonth) {
+                flowOf(null)
+            } else {
+                val today = LocalDate.now()
+                val monthStart = YearMonth.from(today).atDay(1)
+                transactionRepository.getTransactionsBetweenDates(monthStart, today)
+                    .map { transactions ->
+                        SalaryPayPeriodDetector.findSuggestion(
+                            transactions = transactions,
+                            today = today,
+                            useFinancialMonth = inputs.useFinancialMonth,
+                            useFixedBudgetPeriodEnd = inputs.useFixedEnd,
+                            defaultStartDay = inputs.defaultStartDay,
+                            overrides = inputs.overrides,
+                            dismissedTokens = inputs.dismissed,
+                        )
+                    }
+            }
+        }.onEach { suggestion ->
+            _uiState.value = _uiState.value.copy(payPeriodSuggestion = suggestion)
+        }.launchIn(viewModelScope)
+    }
+
+    private data class PayPeriodSuggestionInputs(
+        val useFinancialMonth: Boolean,
+        val defaultStartDay: Int,
+        val useFixedEnd: Boolean,
+        val overrides: Map<String, Int>,
+        val dismissed: Set<String>,
+    )
 
     private fun loadUserName() {
         userPreferencesRepository.userPreferences
@@ -305,9 +371,12 @@ class HomeViewModel @Inject constructor(
             } else {
                 YearMonth.from(now).format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy"))
             }
+            val periodEnd = if (useFinancial) financialEnd else now.withDayOfMonth(now.lengthOfMonth())
+            val periodDayLabel = formatPeriodDayLabel(spendingStart, periodEnd, now)
             _uiState.value = _uiState.value.copy(
                 spendingPeriodLabel = spendingPeriodLabel,
-                useFinancialMonth = useFinancial
+                useFinancialMonth = useFinancial,
+                periodDayLabel = periodDayLabel,
             )
             val prevFinancialEnd = financialStart.minusDays(1)
             val (prevFinancialStart, _) = budgetPeriodRange(prevFinancialEnd)
@@ -431,11 +500,11 @@ class HomeViewModel @Inject constructor(
         }
 
         launch {
-            // Load current month transactions by type (currency-filtered, business-filtered)
+            // Investment / transfer totals for the active spending period (matches hero spend range)
             combine(
                 transactionRepository.getTransactionsBetweenDates(
-                    startDate = financialStart,
-                    endDate = financialEnd
+                    startDate = spendingStart,
+                    endDate = now,
                 ),
                 userPreferencesRepository.selectedProfileId,
                 _cachedAccountBalances.filterNotNull()
@@ -549,10 +618,45 @@ class HomeViewModel @Inject constructor(
                     dayCount++
                 }
 
+                val useFinancial = _uiState.value.useFinancialMonth
+                val periodStart = if (useFinancial) financialStart else now.withDayOfMonth(1)
+                val periodEnd = if (useFinancial) {
+                    financialEnd
+                } else {
+                    now.withDayOfMonth(now.lengthOfMonth())
+                }
+                val periodTxs = allTransactions.filter { tx ->
+                    val day = tx.dateTime.toLocalDate()
+                    !day.isBefore(periodStart) && !day.isAfter(now)
+                }
+                val periodSpendingTxs = if (isUnified) {
+                    periodTxs.filter(isSpending)
+                } else {
+                    periodTxs.filter { isSpending(it) && it.currency == selectedCurrency }
+                }
+                val currentSpendTotal = cumulativeList.lastOrNull() ?: BigDecimal.ZERO
+                val lastSpendTotal = lastMonthCumulative.lastOrNull() ?: BigDecimal.ZERO
+                val stripLabels = computeHomeStripLabels(
+                    periodTransactions = periodTxs,
+                    spendingTransactions = periodSpendingTxs,
+                    periodStart = periodStart,
+                    periodEnd = periodEnd,
+                    now = now,
+                    selectedCurrency = selectedCurrency,
+                    isUnified = isUnified,
+                    totalExpenses = currentSpendTotal,
+                    spendingIncreased = currentSpendTotal >= lastSpendTotal,
+                )
                 _uiState.value = _uiState.value.copy(
                     spendingHistory = cumulativeList,
                     balanceHistory = cumulativeList,
-                    lastMonthSpendingHistory = lastMonthCumulative
+                    lastMonthSpendingHistory = lastMonthCumulative,
+                    periodDayLabel = formatPeriodDayLabel(financialStart, periodEnd, now),
+                    incomeTodayLabel = stripLabels.incomeTodayLabel,
+                    topCategoryName = stripLabels.topCategoryName,
+                    topCategorySubLabel = stripLabels.topCategorySubLabel,
+                    dailyAverageLabel = stripLabels.dailyAverageLabel,
+                    paceLabel = stripLabels.paceLabel,
                 )
                 calculateMonthlyChange()
             }
@@ -649,7 +753,7 @@ class HomeViewModel @Inject constructor(
                 combine(
                     combine(
                         transactionGroupRepository.getUngroupedTransactionsForDate(date),
-                        _cachedAccountBalances
+                        _cachedAccountBalances,
                     ) { ungrouped, balances ->
                         val profileId = _uiState.value.selectedProfileId
                         val keys = buildProfileAccountKeys(balances ?: emptyList())
@@ -658,7 +762,7 @@ class HomeViewModel @Inject constructor(
                     },
                     combine(
                         rawGroupsFlow,
-                        _cachedAccountBalances
+                        _cachedAccountBalances,
                     ) { groupPairs, balances ->
                         val profileId = _uiState.value.selectedProfileId
                         val keys = buildProfileAccountKeys(balances ?: emptyList())
@@ -670,26 +774,36 @@ class HomeViewModel @Inject constructor(
                         }
                     },
                     userPreferencesRepository.unifiedCurrencyMode,
-                    userPreferencesRepository.displayCurrency
+                    userPreferencesRepository.displayCurrency,
                 ) { singles, groups, isUnified, displayCurrency ->
-                    val merged = (singles + groups)
-                        .sortedByDescending { it.sortTime }
+                    val merged = (singles + groups).sortedByDescending { it.sortTime }
 
                     if (!isUnified) return@combine merged
 
                     merged.map { item ->
                         when (item) {
                             is HomeRecentItem.SingleTransaction -> {
-                                val converted = if (!item.transaction.currency.equals(displayCurrency, ignoreCase = true))
-                                    currencyConversionService.convertAmount(item.transaction.amount, item.transaction.currency, displayCurrency)
-                                else null
+                                val converted =
+                                    if (!item.transaction.currency.equals(displayCurrency, ignoreCase = true)) {
+                                        currencyConversionService.convertAmount(
+                                            item.transaction.amount,
+                                            item.transaction.currency,
+                                            displayCurrency,
+                                        )
+                                    } else {
+                                        null
+                                    }
                                 item.copy(convertedAmount = converted)
                             }
                             is HomeRecentItem.GroupItem -> {
                                 val amounts = item.transactions
                                     .filter { !it.currency.equals(displayCurrency, ignoreCase = true) }
                                     .associate { tx ->
-                                        tx.id to currencyConversionService.convertAmount(tx.amount, tx.currency, displayCurrency)
+                                        tx.id to currencyConversionService.convertAmount(
+                                            tx.amount,
+                                            tx.currency,
+                                            displayCurrency,
+                                        )
                                     }
                                 item.copy(convertedAmounts = amounts)
                             }
@@ -867,33 +981,35 @@ class HomeViewModel @Inject constructor(
     }
 
     /**
+     * Background incremental scan on app launch / resume. Throttled and will not cancel an
+     * in-flight manual scan (uses [ExistingWorkPolicy.KEEP]).
+     */
+    fun autoScanIfNeeded() {
+        if (!hasSmsReadPermission()) return
+        if (smsScanManager.scheduleIncrementalScan(replaceExisting = false)) {
+            _uiState.value = _uiState.value.copy(isScanning = true)
+            observeWorkProgress()
+        }
+    }
+
+    /**
      * Scans SMS messages for transactions.
      * @param forceResync If true, performs a full resync from scratch, reprocessing all SMS messages.
      *                    This is useful when bank parsers have been updated and old transactions need to be re-parsed.
      *                    If false (default), performs an incremental scan for new messages only.
      */
     fun scanSmsMessages(forceResync: Boolean = false) {
-        val inputData = workDataOf(
-            OptimizedSmsReaderWorker.INPUT_FORCE_RESYNC to forceResync
+        smsScanManager.scheduleIncrementalScan(
+            forceResync = forceResync,
+            replaceExisting = true,
         )
-
-        val workRequest = OneTimeWorkRequestBuilder<OptimizedSmsReaderWorker>()
-            .setInputData(inputData)
-            .addTag(OptimizedSmsReaderWorker.WORK_NAME)
-            .build()
-
-        WorkManager.getInstance(context).enqueueUniqueWork(
-            OptimizedSmsReaderWorker.WORK_NAME,
-            ExistingWorkPolicy.REPLACE,
-            workRequest
-        )
-
-        // Update UI to show scanning
         _uiState.value = _uiState.value.copy(isScanning = true)
-
-        // Track work progress
         observeWorkProgress()
     }
+
+    private fun hasSmsReadPermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) ==
+            PackageManager.PERMISSION_GRANTED
 
     private fun observeWorkProgress() {
         val workManager = WorkManager.getInstance(context)
@@ -1099,12 +1215,13 @@ class HomeViewModel @Inject constructor(
         // Also refresh transaction type totals for new currency
         viewModelScope.launch {
             refreshPayPeriodPrefsCache()
-            val now = java.time.LocalDate.now()
-            val (financialStart, financialEnd) = budgetPeriodRange(now)
-
+            val now = LocalDate.now()
+            val useFinancial = userPreferencesRepository.useFinancialMonth.first()
+            val (financialStart, _) = budgetPeriodRange(now)
+            val spendingStart = if (useFinancial) financialStart else now.withDayOfMonth(1)
             val allTransactions = transactionRepository.getTransactionsBetweenDates(
-                startDate = financialStart,
-                endDate = financialEnd
+                startDate = spendingStart,
+                endDate = now,
             ).first()
             val transactions = filterTransactions(allTransactions)
             updateTransactionTypeTotals(transactions)
@@ -1114,7 +1231,9 @@ class HomeViewModel @Inject constructor(
     private fun updateTransactionTypeTotals(transactions: List<TransactionEntity>) {
         val selectedCurrency = _uiState.value.selectedCurrency
         val isUnified = _uiState.value.isUnifiedMode
-        val nonLoanTransactions = transactions.filter { it.loanId == null }
+        val nonLoanTransactions = transactions.filter {
+            it.loanId == null && !it.isExcludedFromTracking
+        }
 
         if (isUnified) {
             // Convert all transactions to display currency
@@ -1328,6 +1447,105 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    private fun formatPeriodDayLabel(
+        periodStart: LocalDate,
+        periodEnd: LocalDate,
+        today: LocalDate,
+    ): String {
+        val totalDays = ChronoUnit.DAYS.between(periodStart, periodEnd).toInt() + 1
+        val currentDay = ChronoUnit.DAYS.between(periodStart, today).toInt() + 1
+        if (totalDays <= 0) return ""
+        return context.getString(
+            R.string.home_period_day,
+            currentDay.coerceIn(1, totalDays),
+            totalDays,
+        )
+    }
+
+    private data class HomeStripLabels(
+        val incomeTodayLabel: String,
+        val topCategoryName: String,
+        val topCategorySubLabel: String,
+        val dailyAverageLabel: String,
+        val paceLabel: String,
+    )
+
+    private suspend fun computeHomeStripLabels(
+        periodTransactions: List<TransactionEntity>,
+        spendingTransactions: List<TransactionEntity>,
+        periodStart: LocalDate,
+        periodEnd: LocalDate,
+        now: LocalDate,
+        selectedCurrency: String,
+        isUnified: Boolean,
+        totalExpenses: BigDecimal,
+        spendingIncreased: Boolean,
+    ): HomeStripLabels {
+        val today = now
+        val incomeTodayCount = periodTransactions.count { tx ->
+            !tx.isExcludedFromTracking &&
+                tx.transactionType == TransactionType.INCOME &&
+                tx.dateTime.toLocalDate() == today
+        }
+        val incomeTodayLabel = when (incomeTodayCount) {
+            0 -> context.getString(R.string.home_income_today_none)
+            1 -> context.getString(R.string.home_income_today_one)
+            else -> context.getString(R.string.home_income_today_many, incomeTodayCount)
+        }
+
+        val unknownCategory = context.getString(R.string.home_top_category_unknown)
+        val categoryTotals = mutableMapOf<String, BigDecimal>()
+        for (tx in spendingTransactions) {
+            val category = tx.category.trim().ifEmpty { unknownCategory }
+            val amount = if (isUnified && !tx.currency.equals(selectedCurrency, ignoreCase = true)) {
+                currencyConversionService.convertAmount(tx.amount, tx.currency, selectedCurrency)
+            } else {
+                tx.amount
+            }
+            categoryTotals[category] = (categoryTotals[category] ?: BigDecimal.ZERO) + amount
+        }
+        val topEntry = categoryTotals.maxByOrNull { it.value }
+        val (topCategoryName, topCategorySubLabel) = if (topEntry == null || topEntry.value <= BigDecimal.ZERO) {
+            context.getString(R.string.home_top_category_unknown) to
+                context.getString(R.string.home_top_category_empty)
+        } else {
+            val share = if (totalExpenses > BigDecimal.ZERO) {
+                topEntry.value
+                    .multiply(BigDecimal(100))
+                    .divide(totalExpenses, 0, RoundingMode.HALF_UP)
+                    .toInt()
+            } else {
+                0
+            }
+            topEntry.key to context.getString(
+                R.string.home_top_category_sub,
+                share,
+                CurrencyFormatter.formatCurrency(topEntry.value, selectedCurrency),
+            )
+        }
+
+        val daysElapsed = ChronoUnit.DAYS.between(periodStart, now).toInt().coerceAtLeast(0) + 1
+        val dailyAvg = if (daysElapsed > 0) {
+            totalExpenses.divide(BigDecimal(daysElapsed), 0, RoundingMode.HALF_UP)
+        } else {
+            BigDecimal.ZERO
+        }
+        val dailyAverageLabel = "${CurrencyFormatter.formatCurrency(dailyAvg, selectedCurrency)}/day"
+        val paceLabel = if (spendingIncreased) {
+            context.getString(R.string.home_pace_above_last)
+        } else {
+            context.getString(R.string.home_pace_on_track)
+        }
+
+        return HomeStripLabels(
+            incomeTodayLabel = incomeTodayLabel,
+            topCategoryName = topCategoryName,
+            topCategorySubLabel = topCategorySubLabel,
+            dailyAverageLabel = dailyAverageLabel,
+            paceLabel = paceLabel,
+        )
+    }
+
     override fun onCleared() {
         super.onCleared()
         inAppUpdateManager.cleanup()
@@ -1374,7 +1592,14 @@ data class HomeUiState(
     val lastMonthSpendingHistory: List<BigDecimal> = emptyList(),
     val loanSummary: LoanSummary? = null,
     val selectedProfileId: Long? = null,
-    val profiles: List<ProfileEntity> = emptyList()
+    val profiles: List<ProfileEntity> = emptyList(),
+    val payPeriodSuggestion: SalaryPayPeriodDetector.Suggestion? = null,
+    val periodDayLabel: String = "",
+    val incomeTodayLabel: String = "",
+    val topCategoryName: String = "",
+    val topCategorySubLabel: String = "",
+    val dailyAverageLabel: String = "",
+    val paceLabel: String = "",
 )
 
 data class LoanSummary(

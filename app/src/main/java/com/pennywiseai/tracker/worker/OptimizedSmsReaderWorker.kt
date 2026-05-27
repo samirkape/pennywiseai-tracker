@@ -11,6 +11,7 @@ import androidx.work.*
 import com.pennywiseai.parser.core.ParsedTransaction
 import com.pennywiseai.parser.core.bank.*
 import com.pennywiseai.tracker.data.database.entity.AccountBalanceEntity
+import com.pennywiseai.tracker.data.database.entity.MerchantAliasEntity
 import com.pennywiseai.tracker.data.database.entity.CardType
 import com.pennywiseai.tracker.data.database.entity.TransactionType
 import com.pennywiseai.tracker.data.database.entity.UnrecognizedSmsEntity
@@ -22,6 +23,7 @@ import com.pennywiseai.tracker.domain.model.rule.TransactionRule
 import com.pennywiseai.tracker.domain.repository.RuleRepository
 import com.pennywiseai.tracker.domain.service.RuleEngine
 import com.pennywiseai.tracker.utils.CurrencyFormatter
+import com.pennywiseai.tracker.utils.MerchantAliasResolver
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.*
@@ -61,6 +63,7 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
     private val cardRepository: CardRepository,
     private val llmRepository: LlmRepository,
     private val merchantMappingRepository: MerchantMappingRepository,
+    private val merchantAliasRepository: MerchantAliasRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val unrecognizedSmsRepository: UnrecognizedSmsRepository,
     private val ruleRepository: RuleRepository,
@@ -130,14 +133,19 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
     /** O(1) sender-to-parser lookup. Factory is only called once per unique sender string. */
     private class ParserHolder(val parser: BankParser?)
     private val parserCache = java.util.concurrent.ConcurrentHashMap<String, ParserHolder>(256)
-    private fun cachedParser(sender: String): BankParser? =
-        parserCache.computeIfAbsent(sender) { ParserHolder(BankParserFactory.getParser(sender)) }.parser
+    private fun cachedParser(sender: String, body: String): BankParser? {
+        parserCache[sender]?.parser?.let { return it }
+        val parser = BankParserFactory.getParser(sender, body)
+        parserCache[sender] = ParserHolder(parser)
+        return parser
+    }
 
     /**
      * Merchant-name to custom category, preloaded once at scan start.
      * Previously: 1 DB read per transaction. Now: 1 DB read total, O(1) lookup per transaction.
      */
     private var merchantMappingCache: Map<String, String> = emptyMap()
+    private var merchantAliasCache: List<MerchantAliasEntity> = emptyList()
 
     /**
      * Rules preloaded by transaction type at scan start.
@@ -159,6 +167,15 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
         val timestamp: Long,
         val body: String,
         val type: Int
+    )
+
+    /** SMS read result; scan watermark is committed only after a successful pipeline run. */
+    private data class SmsScanBatch(
+        val messages: List<SmsMessage>,
+        val scanStartTime: Long,
+        val needsFullScan: Boolean,
+        val scanAllTime: Boolean,
+        val scanMonths: Int,
     )
 
     /**
@@ -294,22 +311,24 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
             }
 
             Trace.beginSection("readSmsMessages")
-            val messages = try {
+            val scanBatch = try {
                 readSmsMessages(forceResync)
             } finally {
                 Trace.endSection()
             }
+            val messages = scanBatch.messages
 
             Trace.beginSection("preloadCaches")
             try {
                 merchantMappingCache = merchantMappingRepository.getAllMappingsAsMap()
+                merchantAliasCache = merchantAliasRepository.getAllAliasesList()
                 ruleCache = TransactionType.entries.associateWith { type ->
                     ruleRepository.getActiveRulesByType(type)
                 }
             } finally {
                 Trace.endSection()
             }
-            Log.i(TAG, "Caches: ${merchantMappingCache.size} merchant mappings, ${ruleCache.values.sumOf { it.size }} rules")
+            Log.i(TAG, "Caches: ${merchantMappingCache.size} merchant mappings, ${merchantAliasCache.size} aliases, ${ruleCache.values.sumOf { it.size }} rules")
 
             val parserConcurrency = maxOf(1, Runtime.getRuntime().availableProcessors() - 1)
             Log.i(TAG, "Pipeline: $parserConcurrency parsers | 1 saver | ${messages.size} messages")
@@ -322,6 +341,7 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
             Log.i(TAG, buildSummary(stats, totalTime))
             cleanUpAndFinalize(stats)
             reportProgress(stats)
+            commitScanWatermark(scanBatch, messages)
             Result.success()
 
         } catch (e: Exception) {
@@ -443,7 +463,7 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
         if (upper.endsWith("-P") || upper.endsWith("-G"))
             return ParseResult.Discard(sms)
 
-        val parser = cachedParser(sms.sender)
+        val parser = cachedParser(sms.sender, sms.body)
             ?: return if (upper.endsWith("-T") || upper.endsWith("-S"))
                 ParseResult.StoreUnrecognized(sms)
             else
@@ -588,8 +608,15 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
             // soft-deleted transactions are never re-imported.
             if (transactionRepository.getTransactionByHash(entity.transactionHash) != null) return false
 
-            val customCategory = merchantMappingCache[entity.merchantName]
-            val mapped = if (customCategory != null) entity.copy(category = customCategory) else entity
+            val resolvedMerchant = MerchantAliasResolver.resolveExact(entity.merchantName, merchantAliasCache)
+            val withName = if (resolvedMerchant != entity.merchantName) {
+                entity.copy(merchantName = resolvedMerchant)
+            } else {
+                entity
+            }
+
+            val customCategory = merchantMappingCache[withName.merchantName]
+            val mapped = if (customCategory != null) withName.copy(category = customCategory) else withName
 
             val activeRules = ruleCache[mapped.transactionType] ?: emptyList()
             if (ruleEngine.shouldBlockTransaction(mapped, sms.body, activeRules) != null) {
@@ -768,12 +795,26 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
 
     // ─── SMS / RCS reading ────────────────────────────────────────────────────
 
-    private suspend fun readSmsMessages(forceResync: Boolean = false): List<SmsMessage> {
+    private suspend fun commitScanWatermark(batch: SmsScanBatch, messages: List<SmsMessage>) {
+        val watermark = messages.maxOfOrNull { it.timestamp } ?: batch.scanStartTime
+        userPreferencesRepository.setLastScanTimestamp(watermark)
+        if (batch.needsFullScan) {
+            userPreferencesRepository.setLastScanPeriod(
+                if (batch.scanAllTime) -1 else batch.scanMonths
+            )
+        }
+    }
+
+    private suspend fun readSmsMessages(forceResync: Boolean = false): SmsScanBatch {
         val messages = mutableListOf<SmsMessage>()
+        var scanStartTime = 0L
+        var needsFullScan = false
+        var scanAllTime = false
+        var scanMonths = 3
         try {
             val lastScanTimestamp = userPreferencesRepository.getLastScanTimestamp().first() ?: 0L
-            val scanMonths        = userPreferencesRepository.getSmsScanMonths()
-            val scanAllTime       = userPreferencesRepository.getSmsScanAllTime()
+            scanMonths        = userPreferencesRepository.getSmsScanMonths()
+            scanAllTime       = userPreferencesRepository.getSmsScanAllTime()
             val lastScanPeriod    = userPreferencesRepository.getLastScanPeriod().first() ?: 0
             val now               = System.currentTimeMillis()
 
@@ -782,9 +823,9 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
             // scanAllTime=true→false detected via lastScanPeriod == -1 with scanAllTime=false.
             val scanAllTimeToggled = scanAllTime && lastScanPeriod != -1
             val scanAllTimeToggledOff = !scanAllTime && lastScanPeriod == -1
-            val needsFullScan = forceResync || lastScanTimestamp == 0L || (lastScanPeriod >= 0 && scanMonths > lastScanPeriod) || scanAllTimeToggled || scanAllTimeToggledOff
+            needsFullScan = forceResync || lastScanTimestamp == 0L || (lastScanPeriod >= 0 && scanMonths > lastScanPeriod) || scanAllTimeToggled || scanAllTimeToggledOff
 
-            val scanStartTime = if (needsFullScan) {
+            scanStartTime = if (needsFullScan) {
                 java.util.Calendar.getInstance().apply {
                     if (scanAllTime) add(java.util.Calendar.YEAR, -10)
                     else             add(java.util.Calendar.MONTH, -scanMonths)
@@ -822,9 +863,6 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
                 }
             }
 
-            userPreferencesRepository.setLastScanTimestamp(now)
-            if (needsFullScan) userPreferencesRepository.setLastScanPeriod(if (scanAllTime) -1 else scanMonths)
-
             try { messages.addAll(readRcsMessages(scanStartTime / 1000)) }
             catch (e: Exception) { Log.e(TAG, "RCS read error: ${e.message}") }
 
@@ -832,7 +870,13 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
             Log.e(TAG, "Error reading SMS", e)
         }
         Log.i(TAG, "Loaded ${messages.size} messages (SMS + RCS)")
-        return messages
+        return SmsScanBatch(
+            messages = messages,
+            scanStartTime = scanStartTime,
+            needsFullScan = needsFullScan,
+            scanAllTime = scanAllTime,
+            scanMonths = scanMonths,
+        )
     }
 
     private fun readRcsMessages(scanStartSeconds: Long): List<SmsMessage> {

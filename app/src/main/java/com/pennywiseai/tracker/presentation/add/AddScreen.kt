@@ -20,14 +20,11 @@ fun AddScreen(
     viewModel: AddViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit = {}
 ) {
-    val pagerState = rememberPagerState(pageCount = { 2 })
-    val coroutineScope = rememberCoroutineScope()
-    val uiState by viewModel.uiState.collectAsState()
-    
-    val tabs = listOf("Transaction", "Subscription")
+    val transactionUiState by viewModel.transactionUiState.collectAsState()
+    val fromUnrecognized = transactionUiState.fromUnrecognizedSms
     
     PennyWiseScaffold(
-        title = "Add New",
+        title = if (fromUnrecognized) "Add from SMS" else "Add New",
         navigationIcon = {
             IconButton(onClick = onNavigateBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -39,39 +36,48 @@ fun AddScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Tab Row
-            TabRow(
-                selectedTabIndex = pagerState.currentPage,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface
-            ) {
-                tabs.forEachIndexed { index, title ->
-                    Tab(
-                        text = { Text(title) },
-                        selected = pagerState.currentPage == index,
-                        onClick = {
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(index)
+            if (fromUnrecognized) {
+                TransactionTabContent(
+                    viewModel = viewModel,
+                    onSave = onNavigateBack,
+                )
+            } else {
+                val pagerState = rememberPagerState(pageCount = { 2 })
+                val coroutineScope = rememberCoroutineScope()
+                val tabs = listOf("Transaction", "Subscription")
+
+                TabRow(
+                    selectedTabIndex = pagerState.currentPage,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ) {
+                    tabs.forEachIndexed { index, title ->
+                        Tab(
+                            text = { Text(title) },
+                            selected = pagerState.currentPage == index,
+                            onClick = {
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(index)
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
-            }
-            
-            // Tab Content
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize()
-            ) { page ->
-                when (page) {
-                    0 -> TransactionTabContent(
-                        viewModel = viewModel,
-                        onSave = onNavigateBack
-                    )
-                    1 -> SubscriptionTabContent(
-                        viewModel = viewModel,
-                        onSave = onNavigateBack
-                    )
+
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    when (page) {
+                        0 -> TransactionTabContent(
+                            viewModel = viewModel,
+                            onSave = onNavigateBack
+                        )
+                        1 -> SubscriptionTabContent(
+                            viewModel = viewModel,
+                            onSave = onNavigateBack
+                        )
+                    }
                 }
             }
         }

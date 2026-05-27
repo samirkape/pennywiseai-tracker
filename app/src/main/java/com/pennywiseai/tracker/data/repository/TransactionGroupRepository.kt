@@ -21,8 +21,10 @@ class TransactionGroupRepository @Inject constructor(
 
     fun getTransactionCount(groupId: Long): Flow<Int> = groupDao.getTransactionCount(groupId)
 
-    fun getRecentUngroupedTransactions(): Flow<List<TransactionEntity>> =
-        groupDao.getRecentUngroupedTransactions()
+    fun getRecentUngroupedTransactions(
+        limit: Int = 50,
+    ): Flow<List<TransactionEntity>> =
+        groupDao.getRecentUngroupedTransactions(limit)
 
     fun searchUngroupedTransactions(query: String): Flow<List<TransactionEntity>> =
         groupDao.searchUngroupedTransactions(query)

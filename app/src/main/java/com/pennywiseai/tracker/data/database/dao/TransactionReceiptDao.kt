@@ -22,4 +22,7 @@ interface TransactionReceiptDao {
 
     @Query("DELETE FROM transaction_receipts WHERE transaction_id = :transactionId")
     suspend fun deleteReceiptsForTransaction(transactionId: Long)
+
+    @Query("DELETE FROM transaction_receipts")
+    suspend fun deleteAllReceipts()
 }

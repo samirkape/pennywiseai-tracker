@@ -17,4 +17,7 @@ interface SalaryMonthOverrideDao {
 
     @Query("DELETE FROM salary_month_overrides WHERE year_month = :yearMonth")
     suspend fun deleteOverride(yearMonth: String)
+
+    @Query("DELETE FROM salary_month_overrides")
+    suspend fun deleteAllOverrides()
 }

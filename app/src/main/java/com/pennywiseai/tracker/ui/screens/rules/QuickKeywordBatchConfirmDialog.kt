@@ -46,15 +46,35 @@ fun QuickKeywordBatchConfirmDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
-                Text(
-                    text = stringResource(
-                        R.string.quick_keyword_batch_confirm_summary,
-                        preview.willUpdate,
-                        preview.keywordMatched,
-                        preview.applyScope.displayLabel(),
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                if (preview.keywordMatched == 0) {
+                    Text(
+                        text = stringResource(
+                            R.string.quick_keyword_batch_confirm_zero_matches,
+                            preview.poolSize,
+                            preview.matchStats.typeRejected,
+                            preview.matchStats.noKeywordHit,
+                            preview.matchStats.emptySearchText,
+                            preview.matchStats.alreadyLabeled,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Text(
+                        text = stringResource(R.string.quick_keyword_batch_confirm_zero_logcat),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Text(
+                        text = stringResource(
+                            R.string.quick_keyword_batch_confirm_summary,
+                            preview.willUpdate,
+                            preview.keywordMatched,
+                            preview.applyScope.displayLabel(),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
                 if (preview.alreadyLabeled > 0) {
                     Text(
                         text = stringResource(
@@ -149,6 +169,13 @@ private fun BatchChangeSampleCard(change: QuickKeywordBatchChange) {
                     label = stringResource(R.string.quick_keyword_batch_field_type),
                     before = change.beforeType.name.lowercase().replaceFirstChar { it.uppercase() },
                     after = change.afterType.name.lowercase().replaceFirstChar { it.uppercase() },
+                )
+            }
+            if (change.tagsChanges) {
+                InlineFieldDiff(
+                    label = stringResource(R.string.quick_keyword_batch_field_tags),
+                    before = change.before.tags.ifBlank { "—" },
+                    after = change.after.tags.ifBlank { "—" },
                 )
             }
         }

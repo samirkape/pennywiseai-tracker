@@ -19,12 +19,14 @@ fun PennyWiseScaffold(
     bottomBar: @Composable () -> Unit = {},
     floatingActionButton: @Composable () -> Unit = {},
     floatingActionButtonPosition: FabPosition = FabPosition.End,
+    snackbarHost: @Composable () -> Unit = {},
     containerColor: Color = MaterialTheme.colorScheme.background,
     contentColor: Color = contentColorFor(containerColor),
     content: @Composable (PaddingValues) -> Unit
 ) {
     Scaffold(
         modifier = modifier,
+        snackbarHost = snackbarHost,
         topBar = customTopBar ?: {
             TopAppBar(
                 title = { if (title.isNotEmpty()) Text(title) },

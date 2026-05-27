@@ -208,6 +208,35 @@ class QuickKeywordRuleCompilerTest {
     }
 
     @Test
+    fun applyOverwrites_preservesExplicitHdfcUpiPayeeWhenKeywordIsAccount() {
+        val input = QuickKeywordRuleCompiler.QuickKeywordRuleInput(
+            name = "Cable",
+            keywords = listOf("2518"),
+            merchantLabel = "Cable",
+            categoryLabel = "Bills & Utilities",
+        )
+        val sms = """Sent Rs.25.00
+From HDFC Bank A/C *2518
+To Prajwal Kirana
+On 24/05/26
+Ref 919580778477
+Not You?
+Call 18002586161/SMS BLOCK UPI to 7308080808"""
+        val txn = TransactionEntity(
+            amount = BigDecimal("25"),
+            merchantName = "Prajwal Kirana",
+            category = "Others",
+            transactionType = TransactionType.EXPENSE,
+            dateTime = LocalDateTime.now(),
+            smsBody = sms,
+            transactionHash = "h-cable",
+        )
+        assertTrue(QuickKeywordRuleMatcher.diagnose(txn, txn.smsBody, input).matches)
+        val patched = QuickKeywordRuleMatcher.applyOverwrites(txn, input)
+        assertEquals("Prajwal Kirana", patched.merchantName)
+    }
+
+    @Test
     fun matcher_rejectsExpenseWhenIncomeOnly() {
         val input = QuickKeywordRuleCompiler.QuickKeywordRuleInput(
             name = "Salary",

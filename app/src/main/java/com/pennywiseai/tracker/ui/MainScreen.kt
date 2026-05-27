@@ -40,6 +40,7 @@ import com.pennywiseai.tracker.ui.viewmodel.SpotlightViewModel
 import com.pennywiseai.tracker.navigation.safePopBackStack
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
+import android.util.Log
 
 @Composable
 fun MainScreen(
@@ -147,6 +148,11 @@ fun MainScreen(
                             launchSingleTop = true
                         }
                     },
+                    onNavigateToInvestmentTransactions = { period ->
+                        navController.navigate("transactions?period=$period&type=INVESTMENT") {
+                            launchSingleTop = true
+                        }
+                    },
                     onNavigateToAnalytics = {
                         navController.navigate("analytics") {
                             launchSingleTop = true
@@ -188,7 +194,7 @@ fun MainScreen(
                     },
                     onNavigateToAddScreen = {
                         rootNavController?.navigate(
-                            com.pennywiseai.tracker.navigation.AddTransaction
+                            com.pennywiseai.tracker.navigation.AddTransaction()
                         ) { launchSingleTop = true }
                     },
                     onTransactionClick = { transactionId ->
@@ -217,7 +223,7 @@ fun MainScreen(
             }
 
             composable(
-                route = "transactions?category={category}&merchant={merchant}&period={period}&currency={currency}&focusSearch={focusSearch}&type={type}&categories={categories}&startDateEpoch={startDateEpoch}&endDateEpoch={endDateEpoch}",
+                route = "transactions?category={category}&merchant={merchant}&period={period}&currency={currency}&focusSearch={focusSearch}&type={type}&categories={categories}&startDateEpoch={startDateEpoch}&endDateEpoch={endDateEpoch}&paymentMode={paymentMode}",
                 arguments = listOf(
                     navArgument("category") {
                         type = NavType.StringType
@@ -262,6 +268,11 @@ fun MainScreen(
                         type = NavType.StringType
                         nullable = true
                         defaultValue = null
+                    },
+                    navArgument("paymentMode") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
                     }
                 )
             ) { backStackEntry ->
@@ -274,6 +285,7 @@ fun MainScreen(
                 val categories = backStackEntry.arguments?.getString("categories")
                 val periodStartEpoch = backStackEntry.arguments?.getString("startDateEpoch")?.toLongOrNull()
                 val periodEndEpoch = backStackEntry.arguments?.getString("endDateEpoch")?.toLongOrNull()
+                val paymentMode = backStackEntry.arguments?.getString("paymentMode")
 
                 TransactionsScreen(
                     modifier = Modifier.imePadding(),
@@ -283,6 +295,7 @@ fun MainScreen(
                     initialCurrency = currency,
                     focusSearch = focusSearch,
                     initialTransactionType = transactionType,
+                    initialPaymentMode = paymentMode,
                     initialCategories = categories,
                     initialPeriodStartEpoch = periodStartEpoch,
                     initialPeriodEndEpoch = periodEndEpoch,
@@ -296,7 +309,7 @@ fun MainScreen(
                     },
                     onAddTransactionClick = {
                         rootNavController?.navigate(
-                            com.pennywiseai.tracker.navigation.AddTransaction
+                            com.pennywiseai.tracker.navigation.AddTransaction()
                         ) { launchSingleTop = true }
                     },
                     onNavigateToSettings = {
@@ -324,7 +337,7 @@ fun MainScreen(
                     },
                     onAddSubscriptionClick = {
                         rootNavController?.navigate(
-                            com.pennywiseai.tracker.navigation.AddTransaction
+                            com.pennywiseai.tracker.navigation.AddTransaction()
                         ) { launchSingleTop = true }
                     }
                 )
@@ -355,7 +368,7 @@ fun MainScreen(
                         }
                         navController.navigate(route) { launchSingleTop = true }
                     },
-                    onNavigateToTransactions = { category, merchant, period, currency, transactionType, startDateEpoch, endDateEpoch ->
+                    onNavigateToTransactions = { category, merchant, period, currency, transactionType, startDateEpoch, endDateEpoch, paymentMode ->
                         val route = buildString {
                             append("transactions")
                             val params = mutableListOf<String>()
@@ -381,6 +394,9 @@ fun MainScreen(
                             }
                             endDateEpoch?.let {
                                 params.add("endDateEpoch=$it")
+                            }
+                            paymentMode?.let {
+                                params.add("paymentMode=$it")
                             }
                             if (params.isNotEmpty()) {
                                 append("?")
@@ -459,6 +475,11 @@ fun MainScreen(
                         navController.navigate("unrecognized_sms") {
                             launchSingleTop = true
                         }
+                    },
+                    onNavigateToMerchantAliases = {
+                        rootNavController?.navigate(
+                            com.pennywiseai.tracker.navigation.MerchantAliases
+                        ) { launchSingleTop = true }
                     },
                     onNavigateToManageAccounts = {
                         navController.navigate("manage_accounts") {
@@ -577,6 +598,9 @@ fun MainScreen(
 
         // Bottom navigation OVERLAID on content
         if (baseRoute in listOf("home", "budgets", "analytics", "settings")) {
+            // #region agent log
+            Log.d("DBG_f852e3", "{\"sessionId\":\"f852e3\",\"runId\":\"post-fix\",\"hypothesisId\":\"H2_H3\",\"location\":\"MainScreen:583\",\"message\":\"rendering bottom nav\",\"navBarStyle\":\"${themeState.navBarStyle}\",\"blurEffects\":${themeState.blurEffectsEnabled},\"route\":\"$baseRoute\"}")
+            // #endregion
             PennyWiseBottomNavigation(
                 navController = navController,
                 currentDestination = navBackStackEntry?.destination,

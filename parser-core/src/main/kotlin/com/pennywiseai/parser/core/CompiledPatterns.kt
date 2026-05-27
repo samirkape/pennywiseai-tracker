@@ -65,7 +65,7 @@ object CompiledPatterns {
         )
 
         val ACH_PAYROLL_COMPANY = Regex(
-            """for\s+ACH\s+C-SAL-([^-.\n]+)""",
+            """for\s+ACH\s+C-?\s*SAL-([^-.\n]+)""",
             RegexOption.IGNORE_CASE,
         )
         val SALARY_PATTERN = Regex(
@@ -111,6 +111,11 @@ object CompiledPatterns {
         )
         val MANDATE_MERCHANT = Regex("""For\s+([^\n]+?)\s+mandate""", RegexOption.IGNORE_CASE)
         val UMN_PATTERN = Regex("""UMN\s+([a-zA-Z0-9@]+)""", RegexOption.IGNORE_CASE)
+        // "For IMPS -**MYNTRA DESIGNS PRIVATE LIMITE-**" (Received! credit/refund format)
+        val IMPS_CREDIT_MERCHANT = Regex(
+            """For\s+IMPS\s+[-*\s]*(.+?)[-*\s]*(?=\s*$|\s*\n)""",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE),
+        )
     }
 
     object Cleaning {
@@ -120,8 +125,10 @@ object CompiledPatterns {
         val UPI_SUFFIX = Regex("""\s+UPI.*""", RegexOption.IGNORE_CASE)
         val TIME_SUFFIX = Regex("""\s+at\s+\d{2}:\d{2}.*""")
         val TRAILING_DASH = Regex("""\s*-\s*$""")
-        val PVT_LTD =
-            Regex("""(\s+PVT\.?\s*LTD\.?|\s+PRIVATE\s+LIMITED)$""", RegexOption.IGNORE_CASE)
+        val PVT_LTD = Regex(
+            """(\s+PVT\.?\s*LTD\.?|\s+PRIVATE\s+(?:LIMITED|LIMITE)\.?)$""",
+            RegexOption.IGNORE_CASE,
+        )
         val LTD = Regex("""(\s+LTD\.?|\s+LIMITED)$""", RegexOption.IGNORE_CASE)
     }
 

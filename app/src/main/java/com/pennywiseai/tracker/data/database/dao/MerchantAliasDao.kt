@@ -13,6 +13,9 @@ interface MerchantAliasDao {
     @Query("SELECT display_name FROM merchant_aliases WHERE source_merchant = :sourceMerchant")
     suspend fun getDisplayNameForMerchant(sourceMerchant: String): String?
 
+    @Query("SELECT * FROM merchant_aliases WHERE source_merchant = :sourceMerchant LIMIT 1")
+    suspend fun getAlias(sourceMerchant: String): MerchantAliasEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateAlias(alias: MerchantAliasEntity)
 

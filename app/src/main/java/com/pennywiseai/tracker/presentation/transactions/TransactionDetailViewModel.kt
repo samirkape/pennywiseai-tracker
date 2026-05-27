@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.net.Uri
 import androidx.core.net.toUri
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import com.pennywiseai.tracker.data.currency.CurrencyConversionService
 import com.pennywiseai.tracker.data.database.entity.BudgetImpactType
 import com.pennywiseai.tracker.data.database.entity.CategoryEntity
@@ -23,11 +25,16 @@ import com.pennywiseai.tracker.data.repository.MerchantAliasRepository
 import com.pennywiseai.tracker.data.repository.MerchantMappingRepository
 import com.pennywiseai.tracker.data.repository.TransactionGroupRepository
 import com.pennywiseai.tracker.data.repository.TransactionRepository
+import com.pennywiseai.tracker.domain.model.FutureParsingPromptState
 import com.pennywiseai.tracker.domain.model.TransactionRenameCandidate
 import com.pennywiseai.tracker.data.database.entity.TransactionGroupEntity
 import com.pennywiseai.tracker.core.Constants
+import com.pennywiseai.tracker.worker.SaveTransactionWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.pennywiseai.tracker.utils.MerchantNameMatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
@@ -93,20 +100,34 @@ class TransactionDetailViewModel @Inject constructor(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
     
-    private val _applyToAllFromMerchant = MutableStateFlow(false)
-    val applyToAllFromMerchant: StateFlow<Boolean> = _applyToAllFromMerchant.asStateFlow()
-    
     private val _updateExistingTransactions = MutableStateFlow(false)
     val updateExistingTransactions: StateFlow<Boolean> = _updateExistingTransactions.asStateFlow()
     
     private val _existingTransactionCount = MutableStateFlow(0)
 
     private val _originalMerchantNameOnEdit = MutableStateFlow<String?>(null)
-    private val _suggestedMerchantRename = MutableStateFlow<String?>(null)
-    val suggestedMerchantRename: StateFlow<String?> = _suggestedMerchantRename.asStateFlow()
+    private val _originalCategoryOnEdit = MutableStateFlow<String?>(null)
+    private val _allKnownMerchants = MutableStateFlow<List<String>>(emptyList())
+    private val _suggestedMerchantRenames = MutableStateFlow<List<String>>(emptyList())
+    val suggestedMerchantRenames: StateFlow<List<String>> = _suggestedMerchantRenames.asStateFlow()
+    private var merchantEditDebounceJob: Job? = null
+
+    val merchantAutocompleteSuggestions: StateFlow<List<String>> = combine(
+        _allKnownMerchants,
+        _editableTransaction,
+    ) { knownMerchants, txn ->
+        MerchantNameMatcher.autocompleteMatches(
+            query = txn?.merchantName.orEmpty(),
+            knownMerchants = knownMerchants,
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _merchantRenameReview = MutableStateFlow<MerchantRenameReviewState?>(null)
     val merchantRenameReview: StateFlow<MerchantRenameReviewState?> = _merchantRenameReview.asStateFlow()
+
+    private val _futureParsingPrompt = MutableStateFlow<FutureParsingPromptState?>(null)
+    val futureParsingPrompt: StateFlow<FutureParsingPromptState?> = _futureParsingPrompt.asStateFlow()
+    private var pendingFutureParsingPrompt: FutureParsingPromptState? = null
     
     private val _showDeleteDialog = MutableStateFlow(false)
     val showDeleteDialog: StateFlow<Boolean> = _showDeleteDialog.asStateFlow()
@@ -385,39 +406,69 @@ class TransactionDetailViewModel @Inject constructor(
 
         _transaction.value?.let { txn ->
             _originalMerchantNameOnEdit.value = txn.merchantName
+            _originalCategoryOnEdit.value = txn.category
             viewModelScope.launch {
-                _existingTransactionCount.value = transactionRepository.getOtherTransactionCountForMerchant(
-                    txn.merchantName,
-                    txn.id,
-                )
+                loadKnownMerchants()
                 loadMerchantRenameSuggestion(txn.merchantName)
-                loadMerchantCategorySuggestions(txn.merchantName, txn.id)
+                refreshMerchantDependentEditData(txn.merchantName)
             }
         }
     }
 
-    private suspend fun loadMerchantRenameSuggestion(sourceMerchant: String) {
-        val knownMerchants = transactionRepository.getDistinctMerchantNames()
-        val suggested = merchantAliasRepository.suggestDisplayName(
-            sourceMerchant = sourceMerchant,
-            knownMerchants = knownMerchants
-        )
-        _suggestedMerchantRename.value = suggested?.takeIf {
-            !it.equals(sourceMerchant, ignoreCase = true)
+    private suspend fun refreshMerchantDependentEditData(merchantName: String) {
+        val txnId = _editableTransaction.value?.id ?: return
+        val trimmed = merchantName.trim()
+        if (trimmed.isEmpty()) {
+            _existingTransactionCount.value = 0
+            _merchantSuggestionCategories.value = emptyList()
+            if (_updateExistingTransactions.value) {
+                _updateExistingTransactions.value = false
+            }
+            return
         }
+        _existingTransactionCount.value = transactionRepository.getOtherTransactionCountForMerchant(
+            trimmed,
+            txnId,
+        )
+        loadMerchantCategorySuggestions(trimmed, txnId)
     }
 
-    fun applyMerchantRenameSuggestion() {
-        val suggested = _suggestedMerchantRename.value ?: return
+    private suspend fun loadKnownMerchants() {
+        val fromTransactions = transactionRepository.getDistinctMerchantNames()
+        val fromAliases = merchantAliasRepository.getAllDisplayNames()
+        _allKnownMerchants.value = (fromTransactions + fromAliases).distinct()
+    }
+
+    private suspend fun loadMerchantRenameSuggestion(sourceMerchant: String) {
+        _suggestedMerchantRenames.value = merchantAliasRepository.suggestDisplayNames(
+            sourceMerchant = sourceMerchant,
+            knownMerchants = _allKnownMerchants.value,
+        ).filter { !it.equals(sourceMerchant, ignoreCase = true) }
+    }
+
+    fun applyMerchantRenameSuggestion(suggestedName: String) {
         _editableTransaction.update { current ->
-            current?.copy(merchantName = suggested)
+            current?.copy(merchantName = suggestedName)
+        }
+        _suggestedMerchantRenames.value = emptyList()
+        if (_updateExistingTransactions.value) {
+            _updateExistingTransactions.value = false
+        }
+        viewModelScope.launch {
+            loadMerchantRenameSuggestion(suggestedName)
+            refreshMerchantDependentEditData(suggestedName)
         }
     }
 
     private suspend fun loadMerchantCategorySuggestions(merchantName: String, transactionId: Long) {
-        val mappingCategory = merchantMappingRepository.getCategoryForMerchant(merchantName)
+        val trimmed = merchantName.trim()
+        if (trimmed.isEmpty()) {
+            _merchantSuggestionCategories.value = emptyList()
+            return
+        }
+        val mappingCategory = merchantMappingRepository.getCategoryForMerchant(trimmed)
         _merchantSuggestionCategories.value = transactionRepository.getSuggestedCategoriesForMerchant(
-            merchantName = merchantName,
+            merchantName = trimmed,
             excludeTransactionId = transactionId,
             merchantMappingCategory = mappingCategory
         )
@@ -427,7 +478,6 @@ class TransactionDetailViewModel @Inject constructor(
         _editableTransaction.value = null
         _isEditMode.value = false
         _errorMessage.value = null
-        _applyToAllFromMerchant.value = false
         _updateExistingTransactions.value = false
         _existingTransactionCount.value = 0
         _pendingReceiptUris.value = emptyList()
@@ -437,8 +487,12 @@ class TransactionDetailViewModel @Inject constructor(
         _allUsedTags.value = emptyList()
         _merchantSuggestionCategories.value = emptyList()
         _originalMerchantNameOnEdit.value = null
-        _suggestedMerchantRename.value = null
+        _originalCategoryOnEdit.value = null
+        _allKnownMerchants.value = emptyList()
+        _suggestedMerchantRenames.value = emptyList()
         _merchantRenameReview.value = null
+        pendingFutureParsingPrompt = null
+        _futureParsingPrompt.value = null
 
         // Reset split state to original values
         _splits.value = _originalSplits.value
@@ -460,19 +514,25 @@ class TransactionDetailViewModel @Inject constructor(
         _pendingTags.value = _pendingTags.value - tag
     }
 
-    fun toggleApplyToAllFromMerchant() {
-        _applyToAllFromMerchant.value = !_applyToAllFromMerchant.value
-    }
-    
     fun toggleUpdateExistingTransactions() {
         _updateExistingTransactions.value = !_updateExistingTransactions.value
     }
     
     fun updateMerchantName(name: String) {
+        val previousName = _editableTransaction.value?.merchantName
         _editableTransaction.update { current ->
             current?.copy(merchantName = name)
         }
+        if (previousName != name && _updateExistingTransactions.value) {
+            _updateExistingTransactions.value = false
+        }
         validateMerchantName(name)
+        merchantEditDebounceJob?.cancel()
+        merchantEditDebounceJob = viewModelScope.launch {
+            delay(250)
+            loadMerchantRenameSuggestion(name)
+            refreshMerchantDependentEditData(name)
+        }
     }
     
     fun updateAmount(amountStr: String) {
@@ -716,147 +776,136 @@ class TransactionDetailViewModel @Inject constructor(
             return
         }
 
+        val originalTxn = _transaction.value
+        val normalizedTransaction = toSave.copy(
+            merchantName = normalizeMerchantName(toSave.merchantName),
+            tags = _pendingTags.value.joinToString(",")
+        )
+
+        val removedIds = _removedReceiptIds.value.toList()
+        val removedPaths = removedIds.mapNotNull { id ->
+            _existingReceipts.value.find { it.id == id }?.path
+        }
+
+        val patch = SaveTransactionWorker.TransactionPatch(
+            id = normalizedTransaction.id,
+            amount = normalizedTransaction.amount.toPlainString(),
+            merchantName = normalizedTransaction.merchantName,
+            category = normalizedTransaction.category,
+            transactionType = normalizedTransaction.transactionType.name,
+            dateTime = normalizedTransaction.dateTime.toString(),
+            description = normalizedTransaction.description,
+            accountNumber = normalizedTransaction.accountNumber,
+            fromAccount = normalizedTransaction.fromAccount,
+            toAccount = normalizedTransaction.toAccount,
+            bankName = normalizedTransaction.bankName,
+            currency = normalizedTransaction.currency,
+            tags = normalizedTransaction.tags,
+            isRecurring = normalizedTransaction.isRecurring,
+            isExcludedFromTracking = normalizedTransaction.isExcludedFromTracking,
+            profileId = normalizedTransaction.profileId,
+            transferKind = normalizedTransaction.transferKind,
+            budgetImpactType = normalizedTransaction.budgetImpactType?.name,
+            budgetCategory = normalizedTransaction.budgetCategory,
+        )
+
+        val splitPatches = _splits.value.map { s ->
+            SaveTransactionWorker.SplitPatch(
+                id = s.id,
+                category = s.category,
+                amount = s.amount.toPlainString(),
+                tags = s.tags.joinToString(",")
+            )
+        }
+
+        val inputData = SaveTransactionWorker.buildInputData(
+            patch = patch,
+            originalBank = originalTxn?.bankName,
+            originalAccount = originalTxn?.accountNumber,
+            pendingReceiptUris = _pendingReceiptUris.value,
+            removedReceiptIds = removedIds,
+            removedReceiptPaths = removedPaths,
+            updateCategoryForMerchant = _updateExistingTransactions.value,
+            showSplitEditor = _showSplitEditor.value,
+            hasOriginalSplits = _originalSplits.value.isNotEmpty(),
+            splits = splitPatches,
+        )
+
+        val request = SaveTransactionWorker.buildRequest(inputData)
+        val workManager = WorkManager.getInstance(context)
+        workManager.enqueue(request)
+
+        // Optimistic: update in-memory state and navigate back immediately
+        _transaction.value = normalizedTransaction
+        _pendingReceiptUris.value = emptyList()
+        _removedReceiptIds.value = emptySet()
+        _pendingTags.value = emptyList()
+        _budgetImpactType.value = normalizedTransaction.budgetImpactType
+        _budgetCategory.value = normalizedTransaction.budgetCategory
+
+        // Clear edit state and signal success to navigate back
+        _isEditMode.value = false
+        _editableTransaction.value = null
+        _errorMessage.value = null
+        _updateExistingTransactions.value = false
+        _existingTransactionCount.value = 0
+        _originalMerchantNameOnEdit.value = null
+        _originalCategoryOnEdit.value = null
+        _suggestedMerchantRenames.value = emptyList()
+
+        // Observe the worker for background errors and post-save UX
+        observeSaveWorker(request.id, normalizedTransaction, originalTxn)
+
+        // Navigate back immediately via success signal
+        _saveSuccess.value = true
+    }
+
+    private fun observeSaveWorker(
+        workId: java.util.UUID,
+        saved: TransactionEntity,
+        originalTxn: TransactionEntity?,
+    ) {
+        val workManager = WorkManager.getInstance(context)
         viewModelScope.launch {
-            _isSaving.value = true
-            try {
-                // Handle receipt deletions
-                val removedIds = _removedReceiptIds.value
-                for (id in removedIds) {
-                    val receipt = _existingReceipts.value.find { it.id == id }
-                    receipt?.let {
-                        receiptManager.deleteReceipt(it.path)
-                        transactionRepository.deleteReceipt(id)
-                    }
-                }
+            workManager.getWorkInfoByIdFlow(workId).collect { info ->
+                when (info?.state) {
+                    WorkInfo.State.RUNNING -> _isSaving.value = true
+                    WorkInfo.State.SUCCEEDED -> {
+                        _isSaving.value = false
+                        // Trigger post-save UX that requires the transaction to be saved first
+                        val originalMerchant = _originalMerchantNameOnEdit.value
+                        val futureParsingPrompt = buildFutureParsingPrompt(
+                            originalTxn = originalTxn,
+                            saved = saved,
+                            originalMerchant = originalMerchant,
+                        )
+                        pendingFutureParsingPrompt = futureParsingPrompt
 
-                // Save new pending receipts
-                val newPaths = receiptManager.saveReceipts(_pendingReceiptUris.value)
-                if (newPaths.isNotEmpty()) {
-                    transactionRepository.insertReceipts(toSave.id, newPaths)
-                }
-
-                // Normalize merchant name and persist tags
-                val normalizedTransaction = toSave.copy(
-                    merchantName = normalizeMerchantName(toSave.merchantName),
-                    tags = _pendingTags.value.joinToString(",")
-                )
-
-                transactionRepository.updateTransaction(normalizedTransaction)
-
-                // Update account balance if account was changed or added
-                val originalTxn = _transaction.value
-                val oldBank = originalTxn?.bankName
-                val oldAccount = originalTxn?.accountNumber
-                val newBank = normalizedTransaction.bankName
-                val newAccount = normalizedTransaction.accountNumber
-                val accountChanged = oldBank != newBank || oldAccount != newAccount
-
-                if (accountChanged && newBank != null && newAccount != null) {
-                    val currentBalance = accountBalanceRepository.getLatestBalance(newBank, newAccount)
-                    if (currentBalance != null) {
-                        val balanceChange = when (normalizedTransaction.transactionType) {
-                            TransactionType.INCOME -> normalizedTransaction.amount
-                            TransactionType.EXPENSE, TransactionType.CREDIT -> -normalizedTransaction.amount
-                            TransactionType.TRANSFER -> -normalizedTransaction.amount
-                            TransactionType.INVESTMENT -> -normalizedTransaction.amount
-                        }
-                        accountBalanceRepository.insertBalance(
-                            currentBalance.copy(
-                                id = 0,
-                                balance = currentBalance.balance + balanceChange,
-                                timestamp = normalizedTransaction.dateTime,
-                                transactionId = normalizedTransaction.id,
-                                sourceType = "TRANSACTION",
-                                smsSource = null
+                        if (originalMerchant != null &&
+                            !saved.merchantName.equals(originalMerchant, ignoreCase = true)
+                        ) {
+                            val similarTransactions = transactionRepository.findSimilarTransactionsForRename(
+                                originalMerchant = originalMerchant,
+                                newMerchantName = saved.merchantName,
+                                excludeTransactionId = saved.id,
                             )
-                        )
+                            if (similarTransactions.isNotEmpty()) {
+                                _merchantRenameReview.value = MerchantRenameReviewState(
+                                    newMerchantName = saved.merchantName,
+                                    transactions = similarTransactions,
+                                )
+                                return@collect
+                            }
+                        }
+                        finishSaveFlow()
                     }
-                }
-
-                // Save or remove splits
-                val currentSplits = _splits.value
-                if (_showSplitEditor.value && currentSplits.isNotEmpty()) {
-                    // Convert SplitItems to entities and save
-                    val splitEntities = currentSplits.map { item ->
-                        TransactionSplitEntity(
-                            id = item.id,
-                            transactionId = normalizedTransaction.id,
-                            category = item.category,
-                            amount = item.amount,
-                            tags = item.tags.joinToString(",")
-                        )
+                    WorkInfo.State.FAILED -> {
+                        _isSaving.value = false
+                        val error = info.outputData.getString(SaveTransactionWorker.OUTPUT_ERROR)
+                        _errorMessage.value = "Save failed: ${error ?: "Unknown error"}. Please try again."
                     }
-                    transactionRepository.saveSplits(normalizedTransaction.id, splitEntities)
-                    _hasSplits.value = true
-                    _originalSplits.value = currentSplits
-                } else if (_originalSplits.value.isNotEmpty()) {
-                    // Splits were removed, delete them from database
-                    transactionRepository.removeSplits(normalizedTransaction.id)
-                    _hasSplits.value = false
-                    _originalSplits.value = emptyList()
+                    else -> { /* ENQUEUED, BLOCKED, CANCELLED — no action */ }
                 }
-
-                // Save merchant mapping if checkbox is checked
-                if (_applyToAllFromMerchant.value) {
-                    merchantMappingRepository.setMapping(
-                        normalizedTransaction.merchantName,
-                        normalizedTransaction.category
-                    )
-                }
-
-                // Update existing transactions if checkbox is checked
-                if (_updateExistingTransactions.value) {
-                    transactionRepository.updateCategoryForMerchant(
-                        normalizedTransaction.merchantName,
-                        normalizedTransaction.category
-                    )
-                }
-
-                val originalMerchant = _originalMerchantNameOnEdit.value
-                var pendingRenameReview = false
-                if (originalMerchant != null &&
-                    !normalizedTransaction.merchantName.equals(originalMerchant, ignoreCase = true)
-                ) {
-                    merchantAliasRepository.setAlias(
-                        originalMerchant,
-                        normalizedTransaction.merchantName
-                    )
-                    val similarTransactions = transactionRepository.findSimilarTransactionsForRename(
-                        originalMerchant = originalMerchant,
-                        newMerchantName = normalizedTransaction.merchantName,
-                        excludeTransactionId = normalizedTransaction.id,
-                    )
-                    if (similarTransactions.isNotEmpty()) {
-                        _merchantRenameReview.value = MerchantRenameReviewState(
-                            newMerchantName = normalizedTransaction.merchantName,
-                            transactions = similarTransactions,
-                        )
-                        pendingRenameReview = true
-                    }
-                }
-
-                _transaction.value = normalizedTransaction
-                _pendingReceiptUris.value = emptyList()
-                _removedReceiptIds.value = emptySet()
-                loadReceiptUris(normalizedTransaction)
-                _pendingTags.value = emptyList()
-                if (!pendingRenameReview) {
-                    _saveSuccess.value = true
-                }
-                _isEditMode.value = false
-                _editableTransaction.value = null
-                _errorMessage.value = null
-                _applyToAllFromMerchant.value = false
-                _updateExistingTransactions.value = false
-                _existingTransactionCount.value = 0
-                _originalMerchantNameOnEdit.value = null
-                _suggestedMerchantRename.value = null
-                _budgetImpactType.value = normalizedTransaction.budgetImpactType
-                _budgetCategory.value = normalizedTransaction.budgetCategory
-            } catch (e: Exception) {
-                _errorMessage.value = "Failed to save changes: ${e.message}"
-            } finally {
-                _isSaving.value = false
             }
         }
     }
@@ -887,7 +936,7 @@ class TransactionDetailViewModel @Inject constructor(
 
     fun dismissMerchantRenameReview() {
         _merchantRenameReview.value = null
-        _saveSuccess.value = true
+        finishSaveFlow()
     }
 
     private fun advanceRenameReview(approved: Boolean) {
@@ -912,7 +961,7 @@ class TransactionDetailViewModel @Inject constructor(
         val state = _merchantRenameReview.value ?: return
         if (approvedTransactionIds.isEmpty()) {
             _merchantRenameReview.value = null
-            _saveSuccess.value = true
+            finishSaveFlow()
             return
         }
         viewModelScope.launch {
@@ -928,8 +977,68 @@ class TransactionDetailViewModel @Inject constructor(
                 _errorMessage.value = "Failed to rename some transactions: ${e.message}"
             } finally {
                 _merchantRenameReview.value = null
+                finishSaveFlow()
+            }
+        }
+    }
+
+    fun confirmFutureParsing() {
+        val prompt = _futureParsingPrompt.value ?: return
+        viewModelScope.launch {
+            try {
+                if (prompt.merchantChanged) {
+                    merchantAliasRepository.setAlias(
+                        prompt.rawMerchantName,
+                        prompt.displayMerchantName,
+                    )
+                }
+                merchantMappingRepository.setMapping(
+                    prompt.displayMerchantName,
+                    prompt.category,
+                )
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to save parsing preferences: ${e.message}"
+            } finally {
+                _futureParsingPrompt.value = null
                 _saveSuccess.value = true
             }
+        }
+    }
+
+    fun dismissFutureParsing() {
+        _futureParsingPrompt.value = null
+        _saveSuccess.value = true
+    }
+
+    private fun buildFutureParsingPrompt(
+        originalTxn: TransactionEntity?,
+        saved: TransactionEntity,
+        originalMerchant: String?,
+    ): FutureParsingPromptState? {
+        if (_showSplitEditor.value && _splits.value.isNotEmpty()) return null
+
+        val merchantChanged = originalMerchant != null &&
+            !saved.merchantName.equals(originalMerchant, ignoreCase = true)
+        val originalCategory = _originalCategoryOnEdit.value
+        val categoryChanged = originalCategory != null && saved.category != originalCategory
+        if (!merchantChanged && !categoryChanged) return null
+
+        return FutureParsingPromptState(
+            rawMerchantName = originalMerchant ?: saved.merchantName,
+            displayMerchantName = saved.merchantName,
+            category = saved.category,
+            merchantChanged = merchantChanged,
+            categoryChanged = categoryChanged,
+        )
+    }
+
+    private fun finishSaveFlow() {
+        val prompt = pendingFutureParsingPrompt
+        pendingFutureParsingPrompt = null
+        if (prompt != null) {
+            _futureParsingPrompt.value = prompt
+        } else {
+            _saveSuccess.value = true
         }
     }
     

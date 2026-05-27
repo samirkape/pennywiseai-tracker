@@ -43,6 +43,9 @@ interface UnrecognizedSmsDao {
     @Query("UPDATE unrecognized_sms SET is_deleted = 1 WHERE id = :id")
     suspend fun softDeleteById(id: Long)
     
+    @Query("SELECT * FROM unrecognized_sms WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): UnrecognizedSmsEntity?
+
     @Query("SELECT * FROM unrecognized_sms WHERE sender = :sender AND sms_body = :smsBody LIMIT 1")
     suspend fun findBySenderAndBody(sender: String, smsBody: String): UnrecognizedSmsEntity?
 }

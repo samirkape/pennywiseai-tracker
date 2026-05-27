@@ -94,6 +94,46 @@ fun TransactionTabContent(
                 .padding(horizontal = Dimensions.Padding.content, vertical = Dimensions.Padding.content),
             verticalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
+            if (uiState.fromUnrecognizedSms) {
+                uiState.sourceSmsBody?.let { smsBody ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f),
+                    ),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(Spacing.md),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+                    ) {
+                        Text(
+                            text = "Original SMS",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        uiState.sourceSmsSender?.let { sender ->
+                            Text(
+                                text = sender,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text(
+                            text = smsBody,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = "Amount and merchant are guessed — please verify before saving.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                }
+            }
+
             // ── Amount ──
             Row(
                 modifier = Modifier.fillMaxWidth(),

@@ -5,8 +5,11 @@ import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionType
 import java.time.LocalDateTime
 import com.pennywiseai.parser.core.PayrollCreditDetector
+import com.pennywiseai.parser.core.HdfcExplicitPayee
 import com.pennywiseai.tracker.domain.model.QuickKeywordApplyScope
 import com.pennywiseai.tracker.domain.model.QuickKeywordExpenseChannel
+import com.pennywiseai.tracker.domain.model.QuickKeywordMatchField
+import com.pennywiseai.tracker.domain.model.QuickKeywordMatchStats
 import com.pennywiseai.tracker.domain.model.QuickKeywordTextMatchMode
 import com.pennywiseai.tracker.domain.model.rule.ConditionOperator
 import com.pennywiseai.tracker.data.database.entity.TransferKind
@@ -89,6 +92,22 @@ object QuickKeywordRuleMatcher {
     /**
      * Full haystack for keyword search: scanned SMS body plus parsed fields from that message.
      */
+    fun buildMatchText(
+        transaction: TransactionEntity,
+        smsText: String?,
+        matchField: QuickKeywordMatchField = QuickKeywordMatchField.DEFAULT,
+    ): String = when (matchField) {
+        QuickKeywordMatchField.ALL_TEXT -> buildSearchableText(transaction, smsText)
+        QuickKeywordMatchField.SMS_TEXT ->
+            sequenceOf(smsText, transaction.smsBody)
+                .mapNotNull { it?.trim()?.takeIf { s -> s.isNotEmpty() } }
+                .distinct()
+                .joinToString(" ")
+        QuickKeywordMatchField.MERCHANT -> transaction.merchantName.trim()
+        QuickKeywordMatchField.DESCRIPTION -> transaction.description?.trim().orEmpty()
+        QuickKeywordMatchField.TAGS -> transaction.tags.trim()
+    }
+
     fun buildSearchableText(transaction: TransactionEntity, smsText: String?): String {
         val smsFromScan = sequenceOf(smsText, transaction.smsBody)
             .mapNotNull { it?.trim()?.takeIf { s -> s.isNotEmpty() } }
@@ -201,6 +220,23 @@ object QuickKeywordRuleMatcher {
         return matchesKeywords(haystack, keywords, mode)
     }
 
+    fun matchFieldDescription(field: QuickKeywordMatchField): String = when (field) {
+        QuickKeywordMatchField.ALL_TEXT -> "all SMS and parsed fields"
+        QuickKeywordMatchField.SMS_TEXT -> "SMS body only"
+        QuickKeywordMatchField.MERCHANT -> "merchant name only"
+        QuickKeywordMatchField.DESCRIPTION -> "description only"
+        QuickKeywordMatchField.TAGS -> "tags only"
+    }
+
+    fun parseTagsString(raw: String): List<String> =
+        raw.split(',')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinctBy { it.lowercase() }
+
+    fun formatTagsString(tags: List<String>): String =
+        tags.map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }.joinToString(",")
+
     fun textMatchModeDescription(mode: QuickKeywordTextMatchMode): String = when (mode) {
         QuickKeywordTextMatchMode.CONTAINS_ANY -> "contains any keyword"
         QuickKeywordTextMatchMode.CONTAINS_ALL -> "contains all keywords"
@@ -244,11 +280,11 @@ object QuickKeywordRuleMatcher {
             )
         }
 
-        val searchable = buildSearchableText(transaction, smsText)
+        val searchable = buildMatchText(transaction, smsText, input.matchField)
         if (searchable.isBlank()) {
             return Diagnosis(
                 matches = false,
-                reason = "No SMS scan text, merchant, or description to search",
+                reason = "No text in ${matchFieldDescription(input.matchField)} to search",
                 searchableTextLength = 0,
             )
         }
@@ -350,7 +386,9 @@ object QuickKeywordRuleMatcher {
         input: QuickKeywordRuleInput,
     ): TransactionEntity {
         var updated = transaction
-        if (input.overwriteMerchant) {
+        if (input.overwriteMerchant &&
+            !shouldPreserveParsedMerchant(transaction.smsBody, transaction.merchantName)
+        ) {
             updated = updated.copy(merchantName = input.merchantLabel.trim())
         }
         if (input.overwriteCategory) {
@@ -361,8 +399,22 @@ object QuickKeywordRuleMatcher {
                 updated = updated.copy(transactionType = newType)
             }
         }
+        if (input.overwriteTags && input.tags.isNotEmpty()) {
+            val existing = parseTagsString(updated.tags)
+            val merged = (existing + input.tags.map { it.trim() })
+                .filter { it.isNotEmpty() }
+                .distinctBy { it.lowercase() }
+            updated = updated.copy(tags = formatTagsString(merged))
+        }
         return updated.copy(updatedAt = LocalDateTime.now())
     }
+
+    /**
+     * Keeps parser-extracted HDFC payees when a keyword rule matched on incidental
+     * SMS text (account number, footer boilerplate) instead of the payee name.
+     */
+    fun shouldPreserveParsedMerchant(sms: String?, parsedMerchant: String): Boolean =
+        HdfcExplicitPayee.shouldPreserveMerchant(sms, parsedMerchant)
 
     fun hasPendingOverwrites(
         transaction: TransactionEntity,
@@ -384,6 +436,11 @@ object QuickKeywordRuleMatcher {
         ) {
             return true
         }
+        if (input.overwriteTags && input.tags.isNotEmpty()) {
+            val before = parseTagsString(transaction.tags).map { it.lowercase() }.toSet()
+            val after = parseTagsString(patched.tags).map { it.lowercase() }.toSet()
+            if (after != before) return true
+        }
         return false
     }
 
@@ -394,13 +451,132 @@ object QuickKeywordRuleMatcher {
             if (input.overwriteTransactionType) {
                 input.resolvedOverwriteType()?.let { add("type→${it.name.lowercase()}") }
             }
+            if (input.overwriteTags && input.tags.isNotEmpty()) {
+                add("tags→${input.tags.joinToString(", ")}")
+            }
         }.joinToString(", ")
-        val textLine = "Text: ${textMatchModeDescription(input.textMatchMode)}"
+        val textLine = "Text (${matchFieldDescription(input.matchField)}): " +
+            textMatchModeDescription(input.textMatchMode)
         val matchLine = when {
             input.overwriteTransactionType -> "Keyword match only (fixes wrong types)"
             input.matchType != null -> "Type: ${matchTypeDescription(input)} only"
             else -> "Any transaction type"
         }
         return "Overwrite: $overwrites. $textLine. $matchLine"
+    }
+
+    /**
+     * Scans [pool] and returns match counters plus sample rejection reasons (logcat tag [QuickKeywordRule]).
+     */
+    fun scanPool(
+        pool: List<TransactionEntity>,
+        input: QuickKeywordRuleInput,
+        logTag: String = LOG_TAG,
+    ): QuickKeywordMatchStats {
+        var keywordMatched = 0
+        var wouldUpdate = 0
+        var alreadyLabeled = 0
+        var typeRejected = 0
+        var noKeywordHit = 0
+        var emptySearchText = 0
+        val rejectionSamples = mutableListOf<String>()
+
+        Log.d(
+            logTag,
+            buildString {
+                append("scanPool start: pool=")
+                append(pool.size)
+                append(" keywords=")
+                append(input.keywords)
+                append(" mode=")
+                append(input.textMatchMode)
+                append(" matchField=")
+                append(input.matchField)
+                append(" typeFilter=")
+                append(input.matchType?.name ?: "any")
+                if (input.matchExpenseChannel != null) {
+                    append(" expenseChannel=")
+                    append(input.matchExpenseChannel)
+                }
+                append(" textMatch=")
+                append(textMatchModeDescription(input.textMatchMode))
+                append(" uncategorizedOnly=")
+                append(input.applyUncategorizedOnly)
+            },
+        )
+
+        pool.forEach { transaction ->
+            if (transaction.isDeleted) return@forEach
+
+            val smsBody = transaction.smsBody
+            val diagnosis = diagnose(transaction, smsBody, input)
+
+            when {
+                !diagnosis.matches && diagnosis.reason.startsWith("Type is") -> {
+                    typeRejected++
+                    if (rejectionSamples.size < 8) {
+                        rejectionSamples.add(
+                            "id=${transaction.id} type=${transaction.transactionType.name}: ${diagnosis.reason}",
+                        )
+                    }
+                }
+                !diagnosis.matches && diagnosis.reason.contains("No text in") -> {
+                    emptySearchText++
+                    if (rejectionSamples.size < 8) {
+                        rejectionSamples.add("id=${transaction.id}: ${diagnosis.reason}")
+                    }
+                }
+                !diagnosis.matches -> {
+                    noKeywordHit++
+                    if (rejectionSamples.size < 8) {
+                        val snippet = buildMatchText(transaction, smsBody, input.matchField)
+                            .take(80)
+                            .replace('\n', ' ')
+                        rejectionSamples.add(
+                            "id=${transaction.id} ${diagnosis.reason}; text=\"$snippet\"",
+                        )
+                    }
+                }
+                else -> {
+                    keywordMatched++
+                    val shouldUpdate = input.forceOverwriteExisting ||
+                        hasPendingOverwrites(transaction, input)
+                    if (shouldUpdate) {
+                        wouldUpdate++
+                    } else {
+                        alreadyLabeled++
+                        if (rejectionSamples.size < 8) {
+                            rejectionSamples.add(
+                                "id=${transaction.id}: keyword \"${diagnosis.matchedKeyword}\" but labels already match",
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        val stats = QuickKeywordMatchStats(
+            poolSize = pool.size,
+            keywordMatched = keywordMatched,
+            wouldUpdate = wouldUpdate,
+            alreadyLabeled = alreadyLabeled,
+            typeRejected = typeRejected,
+            noKeywordHit = noKeywordHit,
+            emptySearchText = emptySearchText,
+            rejectionSamples = rejectionSamples,
+        )
+
+        Log.i(
+            logTag,
+            "scanPool done: pool=${stats.poolSize} keywordMatched=${stats.keywordMatched} " +
+                "wouldUpdate=${stats.wouldUpdate} alreadyLabeled=${stats.alreadyLabeled} " +
+                "typeRejected=${stats.typeRejected} noKeywordHit=${stats.noKeywordHit} " +
+                "emptySearch=${stats.emptySearchText}",
+        )
+        stats.rejectionSamples.forEach { sample ->
+            Log.d(logTag, "scanPool sample: $sample")
+        }
+
+        return stats
     }
 }

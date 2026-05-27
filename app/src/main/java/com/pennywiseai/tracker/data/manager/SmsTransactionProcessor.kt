@@ -12,6 +12,7 @@ import com.pennywiseai.tracker.data.mapper.toEntity
 import com.pennywiseai.tracker.data.mapper.toEntityType
 import com.pennywiseai.tracker.data.repository.AccountBalanceRepository
 import com.pennywiseai.tracker.data.repository.CardRepository
+import com.pennywiseai.tracker.data.repository.MerchantAliasRepository
 import com.pennywiseai.tracker.data.repository.MerchantMappingRepository
 import com.pennywiseai.tracker.data.repository.SubscriptionRepository
 import com.pennywiseai.tracker.data.repository.TransactionRepository
@@ -38,6 +39,7 @@ class SmsTransactionProcessor @Inject constructor(
     private val accountBalanceRepository: AccountBalanceRepository,
     private val cardRepository: CardRepository,
     private val merchantMappingRepository: MerchantMappingRepository,
+    private val merchantAliasRepository: MerchantAliasRepository,
     private val subscriptionRepository: SubscriptionRepository,
     private val ruleRepository: RuleRepository,
     private val ruleEngine: RuleEngine,
@@ -71,7 +73,7 @@ class SmsTransactionProcessor @Inject constructor(
     ): ProcessingResult {
         try {
             // Get the appropriate parser for this sender
-            val parser = BankParserFactory.getParser(sender)
+            val parser = BankParserFactory.getParser(sender, body)
             if (parser == null) {
                 return ProcessingResult(false, reason = "No parser found for sender: $sender")
             }
@@ -120,13 +122,21 @@ class SmsTransactionProcessor @Inject constructor(
                 return ProcessingResult(false, reason = "Duplicate transaction")
             }
 
-            // Check for custom merchant mapping
-            val customCategory = merchantMappingRepository.getCategoryForMerchant(entity.merchantName)
-            val entityWithMapping = if (customCategory != null) {
-                Log.d(TAG, "Found custom category mapping: ${entity.merchantName} -> $customCategory")
-                entity.copy(category = customCategory)
+            // Resolve merchant alias then apply category mapping for future SMS
+            val resolvedMerchant = merchantAliasRepository.resolveDisplayNameForIngest(entity.merchantName)
+            val entityWithName = if (resolvedMerchant != entity.merchantName) {
+                Log.d(TAG, "Resolved merchant alias: ${entity.merchantName} -> $resolvedMerchant")
+                entity.copy(merchantName = resolvedMerchant)
             } else {
                 entity
+            }
+
+            val customCategory = merchantMappingRepository.getCategoryForMerchant(entityWithName.merchantName)
+            val entityWithMapping = if (customCategory != null) {
+                Log.d(TAG, "Found custom category mapping: ${entityWithName.merchantName} -> $customCategory")
+                entityWithName.copy(category = customCategory)
+            } else {
+                entityWithName
             }
 
             // Apply rule engine to the transaction

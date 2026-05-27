@@ -89,6 +89,9 @@ interface TransactionSplitDao {
     @Query("DELETE FROM transaction_splits WHERE id = :splitId")
     suspend fun deleteSplitById(splitId: Long)
 
+    @Query("DELETE FROM transaction_splits")
+    suspend fun deleteAllSplits()
+
     @Query("SELECT COUNT(*) FROM transaction_splits WHERE transaction_id = :transactionId")
     suspend fun getSplitCountForTransaction(transactionId: Long): Int
 

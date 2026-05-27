@@ -35,7 +35,12 @@ class RuleEngine @Inject constructor() {
 
         for (rule in sortedRules) {
             if (evaluateConditions(modifiedTransaction, smsText, rule.conditions)) {
-                val (newTransaction, fieldMods) = applyActions(modifiedTransaction, rule.actions)
+                val (newTransaction, fieldMods) = applyActions(
+                    modifiedTransaction,
+                    rule.actions,
+                    smsText,
+                    rule,
+                )
 
                 if (fieldMods.isNotEmpty()) {
                     modifiedTransaction = newTransaction
@@ -204,7 +209,10 @@ class RuleEngine @Inject constructor() {
             TransactionField.CATEGORY -> transaction.category ?: ""
             TransactionField.MERCHANT -> transaction.merchantName
             TransactionField.NARRATION -> transaction.description ?: ""
-            TransactionField.SMS_TEXT -> smsText ?: ""
+            TransactionField.SMS_TEXT -> {
+                val fromScan = smsText?.trim().orEmpty()
+                if (fromScan.isNotEmpty()) fromScan else transaction.smsBody.orEmpty()
+            }
             TransactionField.BANK_NAME -> transaction.bankName ?: ""
             TransactionField.TRANSACTION_HOUR ->
                 String.format("%02d", transaction.dateTime.hour)
@@ -218,6 +226,7 @@ class RuleEngine @Inject constructor() {
                 transaction.dateTime.toLocalDate().toString()
             TransactionField.SEARCHABLE_TEXT ->
                 QuickKeywordRuleMatcher.buildSearchableText(transaction, smsText)
+            TransactionField.TAGS -> transaction.tags
         }
     }
 
@@ -231,7 +240,9 @@ class RuleEngine @Inject constructor() {
 
     private fun applyActions(
         transaction: TransactionEntity,
-        actions: List<RuleAction>
+        actions: List<RuleAction>,
+        smsText: String?,
+        rule: TransactionRule,
     ): Pair<TransactionEntity, List<FieldModification>> {
         var modifiedTransaction = transaction
         val modifications = mutableListOf<FieldModification>()
@@ -239,6 +250,17 @@ class RuleEngine @Inject constructor() {
         for (action in actions) {
             // Skip BLOCK actions as they don't modify the transaction
             if (action.actionType == ActionType.BLOCK) {
+                continue
+            }
+
+            if (action.field == TransactionField.MERCHANT &&
+                action.actionType == ActionType.SET &&
+                QuickKeywordRuleCompiler.isQuickKeywordRule(rule) &&
+                QuickKeywordRuleMatcher.shouldPreserveParsedMerchant(
+                    smsText ?: transaction.smsBody,
+                    transaction.merchantName,
+                )
+            ) {
                 continue
             }
 
@@ -307,6 +329,28 @@ class RuleEngine @Inject constructor() {
                     else -> transaction.transactionType
                 }
                 transaction.copy(transactionType = newType) to newType.name
+            }
+            TransactionField.TAGS -> {
+                val existing = QuickKeywordRuleMatcher.parseTagsString(transaction.tags)
+                val newValue = when (action.actionType) {
+                    ActionType.SET -> QuickKeywordRuleMatcher.formatTagsString(
+                        QuickKeywordRuleMatcher.parseTagsString(action.value),
+                    )
+                    ActionType.ADD_TAG -> {
+                        val tag = action.value.trim()
+                        if (tag.isBlank()) transaction.tags
+                        else QuickKeywordRuleMatcher.formatTagsString(existing + tag)
+                    }
+                    ActionType.REMOVE_TAG -> {
+                        val remove = action.value.trim().lowercase()
+                        QuickKeywordRuleMatcher.formatTagsString(
+                            existing.filter { it.lowercase() != remove },
+                        )
+                    }
+                    ActionType.CLEAR -> ""
+                    else -> transaction.tags
+                }
+                transaction.copy(tags = newValue) to newValue
             }
             else -> transaction to getFieldValue(transaction, null, action.field)
         }

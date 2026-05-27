@@ -3,8 +3,10 @@ package com.pennywiseai.tracker.ui.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pennywiseai.tracker.data.repository.CategoryRepository
 import com.pennywiseai.tracker.data.repository.KeywordRuleBatchUndoRepository
 import com.pennywiseai.tracker.data.repository.TransactionRepository
+import com.pennywiseai.tracker.domain.model.QuickKeywordMatchStats
 import com.pennywiseai.tracker.domain.model.KeywordBatchUndoSession
 import com.pennywiseai.tracker.domain.model.PendingKeywordBatchApply
 import com.pennywiseai.tracker.domain.model.QuickKeywordApplyScope
@@ -18,6 +20,7 @@ import com.pennywiseai.tracker.domain.usecase.ApplyRulesToPastTransactionsUseCas
 import com.pennywiseai.tracker.domain.usecase.BatchApplyResult
 import com.pennywiseai.tracker.domain.usecase.DryRunResult
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.pennywiseai.tracker.data.database.entity.CategoryEntity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -48,9 +51,30 @@ data class ApplyRuleUiState(
 class QuickKeywordRulesViewModel @Inject constructor(
     private val ruleRepository: RuleRepository,
     private val transactionRepository: TransactionRepository,
+    private val categoryRepository: CategoryRepository,
     private val applyRulesToPastTransactionsUseCase: ApplyRulesToPastTransactionsUseCase,
     private val keywordRuleBatchUndoRepository: KeywordRuleBatchUndoRepository,
 ) : ViewModel() {
+
+    val categoryEntities: StateFlow<List<CategoryEntity>> = categoryRepository.getAllCategories()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList(),
+        )
+
+    val usedCategoryNames: StateFlow<List<String>> = transactionRepository.getAllCategories()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList(),
+        )
+
+    private val _allUsedTags = MutableStateFlow<List<String>>(emptyList())
+    val usedTags: StateFlow<List<String>> = _allUsedTags.asStateFlow()
+
+    private val _liveMatchStats = MutableStateFlow<QuickKeywordMatchStats?>(null)
+    val liveMatchStats: StateFlow<QuickKeywordMatchStats?> = _liveMatchStats.asStateFlow()
 
     val quickRules: StateFlow<List<TransactionRule>> = ruleRepository.getAllRules()
         .map { rules -> rules.filter { QuickKeywordRuleCompiler.isQuickKeywordRule(it) } }
@@ -73,7 +97,15 @@ class QuickKeywordRulesViewModel @Inject constructor(
 
     init {
         refreshUndoSession()
+        viewModelScope.launch {
+            runCatching {
+                _allUsedTags.value = transactionRepository.getAllUsedTags()
+            }.onFailure { e ->
+                Log.e(QuickKeywordRuleMatcher.LOG_TAG, "loadUsedTags failed", e)
+            }
+        }
     }
+
 
     fun refreshUndoSession() {
         _undoSession.value = keywordRuleBatchUndoRepository.getActiveSession()
@@ -228,20 +260,60 @@ class QuickKeywordRulesViewModel @Inject constructor(
         }
     }
 
+    fun refreshLiveMatchStats(
+        input: QuickKeywordRuleCompiler.QuickKeywordRuleInput,
+        applyScope: QuickKeywordApplyScope = QuickKeywordApplyScope.AllTime,
+    ) {
+        if (!input.validate()) {
+            _liveMatchStats.value = null
+            return
+        }
+        viewModelScope.launch {
+            runCatching { computeMatchStats(input, applyScope) }
+                .onSuccess { _liveMatchStats.value = it }
+                .onFailure { e ->
+                    Log.e(QuickKeywordRuleMatcher.LOG_TAG, "refreshLiveMatchStats failed", e)
+                    _liveMatchStats.value = null
+                }
+        }
+    }
+
+    fun clearLiveMatchStats() {
+        _liveMatchStats.value = null
+    }
+
+    private suspend fun computeMatchStats(
+        input: QuickKeywordRuleCompiler.QuickKeywordRuleInput,
+        applyScope: QuickKeywordApplyScope,
+    ): QuickKeywordMatchStats {
+        val allInRange = loadTransactionsForScope(applyScope)
+        val pool = filterPool(allInRange, input)
+        return QuickKeywordRuleMatcher.scanPool(pool, input).copy(
+            transactionsInRange = allInRange.size,
+        )
+    }
+
+    private fun filterPool(
+        allInRange: List<com.pennywiseai.tracker.data.database.entity.TransactionEntity>,
+        input: QuickKeywordRuleCompiler.QuickKeywordRuleInput,
+    ): List<com.pennywiseai.tracker.data.database.entity.TransactionEntity> =
+        if (input.applyUncategorizedOnly) {
+            allInRange.filter { it.category.isBlank() || it.category == "Others" }
+        } else {
+            allInRange
+        }
+
     private suspend fun buildBatchPreview(
         ruleName: String,
         input: QuickKeywordRuleCompiler.QuickKeywordRuleInput,
         applyScope: QuickKeywordApplyScope,
     ): QuickKeywordBatchPreview {
         val allInRange = loadTransactionsForScope(applyScope)
-        val pool = if (input.applyUncategorizedOnly) {
-            allInRange.filter { it.category.isBlank() || it.category == "Others" }
-        } else {
-            allInRange
-        }
+        val pool = filterPool(allInRange, input)
+        val stats = QuickKeywordRuleMatcher.scanPool(pool, input).copy(
+            transactionsInRange = allInRange.size,
+        )
 
-        var keywordMatched = 0
-        var alreadyLabeled = 0
         val pendingChanges = mutableListOf<QuickKeywordBatchChange>()
 
         pool.forEach { transaction ->
@@ -251,7 +323,6 @@ class QuickKeywordRulesViewModel @Inject constructor(
             val diagnosis = QuickKeywordRuleMatcher.diagnose(transaction, smsBody, input)
             if (!diagnosis.matches) return@forEach
 
-            keywordMatched++
             val patched = QuickKeywordRuleMatcher.applyOverwrites(transaction, input)
             val shouldUpdate = input.forceOverwriteExisting ||
                 QuickKeywordRuleMatcher.hasPendingOverwrites(transaction, input)
@@ -273,8 +344,6 @@ class QuickKeywordRulesViewModel @Inject constructor(
                         after = patched,
                     ),
                 )
-            } else {
-                alreadyLabeled++
             }
         }
 
@@ -283,11 +352,12 @@ class QuickKeywordRulesViewModel @Inject constructor(
             ruleName = ruleName,
             applyScope = applyScope,
             poolSize = pool.size,
-            keywordMatched = keywordMatched,
+            keywordMatched = stats.keywordMatched,
             willUpdate = pendingChanges.size,
-            alreadyLabeled = alreadyLabeled,
+            alreadyLabeled = stats.alreadyLabeled,
             sampleChanges = samples,
             pendingChanges = pendingChanges,
+            matchStats = stats,
         )
     }
 

@@ -2,6 +2,7 @@ package com.pennywiseai.tracker.presentation.add
 
 import android.content.Context
 import android.net.Uri
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pennywiseai.tracker.data.database.entity.AccountBalanceEntity
@@ -12,6 +13,7 @@ import com.pennywiseai.tracker.data.preferences.UserPreferencesRepository
 import com.pennywiseai.tracker.data.receipt.ReceiptManager
 import com.pennywiseai.tracker.data.repository.AccountBalanceRepository
 import com.pennywiseai.tracker.data.repository.BudgetGroupRepository
+import com.pennywiseai.tracker.data.repository.UnrecognizedSmsRepository
 import com.pennywiseai.tracker.domain.usecase.AddTransactionUseCase
 import com.pennywiseai.tracker.domain.usecase.AddSubscriptionUseCase
 import com.pennywiseai.tracker.data.repository.CategoryRepository
@@ -20,6 +22,7 @@ import com.pennywiseai.tracker.domain.usecase.GetCategoriesUseCase
 import android.util.Log
 import com.pennywiseai.tracker.data.database.entity.TransactionSplitEntity
 import com.pennywiseai.tracker.ui.components.SplitItem
+import com.pennywiseai.tracker.utils.UnrecognizedSmsPrefillParser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
@@ -35,6 +38,7 @@ import javax.inject.Inject
 @HiltViewModel
 class AddViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
+    savedStateHandle: SavedStateHandle,
     private val addTransactionUseCase: AddTransactionUseCase,
     private val addSubscriptionUseCase: AddSubscriptionUseCase,
     private val getCategoriesUseCase: GetCategoriesUseCase,
@@ -43,8 +47,11 @@ class AddViewModel @Inject constructor(
     private val accountBalanceRepository: AccountBalanceRepository,
     private val budgetGroupRepository: BudgetGroupRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
-    private val receiptManager: ReceiptManager
+    private val receiptManager: ReceiptManager,
+    private val unrecognizedSmsRepository: UnrecognizedSmsRepository,
 ) : ViewModel() {
+
+    private val unrecognizedSmsId: Long = savedStateHandle.get<Long>("unrecognizedSmsId") ?: -1L
     
     // General UI State
     private val _uiState = MutableStateFlow(AddUiState())
@@ -60,11 +67,40 @@ class AddViewModel @Inject constructor(
     
     
     init {
-        // Load base currency and set as default for both transaction and subscription
         viewModelScope.launch {
             val baseCurrency = userPreferencesRepository.baseCurrency.first()
             _transactionUiState.update { it.copy(currency = baseCurrency) }
             _subscriptionUiState.update { it.copy(currency = baseCurrency) }
+            if (unrecognizedSmsId > 0) {
+                loadUnrecognizedSmsPrefill(unrecognizedSmsId)
+            }
+        }
+    }
+
+    private suspend fun loadUnrecognizedSmsPrefill(id: Long) {
+        val message = unrecognizedSmsRepository.getById(id) ?: return
+        val prefill = UnrecognizedSmsPrefillParser.parse(message)
+        _transactionUiState.update { current ->
+            current.copy(
+                amount = prefill.amount?.stripTrailingZeros()?.toPlainString().orEmpty(),
+                merchant = prefill.merchant.orEmpty(),
+                category = when (prefill.transactionType) {
+                    TransactionType.INCOME -> "Income"
+                    TransactionType.INVESTMENT -> "Investment"
+                    else -> current.category
+                },
+                transactionType = prefill.transactionType,
+                paymentChannel = if (prefill.transactionType == TransactionType.CREDIT) {
+                    PaymentChannel.CREDIT_CARD
+                } else {
+                    PaymentChannel.ACCOUNT
+                },
+                date = prefill.dateTime,
+                sourceSmsBody = prefill.smsBody,
+                sourceSmsSender = prefill.smsSender,
+                fromUnrecognizedSms = true,
+                sourceUnrecognizedSmsId = id,
+            )
         }
     }
 
@@ -306,8 +342,14 @@ class AddViewModel @Inject constructor(
                     currency = state.currency,
                     receiptPaths = receiptPaths,
                     budgetCategory = state.budgetCategory,
-                    budgetImpactType = state.budgetImpactType
+                    budgetImpactType = state.budgetImpactType,
+                    smsBody = state.sourceSmsBody,
+                    smsSender = state.sourceSmsSender,
                 )
+
+                if (transactionId != -1L && state.sourceUnrecognizedSmsId != null) {
+                    unrecognizedSmsRepository.deleteMessage(state.sourceUnrecognizedSmsId)
+                }
 
                 if (state.isSplitEnabled && state.splits.size >= 2 && transactionId != -1L) {
                     val splitEntities = state.splits.map { split ->
@@ -527,7 +569,11 @@ data class TransactionUiState(
     val budgetImpactType: BudgetImpactType? = null,
     val budgetCategory: String? = null,
     val isSplitEnabled: Boolean = false,
-    val splits: List<SplitItem> = emptyList()
+    val splits: List<SplitItem> = emptyList(),
+    val fromUnrecognizedSms: Boolean = false,
+    val sourceSmsBody: String? = null,
+    val sourceSmsSender: String? = null,
+    val sourceUnrecognizedSmsId: Long? = null,
 ) {
     private val areSplitsBalanced: Boolean
         get() {

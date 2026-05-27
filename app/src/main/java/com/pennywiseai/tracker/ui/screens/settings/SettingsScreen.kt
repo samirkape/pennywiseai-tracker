@@ -33,7 +33,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.net.Uri
 import com.pennywiseai.tracker.R
+import com.pennywiseai.tracker.data.backup.ImportStrategy
 import com.pennywiseai.tracker.utils.DateRangeUtils
 import com.pennywiseai.tracker.ui.components.CustomTitleTopAppBar
 import com.pennywiseai.tracker.ui.components.cards.SectionHeaderV2
@@ -73,6 +75,7 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToCategories: () -> Unit = {},
     onNavigateToUnrecognizedSms: () -> Unit = {},
+    onNavigateToMerchantAliases: () -> Unit = {},
     onNavigateToManageAccounts: () -> Unit = {},
     onNavigateToRules: () -> Unit = {},
     onNavigateToBudgets: () -> Unit = {},
@@ -98,6 +101,9 @@ fun SettingsScreen(
     val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifecycle(initialValue = "")
     val availableCurrencies by settingsViewModel.availableCurrencies.collectAsStateWithLifecycle()
     var showSmsScanDialog by remember { mutableStateOf(false) }
+    var showImportStrategyDialog by remember { mutableStateOf(false) }
+    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedImportStrategy by remember { mutableStateOf(ImportStrategy.MERGE) }
     var showExportOptionsDialog by remember { mutableStateOf(false) }
     var showTimeoutDialog by remember { mutableStateOf(false) }
     var showDisplayCurrencyDialog by remember { mutableStateOf(false) }
@@ -116,7 +122,9 @@ fun SettingsScreen(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri ->
             uri?.let {
-                settingsViewModel.importBackup(it)
+                pendingImportUri = it
+                selectedImportStrategy = ImportStrategy.MERGE
+                showImportStrategyDialog = true
             }
         }
     )
@@ -365,7 +373,7 @@ fun SettingsScreen(
                     iconBgColor = cyan_light,
                     iconTint = cyan_dark,
                     title = "Import Data",
-                    subtitle = "Restore data from backup",
+                    subtitle = "Restore from backup — merge or overwrite",
                     onClick = { importLauncher.launch("*/*") },
                     position = ItemPosition.MIDDLE
                 )
@@ -385,6 +393,15 @@ fun SettingsScreen(
                     title = "Unrecognized SMS",
                     subtitle = "View and report unsupported bank messages",
                     onClick = onNavigateToUnrecognizedSms,
+                    position = ItemPosition.MIDDLE
+                )
+                SettingsNavItem(
+                    icon = Icons.Default.Store,
+                    iconBgColor = pink_light,
+                    iconTint = pink_dark,
+                    title = "Merchant name mappings",
+                    subtitle = "Review SMS label → display name pairs; fix risky ones",
+                    onClick = onNavigateToMerchantAliases,
                     position = ItemPosition.MIDDLE
                 )
                 SettingsNavItem(
@@ -420,7 +437,7 @@ fun SettingsScreen(
             // App Version
             Spacer(modifier = Modifier.height(Spacing.sm))
             Text(
-                text = "SpendTracker PRO v${com.pennywiseai.tracker.BuildConfig.VERSION_NAME}",
+                text = "Spendly v${com.pennywiseai.tracker.BuildConfig.VERSION_NAME}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
@@ -544,6 +561,60 @@ fun SettingsScreen(
         )
     }
 
+    if (showImportStrategyDialog && pendingImportUri != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showImportStrategyDialog = false
+                pendingImportUri = null
+            },
+            title = { Text(stringResource(R.string.backup_restore_dialog_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(R.string.backup_restore_dialog_hint),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(modifier = Modifier.height(Spacing.md))
+                    ImportStrategyOption(
+                        title = stringResource(R.string.backup_restore_merge_title),
+                        subtitle = stringResource(R.string.backup_restore_merge_hint),
+                        selected = selectedImportStrategy == ImportStrategy.MERGE,
+                        onSelect = { selectedImportStrategy = ImportStrategy.MERGE },
+                    )
+                    ImportStrategyOption(
+                        title = stringResource(R.string.backup_restore_overwrite_title),
+                        subtitle = stringResource(R.string.backup_restore_overwrite_hint),
+                        selected = selectedImportStrategy == ImportStrategy.REPLACE_ALL,
+                        onSelect = { selectedImportStrategy = ImportStrategy.REPLACE_ALL },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingImportUri?.let { uri ->
+                            settingsViewModel.importBackup(uri, selectedImportStrategy)
+                        }
+                        showImportStrategyDialog = false
+                        pendingImportUri = null
+                    },
+                ) {
+                    Text(stringResource(R.string.backup_restore_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showImportStrategyDialog = false
+                        pendingImportUri = null
+                    },
+                ) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
     // Show import/export message
     importExportMessage?.let { message ->
         if (exportedBackupFile != null && message.contains("successfully! Choose")) {
@@ -572,7 +643,7 @@ fun SettingsScreen(
         val timestamp = java.time.LocalDateTime.now().format(
             java.time.format.DateTimeFormatter.ofPattern("yyyy_MM_dd_HHmmss")
         )
-        val fileName = "SpendTracker_PRO_Backup_$timestamp.pennywisebackup"
+        val fileName = "Spendly_Backup_$timestamp.pennywisebackup"
 
         AlertDialog(
             onDismissRequest = {
@@ -934,6 +1005,42 @@ private fun SettingsNavigationContent(onNavigateBack: () -> Unit) {
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Back",
                 modifier = Modifier.size(Dimensions.Icon.small)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ImportStrategyOption(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onSelect: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(
+                selected = selected,
+                onClick = onSelect,
+            )
+            .padding(vertical = Spacing.sm),
+        verticalAlignment = Alignment.Top,
+    ) {
+        RadioButton(
+            selected = selected,
+            onClick = onSelect,
+        )
+        Spacer(modifier = Modifier.width(Spacing.md))
+        Column {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

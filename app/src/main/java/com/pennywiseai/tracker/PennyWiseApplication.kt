@@ -5,6 +5,7 @@ import android.app.Application
 import android.os.Bundle
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.pennywiseai.tracker.data.manager.SmsScanManager
 import com.pennywiseai.tracker.data.preferences.UserPreferencesRepository
 import com.pennywiseai.tracker.data.repository.AppLockRepository
 import com.pennywiseai.tracker.domain.usecase.CreditCardPaymentLinker
@@ -30,6 +31,9 @@ class PennyWiseApplication : Application(), Configuration.Provider {
 
     @Inject
     lateinit var userPreferencesRepository: UserPreferencesRepository
+
+    @Inject
+    lateinit var smsScanManager: SmsScanManager
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var activityReferences = 0
@@ -83,6 +87,7 @@ class PennyWiseApplication : Application(), Configuration.Provider {
                 // App came to foreground
                 isInForeground = true
                 isAppInForeground = true
+                smsScanManager.scheduleIncrementalScan(replaceExisting = false)
                 // Check if app should be locked when returning from background
                 checkAndLockApp()
             }

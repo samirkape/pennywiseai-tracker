@@ -45,23 +45,6 @@ data class DayOfWeekBucket(
     val share: Float
 )
 
-data class StreakData(
-    val currentStreak: Int,   // consecutive "good" days (spend ≤ daily avg)
-    val longestStreak: Int,
-    val goodDaysCount: Int,   // total good days in period
-    val totalDays: Int
-)
-
-enum class TrendDirection { GROWING, SHRINKING, STABLE }
-
-data class CategoryTrend(
-    val name: String,
-    val firstHalfAmount: BigDecimal,
-    val secondHalfAmount: BigDecimal,
-    val trendPercent: Float,  // positive = growing, negative = shrinking
-    val direction: TrendDirection
-)
-
 data class MerchantLoyalty(
     val name: String,
     val visitCount: Int,
@@ -109,8 +92,6 @@ data class BehavioralStatsUiState(
     val spendingForecast: SpendingForecast? = null,
     val timeOfDayBuckets: List<TimeOfDayBucket> = emptyList(),
     val dayOfWeekBuckets: List<DayOfWeekBucket> = emptyList(),
-    val streakData: StreakData? = null,
-    val categoryTrends: List<CategoryTrend> = emptyList(),
     val topMerchants: List<MerchantLoyalty> = emptyList()
 )
 
@@ -212,8 +193,6 @@ class BehavioralStatsViewModel @Inject constructor(
             spendingForecast = computeSpendingForecast(spendingTxns, startDate, endDate),
             timeOfDayBuckets = computeTimeOfDayBuckets(spendingTxns),
             dayOfWeekBuckets = computeDayOfWeekBuckets(spendingTxns),
-            streakData = computeStreakData(spendingTxns, startDate, endDate),
-            categoryTrends = computeCategoryTrends(spendingTxns, startDate, endDate),
             topMerchants = computeMerchantLoyalty(spendingTxns)
         )
     }
@@ -370,111 +349,6 @@ class BehavioralStatsViewModel @Inject constructor(
                 else 0f
             )
         }
-    }
-
-    // ── Spending streaks ────────────────────────────────────────────────────────
-    // "Good day" = day where total spend ≤ rolling daily average for the period
-
-    private fun computeStreakData(
-        txns: List<TransactionEntity>,
-        startDate: LocalDate,
-        endDate: LocalDate
-    ): StreakData {
-        val today = LocalDate.now()
-        val effectiveEnd = if (endDate.isAfter(today)) today else endDate
-
-        val totalDays = (ChronoUnit.DAYS.between(startDate, effectiveEnd) + 1).toInt()
-        if (totalDays <= 0) return StreakData(0, 0, 0, 0)
-
-        val totalSpend = txns.sumOf { it.amount.toDouble() }
-        val dailyAvg = totalSpend / totalDays
-
-        // Build daily spend map
-        val dailySpend = txns.groupBy { it.dateTime.toLocalDate() }
-            .mapValues { (_, list) -> list.sumOf { it.amount.toDouble() } }
-
-        var currentStreak = 0
-        var longestStreak = 0
-        var runningStreak = 0
-        var goodDays = 0
-
-        var currentDate = startDate
-        while (!currentDate.isAfter(effectiveEnd)) {
-            val daySpend = dailySpend[currentDate] ?: 0.0
-            val isGood = daySpend <= dailyAvg
-            if (isGood) {
-                runningStreak++
-                goodDays++
-                if (runningStreak > longestStreak) longestStreak = runningStreak
-            } else {
-                runningStreak = 0
-            }
-            currentDate = currentDate.plusDays(1)
-        }
-
-        // Current streak = from most recent day going back
-        currentStreak = 0
-        currentDate = effectiveEnd
-        while (!currentDate.isBefore(startDate)) {
-            val daySpend = dailySpend[currentDate] ?: 0.0
-            if (daySpend <= dailyAvg) {
-                currentStreak++
-                currentDate = currentDate.minusDays(1)
-            } else {
-                break
-            }
-        }
-
-        return StreakData(
-            currentStreak = currentStreak,
-            longestStreak = longestStreak,
-            goodDaysCount = goodDays,
-            totalDays = totalDays
-        )
-    }
-
-    // ── Category velocity (first-half vs. second-half comparison) ──────────────
-
-    private fun computeCategoryTrends(
-        txns: List<TransactionEntity>,
-        startDate: LocalDate,
-        endDate: LocalDate
-    ): List<CategoryTrend> {
-        val midDate = startDate.plusDays(ChronoUnit.DAYS.between(startDate, endDate) / 2)
-
-        val firstHalf = txns.filter { !it.dateTime.toLocalDate().isAfter(midDate) }
-        val secondHalf = txns.filter { it.dateTime.toLocalDate().isAfter(midDate) }
-
-        val firstAmounts = firstHalf.groupBy { it.category.ifEmpty { "Others" } }
-            .mapValues { (_, list) -> list.sumOf { it.amount.toDouble() }.toBigDecimal() }
-        val secondAmounts = secondHalf.groupBy { it.category.ifEmpty { "Others" } }
-            .mapValues { (_, list) -> list.sumOf { it.amount.toDouble() }.toBigDecimal() }
-
-        val allCategories = (firstAmounts.keys + secondAmounts.keys).distinct()
-
-        return allCategories.map { cat ->
-            val first = firstAmounts[cat] ?: BigDecimal.ZERO
-            val second = secondAmounts[cat] ?: BigDecimal.ZERO
-            val trendPct = if (first > BigDecimal.ZERO) {
-                ((second - first).divide(first, 4, RoundingMode.HALF_UP) * BigDecimal(100)).toFloat()
-            } else if (second > BigDecimal.ZERO) {
-                100f
-            } else {
-                0f
-            }
-            val direction = when {
-                trendPct > 10f  -> TrendDirection.GROWING
-                trendPct < -10f -> TrendDirection.SHRINKING
-                else            -> TrendDirection.STABLE
-            }
-            CategoryTrend(
-                name = cat,
-                firstHalfAmount = first,
-                secondHalfAmount = second,
-                trendPercent = trendPct,
-                direction = direction
-            )
-        }.sortedByDescending { it.secondHalfAmount }.take(8)
     }
 
     // ── Merchant loyalty ────────────────────────────────────────────────────────

@@ -119,6 +119,9 @@ fun PennyWiseNavHost(
                 onNavigateToUnrecognizedSms = {
                     navController.navigate(UnrecognizedSms) { launchSingleTop = true }
                 },
+                onNavigateToMerchantAliases = {
+                    navController.navigate(MerchantAliases) { launchSingleTop = true }
+                },
                 onNavigateToBudgets = {
                     navController.navigate(BudgetGroups) { launchSingleTop = true }
                 },
@@ -184,6 +187,9 @@ fun PennyWiseNavHost(
                         navController.navigate(TransactionsByMerchant(merchant)) {
                             launchSingleTop = true
                         }
+                    },
+                    onNavigateToTransactionDetail = { targetTransactionId ->
+                        navController.navigate(TransactionDetail(targetTransactionId))
                     }
                 )
             }
@@ -202,6 +208,17 @@ fun PennyWiseNavHost(
             )
         }
         
+        composable<MerchantAliases>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+        ) {
+            com.pennywiseai.tracker.ui.screens.settings.MerchantAliasesScreen(
+                onNavigateBack = { navController.safePopBackStack() },
+            )
+        }
+
         composable<UnrecognizedSms>(
             enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
             exitTransition = { fadeOut(tween(200)) },
@@ -211,7 +228,12 @@ fun PennyWiseNavHost(
             com.pennywiseai.tracker.ui.screens.unrecognized.UnrecognizedSmsScreen(
                 onNavigateBack = {
                     navController.safePopBackStack()
-                }
+                },
+                onAddAsTransaction = { smsId ->
+                    navController.navigate(AddTransaction(unrecognizedSmsId = smsId)) {
+                        launchSingleTop = true
+                    }
+                },
             )
         }
         
@@ -478,7 +500,7 @@ fun PennyWiseNavHost(
                     navController.navigate(TransactionDetail(transactionId)) { launchSingleTop = true }
                 },
                 onAddTransactionClick = {
-                    navController.navigate(AddTransaction) { launchSingleTop = true }
+                    navController.navigate(AddTransaction()) { launchSingleTop = true }
                 },
                 onNavigateToSettings = {
                     navController.navigate(Settings) { launchSingleTop = true }
@@ -501,7 +523,7 @@ fun PennyWiseNavHost(
                     navController.navigate(TransactionDetail(transactionId)) { launchSingleTop = true }
                 },
                 onAddTransactionClick = {
-                    navController.navigate(AddTransaction) { launchSingleTop = true }
+                    navController.navigate(AddTransaction()) { launchSingleTop = true }
                 },
                 onNavigateToSettings = {
                     navController.navigate(Settings) { launchSingleTop = true }

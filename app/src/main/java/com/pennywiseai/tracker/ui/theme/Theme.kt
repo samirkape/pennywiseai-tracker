@@ -146,6 +146,13 @@ fun PennyWiseTheme(
             surfaceContainer = amoled_surfaceContainer,
             surfaceContainerHigh = amoled_surfaceContainerHigh,
             surfaceContainerHighest = amoled_surfaceContainerHighest,
+            // Keep chips, FABs, and blurred bars on AMOLED grays instead of dynamic tints
+            primaryContainer = amoled_surfaceContainerHigh,
+            onPrimaryContainer = colorScheme.onSurface,
+            secondaryContainer = amoled_surfaceContainer,
+            onSecondaryContainer = colorScheme.onSurface,
+            tertiaryContainer = amoled_surfaceContainerHigh,
+            onTertiaryContainer = colorScheme.onSurface,
         )
     }
 
