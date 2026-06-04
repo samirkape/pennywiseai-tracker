@@ -4,8 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.net.Uri
 import androidx.core.net.toUri
-import androidx.work.WorkInfo
-import androidx.work.WorkManager
 import com.pennywiseai.tracker.data.currency.CurrencyConversionService
 import com.pennywiseai.tracker.data.database.entity.BudgetImpactType
 import com.pennywiseai.tracker.data.database.entity.CategoryEntity
@@ -31,7 +29,8 @@ import com.pennywiseai.tracker.domain.model.TransactionRenameCandidate
 import com.pennywiseai.tracker.data.database.entity.TransactionGroupEntity
 import com.pennywiseai.tracker.core.Constants
 import com.pennywiseai.tracker.data.database.dao.BulkCategoryPreviewDaoRow
-import com.pennywiseai.tracker.worker.SaveTransactionWorker
+import com.pennywiseai.tracker.domain.usecase.UpdateTransactionRequest
+import com.pennywiseai.tracker.domain.usecase.UpdateTransactionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import com.pennywiseai.tracker.utils.MerchantAliasAuditor
 import com.pennywiseai.tracker.utils.MerchantNameMatcher
@@ -90,6 +89,7 @@ class TransactionDetailViewModel @Inject constructor(
     private val currencyConversionService: CurrencyConversionService,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val receiptManager: ReceiptManager,
+    private val updateTransactionUseCase: UpdateTransactionUseCase,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : ViewModel() {
     
@@ -1092,76 +1092,52 @@ class TransactionDetailViewModel @Inject constructor(
             val hadSplitLinesSnapshot = _showSplitEditor.value && _splits.value.isNotEmpty()
             val snapshotOriginalMerchant = _originalMerchantNameOnEdit.value
             val snapshotOriginalCategory = _originalCategoryOnEdit.value
+            val snapshotIncomingCategory = _bulkIncomingCategory.value
+            val snapshotIncomingMerchant = _bulkIncomingMerchant.value
 
             val removedIds = _removedReceiptIds.value.toList()
             val removedPaths = removedIds.mapNotNull { id ->
                 _existingReceipts.value.find { it.id == id }?.path
             }
 
-            val patch = SaveTransactionWorker.TransactionPatch(
-                id = normalizedTransaction.id,
-                amount = normalizedTransaction.amount.toPlainString(),
-                merchantName = normalizedTransaction.merchantName,
-                category = normalizedTransaction.category,
-                transactionType = normalizedTransaction.transactionType.name,
-                dateTime = normalizedTransaction.dateTime.toString(),
-                description = normalizedTransaction.description,
-                accountNumber = normalizedTransaction.accountNumber,
-                fromAccount = normalizedTransaction.fromAccount,
-                toAccount = normalizedTransaction.toAccount,
-                bankName = normalizedTransaction.bankName,
-                currency = normalizedTransaction.currency,
-                tags = normalizedTransaction.tags,
-                isRecurring = normalizedTransaction.isRecurring,
-                isExcludedFromTracking = normalizedTransaction.isExcludedFromTracking,
-                profileId = normalizedTransaction.profileId,
-                transferKind = normalizedTransaction.transferKind,
-                budgetImpactType = normalizedTransaction.budgetImpactType?.name,
-                budgetCategory = normalizedTransaction.budgetCategory,
-            )
-
-            val splitPatches = _splits.value.map { s ->
-                SaveTransactionWorker.SplitPatch(
+            val splitEntities = _splits.value.map { s ->
+                TransactionSplitEntity(
                     id = s.id,
+                    transactionId = normalizedTransaction.id,
                     category = s.category,
-                    amount = s.amount.toPlainString(),
-                    tags = s.tags.joinToString(",")
+                    amount = s.amount,
+                    tags = s.tags.joinToString(","),
                 )
             }
 
-            val wantsPastBulkForWorker =
-                _bulkPastCategory.value || _bulkPastMerchant.value || _bulkPastType.value
-            val bulkNotBeforeIso = if (wantsPastBulkForWorker) {
-                notBeforeForCurrentBulkScope()?.toString().orEmpty()
+            val bulkNotBefore = if (_bulkPastCategory.value || _bulkPastMerchant.value || _bulkPastType.value) {
+                notBeforeForCurrentBulkScope()
             } else {
-                ""
+                null
             }
 
-            val snapshotIncomingCategory = _bulkIncomingCategory.value
-            val snapshotIncomingMerchant = _bulkIncomingMerchant.value
-
-            val inputData = SaveTransactionWorker.buildInputData(
-                patch = patch,
-                originalBank = originalTxn?.bankName,
-                originalAccount = originalTxn?.accountNumber,
+            val updateRequest = UpdateTransactionRequest(
+                original = originalTxn ?: normalizedTransaction,
+                updated = normalizedTransaction,
                 pendingReceiptUris = _pendingReceiptUris.value,
                 removedReceiptIds = removedIds,
                 removedReceiptPaths = removedPaths,
                 updateCategoryForMerchant = _bulkPastCategory.value,
-                bulkCategoryNotBeforeIso = bulkNotBeforeIso,
+                bulkCategoryNotBefore = bulkNotBefore,
                 bulkCategoryMerchantName = effectiveBulkCategoryMerchantKey(latest.merchantName.trim()),
                 bulkSyncMerchantName = _bulkPastMerchant.value,
                 bulkSyncTransactionType = _bulkPastType.value,
                 showSplitEditor = _showSplitEditor.value,
                 hasOriginalSplits = _originalSplits.value.isNotEmpty(),
-                splits = splitPatches,
+                splits = splitEntities,
             )
 
-            val request = SaveTransactionWorker.buildRequest(inputData)
-            val workManager = WorkManager.getInstance(context)
-            workManager.enqueue(request)
+            // Execute all DB mutations — DB is fully committed when this returns
+            val result = withContext(Dispatchers.IO) {
+                updateTransactionUseCase.execute(updateRequest)
+            }
 
-            // Optimistic: update in-memory state and navigate back immediately
+            // Update in-memory state to reflect committed DB values
             _transaction.value = normalizedTransaction
             _pendingReceiptUris.value = emptyList()
             _removedReceiptIds.value = emptySet()
@@ -1169,7 +1145,7 @@ class TransactionDetailViewModel @Inject constructor(
             _budgetImpactType.value = normalizedTransaction.budgetImpactType
             _budgetCategory.value = normalizedTransaction.budgetCategory
 
-            // Clear edit state and signal success to navigate back
+            // Clear edit state
             _isEditMode.value = false
             _editableTransaction.value = null
             _errorMessage.value = null
@@ -1182,147 +1158,93 @@ class TransactionDetailViewModel @Inject constructor(
             _originalCategoryOnEdit.value = null
             _suggestedMerchantRenames.value = emptyList()
 
-            // Observe the worker for background errors and post-save UX
-            observeSaveWorker(
-                workId = request.id,
+            // Show undo snackbar if bulk category was applied to other transactions
+            if (result.bulkCategoryUndoCount > 0) {
+                _bulkCategoryUndoSnackCount.value = result.bulkCategoryUndoCount
+            }
+
+            // Apply incoming SMS rules (merchant→category mapping, raw→display alias)
+            try {
+                if (snapshotIncomingCategory) {
+                    merchantMappingRepository.setMapping(
+                        normalizedTransaction.merchantName.trim(),
+                        normalizedTransaction.category,
+                    )
+                }
+                if (snapshotIncomingMerchant &&
+                    snapshotOriginalMerchant != null &&
+                    !normalizedTransaction.merchantName.equals(snapshotOriginalMerchant, ignoreCase = true)
+                ) {
+                    merchantAliasRepository.setAlias(
+                        snapshotOriginalMerchant.trim(),
+                        normalizedTransaction.merchantName.trim(),
+                    )
+                    val bodyExtras = SmsMerchantAliasHints.deriveExtraAliasSources(
+                        smsBody = normalizedTransaction.smsBody,
+                        rawMerchant = snapshotOriginalMerchant.trim(),
+                        displayMerchant = normalizedTransaction.merchantName.trim(),
+                    )
+                    for (src in bodyExtras.take(2)) {
+                        val audit = MerchantAliasAuditor.audit(
+                            MerchantAliasEntity(
+                                sourceMerchant = src,
+                                displayName = normalizedTransaction.merchantName.trim(),
+                            ),
+                        )
+                        if (audit.risk == MerchantAliasAuditor.RiskLevel.OK) {
+                            merchantAliasRepository.setAlias(src, normalizedTransaction.merchantName.trim())
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Saved, but failed to update future SMS rules: ${e.message}"
+            }
+
+            pendingFutureParsingPrompt = buildFutureParsingPrompt(
                 saved = normalizedTransaction,
-                snapshotOriginalMerchant = snapshotOriginalMerchant,
-                snapshotOriginalCategory = snapshotOriginalCategory,
+                originalMerchant = snapshotOriginalMerchant,
+                originalCategoryOnEdit = snapshotOriginalCategory,
                 hadSplitLines = hadSplitLinesSnapshot,
                 appliedIncomingCategory = snapshotIncomingCategory,
                 appliedIncomingMerchant = snapshotIncomingMerchant,
             )
 
-            // Navigate back immediately via success signal
-            _saveSuccess.value = true
-            } catch (e: Exception) {
-                _isSaving.value = false
-                _errorMessage.value = e.message ?: "Save failed"
-            }
-        }
-    }
-
-    private fun observeSaveWorker(
-        workId: java.util.UUID,
-        saved: TransactionEntity,
-        snapshotOriginalMerchant: String?,
-        snapshotOriginalCategory: String?,
-        hadSplitLines: Boolean,
-        appliedIncomingCategory: Boolean,
-        appliedIncomingMerchant: Boolean,
-    ) {
-        val workManager = WorkManager.getInstance(context)
-        viewModelScope.launch {
-            var workTerminalEventHandled = false
-            workManager.getWorkInfoByIdFlow(workId).collect { info ->
-                when (info?.state) {
-                    WorkInfo.State.RUNNING -> _isSaving.value = true
-                    WorkInfo.State.SUCCEEDED -> {
-                        if (workTerminalEventHandled) return@collect
-                        workTerminalEventHandled = true
-                        val bulkUndoCount = info.outputData.getInt(
-                            SaveTransactionWorker.OUTPUT_BULK_CATEGORY_UNDO_COUNT,
-                            0,
+            // Scan for other transactions with a similar old merchant name to offer batch rename
+            val needSimilarMerchantScan = snapshotOriginalMerchant != null &&
+                !normalizedTransaction.merchantName.equals(snapshotOriginalMerchant, ignoreCase = true)
+            if (needSimilarMerchantScan) {
+                val origMerchantForScan = snapshotOriginalMerchant!!
+                try {
+                    val similar = withContext(Dispatchers.IO) {
+                        transactionRepository.findSimilarTransactionsForRename(
+                            originalMerchant = origMerchantForScan,
+                            newMerchantName = normalizedTransaction.merchantName,
+                            excludeTransactionId = normalizedTransaction.id,
                         )
-                        if (bulkUndoCount > 0) {
-                            _bulkCategoryUndoSnackCount.value = bulkUndoCount
-                        }
-                        try {
-                            if (appliedIncomingCategory) {
-                                merchantMappingRepository.setMapping(
-                                    saved.merchantName.trim(),
-                                    saved.category,
-                                )
-                            }
-                            if (appliedIncomingMerchant &&
-                                snapshotOriginalMerchant != null &&
-                                !saved.merchantName.equals(snapshotOriginalMerchant, ignoreCase = true)
-                            ) {
-                                merchantAliasRepository.setAlias(
-                                    snapshotOriginalMerchant.trim(),
-                                    saved.merchantName.trim(),
-                                )
-                                val bodyExtras = SmsMerchantAliasHints.deriveExtraAliasSources(
-                                    smsBody = saved.smsBody,
-                                    rawMerchant = snapshotOriginalMerchant.trim(),
-                                    displayMerchant = saved.merchantName.trim(),
-                                )
-                                for (src in bodyExtras.take(2)) {
-                                    val audit = MerchantAliasAuditor.audit(
-                                        MerchantAliasEntity(
-                                            sourceMerchant = src,
-                                            displayName = saved.merchantName.trim(),
-                                        ),
-                                    )
-                                    if (audit.risk == MerchantAliasAuditor.RiskLevel.OK) {
-                                        merchantAliasRepository.setAlias(src, saved.merchantName.trim())
-                                    }
-                                }
-                            }
-                        } catch (e: Exception) {
-                            _errorMessage.value = "Saved transaction, but failed to update future SMS rules: ${e.message}"
-                        }
-                        pendingFutureParsingPrompt = buildFutureParsingPrompt(
-                            saved = saved,
-                            originalMerchant = snapshotOriginalMerchant,
-                            originalCategoryOnEdit = snapshotOriginalCategory,
-                            hadSplitLines = hadSplitLines,
-                            appliedIncomingCategory = appliedIncomingCategory,
-                            appliedIncomingMerchant = appliedIncomingMerchant,
+                    }
+                    if (similar.isNotEmpty()) {
+                        _merchantRenameReview.value = MerchantRenameReviewState(
+                            newMerchantName = normalizedTransaction.merchantName,
+                            transactions = similar,
                         )
-
-                        val needSimilarMerchantScan = snapshotOriginalMerchant != null &&
-                            !saved.merchantName.equals(snapshotOriginalMerchant, ignoreCase = true)
-                        if (needSimilarMerchantScan) {
-                            val origMerchantForScan = snapshotOriginalMerchant!!
-                            launch {
-                                try {
-                                    val similar = withContext(Dispatchers.IO) {
-                                        transactionRepository.findSimilarTransactionsForRename(
-                                            originalMerchant = origMerchantForScan,
-                                            newMerchantName = saved.merchantName,
-                                            excludeTransactionId = saved.id,
-                                        )
-                                    }
-                                    if (similar.isNotEmpty()) {
-                                        _merchantRenameReview.value = MerchantRenameReviewState(
-                                            newMerchantName = saved.merchantName,
-                                            transactions = similar,
-                                        )
-                                    } else {
-                                        finishSaveFlow()
-                                    }
-                                } catch (e: Exception) {
-                                    _errorMessage.value =
-                                        "Could not load similar transactions: ${e.message}"
-                                    finishSaveFlow()
-                                } finally {
-                                    _isSaving.value = false
-                                }
-                            }
-                        } else {
-                            _isSaving.value = false
-                            finishSaveFlow()
-                        }
+                    } else {
+                        finishSaveFlow()
                     }
-                    WorkInfo.State.FAILED -> {
-                        if (workTerminalEventHandled) return@collect
-                        workTerminalEventHandled = true
-                        _isSaving.value = false
-                        val error = info.outputData.getString(SaveTransactionWorker.OUTPUT_ERROR)
-                        _errorMessage.value = "Save failed: ${error ?: "Unknown error"}. Please try again."
-                    }
-                    WorkInfo.State.CANCELLED -> {
-                        if (workTerminalEventHandled) return@collect
-                        workTerminalEventHandled = true
-                        _isSaving.value = false
-                    }
-                    else -> { /* ENQUEUED, BLOCKED — no action */ }
+                } catch (e: Exception) {
+                    _errorMessage.value = "Could not load similar transactions: ${e.message}"
+                    finishSaveFlow()
                 }
+            } else {
+                finishSaveFlow()
+            }
+            } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Save failed"
+            } finally {
+                _isSaving.value = false
             }
         }
     }
-    
+
     fun cancelEdit() {
         exitEditMode()
     }

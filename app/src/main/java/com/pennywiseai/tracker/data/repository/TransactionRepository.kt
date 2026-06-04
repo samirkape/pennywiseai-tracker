@@ -18,7 +18,6 @@ import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.YearMonth
-import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.min
@@ -68,8 +67,12 @@ class TransactionRepository @Inject constructor(
         }
     }
 
-    /** In-memory undo for the last bulk category-by-merchant update (single slot). */
-    private val lastBulkCategoryUndo = AtomicReference<List<Pair<Long, String>>?>(null)
+    /**
+     * In-memory undo stack for bulk category-by-merchant updates, capped at 3 entries.
+     * Each entry represents one bulk operation's affected (id, oldCategory) pairs.
+     */
+    private val bulkCategoryUndoStack = ArrayDeque<List<Pair<Long, String>>>()
+    private val undoLock = Any()
 
     suspend fun captureBulkCategoryUndoSnapshot(
         merchantName: String,
@@ -108,11 +111,15 @@ class TransactionRepository @Inject constructor(
     }
 
     fun rememberBulkCategoryUndo(pairs: List<Pair<Long, String>>) {
-        lastBulkCategoryUndo.set(if (pairs.isEmpty()) null else pairs)
+        if (pairs.isEmpty()) return
+        synchronized(undoLock) {
+            bulkCategoryUndoStack.addFirst(pairs)
+            while (bulkCategoryUndoStack.size > 3) bulkCategoryUndoStack.removeLast()
+        }
     }
 
     suspend fun undoLastBulkCategoryUpdate(): Boolean {
-        val pairs = lastBulkCategoryUndo.getAndSet(null) ?: return false
+        val pairs = synchronized(undoLock) { bulkCategoryUndoStack.removeFirstOrNull() } ?: return false
         for ((id, category) in pairs) {
             transactionDao.updateTransactionCategoryById(id, category, LocalDateTime.now())
         }
