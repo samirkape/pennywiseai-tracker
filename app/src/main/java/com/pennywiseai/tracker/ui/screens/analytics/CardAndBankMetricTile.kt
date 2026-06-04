@@ -51,30 +51,18 @@ fun CardAndBankMetricTile(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "CARD & BANK",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        letterSpacing = 1.sp,
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = formattedTotal,
-                        style = if (isLongTotal) {
-                            MaterialTheme.typography.headlineMedium
-                        } else {
-                            MaterialTheme.typography.headlineLarge
-                        },
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                Text(
+                    text = "CARD & BANK",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = 1.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
                 Box(
                     modifier = Modifier
                         .background(
@@ -102,6 +90,19 @@ fun CardAndBankMetricTile(
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = formattedTotal,
+                style = if (isLongTotal) {
+                    MaterialTheme.typography.headlineMedium
+                } else {
+                    MaterialTheme.typography.headlineLarge
+                },
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
 
             Spacer(modifier = Modifier.height(Spacing.md))
             HorizontalDivider(

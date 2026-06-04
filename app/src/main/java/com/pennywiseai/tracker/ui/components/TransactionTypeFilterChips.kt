@@ -152,6 +152,7 @@ fun TransactionTypeFilterChips(
                 listOf(
                     TransferKind.SELF_TRANSFER to stringResource(R.string.txn_type_transfer_self),
                     TransferKind.OTHERS_TRANSFER to stringResource(R.string.txn_type_transfer_others),
+                    TransferKind.CC_BILL_PAYMENT to stringResource(R.string.txn_transfer_cc_bill_short),
                 ).forEach { (kind, label) ->
                     TypeFilterChip(
                         label = label,

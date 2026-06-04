@@ -95,7 +95,7 @@ fun HomeSummaryStrip(
                 SummaryStripDivider()
                 SummaryStripCell(
                     dotColor = categoryDot,
-                    label = null,
+                    label = stringResource(R.string.home_summary_top_spend),
                     value = topCategoryName,
                     subLabel = topCategorySubLabel,
                     onClick = onTopCategoryClick,

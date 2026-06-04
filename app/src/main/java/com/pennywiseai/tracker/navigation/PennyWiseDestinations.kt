@@ -28,9 +28,6 @@ object Categories
 object Analytics
 
 @Serializable
-object Chat
-
-@Serializable
 data class TransactionDetail(val transactionId: Long)
 
 @Serializable
@@ -60,13 +57,20 @@ data class CreateRule(val ruleId: String? = null)
 object QuickKeywordRules
 
 @Serializable
-data class EditQuickKeywordRule(val ruleId: String? = null)
+data class EditQuickKeywordRule(
+    val ruleId: String? = null,
+    val prefilledKeywords: String? = null,
+    val prefilledName: String? = null,
+)
 
 @Serializable
 object ExchangeRates
 
 @Serializable
 object BudgetGroups
+
+@Serializable
+object Subscriptions
 
 @Serializable
 data class BudgetGroupEdit(val groupId: Long = -1L)

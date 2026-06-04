@@ -109,6 +109,8 @@ fun TransactionsScreen(
     val profiles by viewModel.profiles.collectAsState()
     val profileAccountKeys by viewModel.profileAccountKeys.collectAsState()
     val includeExcluded by viewModel.includeExcluded.collectAsState()
+    val pendingSelfTransferCount by viewModel.pendingSelfTransferCount.collectAsState()
+    val selfTransferReview by viewModel.selfTransferReview.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -123,12 +125,20 @@ fun TransactionsScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val view = LocalView.current
     
-    // Active filter count only tracks filters inside the "More Filters" collapsible section
-    // (profile and include-excluded). Type filter is now always visible so is not counted here.
+    // Active filter count for the "More Filters" row (profile, category, include-excluded).
+    // Period, type, search, and currency are outside this section and are not counted here.
     val activeFilterCount = listOf(
         selectedProfileId != null,
+        categoryFilter != null,
+        !categoriesFilter.isNullOrEmpty(),
         includeExcluded
     ).count { it }
+
+    LaunchedEffect(categoryFilter, categoriesFilter) {
+        if (categoryFilter != null || !categoriesFilter.isNullOrEmpty()) {
+            showAdvancedFilters = true
+        }
+    }
 
     val defaultPeriod = defaultTimePeriod(useFinancialMonth)
 
@@ -504,8 +514,18 @@ fun TransactionsScreen(
                                     contentDescription = null,
                                     modifier = Modifier.size(Dimensions.Icon.small)
                                 )
+                                TransactionTypeFilter.CC_BILL_PAYMENT -> Icon(
+                                    Icons.Default.Payment,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(Dimensions.Icon.small)
+                                )
                                 TransactionTypeFilter.INVESTMENT -> Icon(
                                     Icons.AutoMirrored.Filled.ShowChart,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(Dimensions.Icon.small)
+                                )
+                                TransactionTypeFilter.EXCLUDED -> Icon(
+                                    Icons.Default.VisibilityOff,
                                     contentDescription = null,
                                     modifier = Modifier.size(Dimensions.Icon.small)
                                 )
@@ -518,6 +538,40 @@ fun TransactionsScreen(
                         selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                     )
                 )
+            }
+        }
+
+        // Pending self-transfer review chip
+        if (pendingSelfTransferCount > 0) {
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = Spacing.xs),
+                contentPadding = PaddingValues(horizontal = Dimensions.Padding.content),
+            ) {
+                item {
+                    FilterChip(
+                        selected = false,
+                        onClick = { viewModel.startSelfTransferReview() },
+                        label = {
+                            Text(
+                                if (pendingSelfTransferCount == 1) "Review 1 transfer"
+                                else "Review $pendingSelfTransferCount transfers"
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.CompareArrows,
+                                contentDescription = null,
+                                modifier = Modifier.size(Dimensions.Icon.small)
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+                            labelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    )
+                }
             }
         }
 
@@ -628,6 +682,64 @@ fun TransactionsScreen(
                 }
             }
 
+            if (availableCategories.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(Spacing.xs))
+
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = Dimensions.Padding.content),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                ) {
+                    item {
+                        FilterChip(
+                            selected = categoryFilter == null && categoriesFilter.isNullOrEmpty(),
+                            onClick = {
+                                viewModel.clearCategoryFilter()
+                                viewModel.clearCategoriesFilter()
+                            },
+                            label = { Text("All") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        )
+                    }
+
+                    items(availableCategories) { category ->
+                        FilterChip(
+                            selected = categoryFilter == category,
+                            onClick = {
+                                if (categoryFilter == category) {
+                                    viewModel.clearCategoryFilter()
+                                } else {
+                                    viewModel.setCategoryFilter(category)
+                                }
+                            },
+                            label = { Text(category) },
+                            leadingIcon = {
+                                CategoryIcon(
+                                    category = category,
+                                    size = Dimensions.Icon.small
+                                )
+                            },
+                            trailingIcon = if (categoryFilter == category) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Clear category filter",
+                                        modifier = Modifier.size(Dimensions.Icon.small)
+                                    )
+                                }
+                            } else null,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(Spacing.xs))
 
             // Include excluded transactions toggle
@@ -679,64 +791,6 @@ fun TransactionsScreen(
                     .padding(horizontal = Dimensions.Padding.content)
                     .padding(top = Spacing.sm)
             )
-        }
-        
-        // Category Filter Chips - Always visible when categories exist
-        if (availableCategories.isNotEmpty()) {
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = Spacing.xs),
-                contentPadding = PaddingValues(horizontal = Dimensions.Padding.content),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                // "All" chip - selected when no category filter is active
-                item {
-                    FilterChip(
-                        selected = categoryFilter == null,
-                        onClick = { viewModel.clearCategoryFilter() },
-                        label = { Text("All") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    )
-                }
-
-                // Category chips
-                items(availableCategories) { category ->
-                    FilterChip(
-                        selected = categoryFilter == category,
-                        onClick = {
-                            if (categoryFilter == category) {
-                                viewModel.clearCategoryFilter()
-                            } else {
-                                viewModel.setCategoryFilter(category)
-                            }
-                        },
-                        label = { Text(category) },
-                        leadingIcon = {
-                            CategoryIcon(
-                                category = category,
-                                size = Dimensions.Icon.small
-                            )
-                        },
-                        trailingIcon = if (categoryFilter == category) {
-                            {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Clear category filter",
-                                    modifier = Modifier.size(Dimensions.Icon.small)
-                                )
-                            }
-                        } else null,
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    )
-                }
-            }
         }
         
         // Transaction List
@@ -841,6 +895,15 @@ fun TransactionsScreen(
             },
             initialStartDate = customDateRange?.first,
             initialEndDate = customDateRange?.second
+        )
+    }
+
+    selfTransferReview?.let { reviewState ->
+        SelfTransferReviewSheet(
+            state = reviewState,
+            onConfirm = { viewModel.confirmSelfTransfer() },
+            onDeny = { viewModel.denySelfTransfer() },
+            onDismiss = { viewModel.dismissSelfTransferReview() },
         )
     }
 }

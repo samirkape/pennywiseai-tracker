@@ -51,6 +51,8 @@ data class ParsedTransaction(
 object TransferKinds {
     const val CC_BILL_PAYMENT = "CC_BILL_PAYMENT"
     const val SELF_TRANSFER = "SELF_TRANSFER"
+    /** Detected as a possible self-transfer but awaiting user confirmation. */
+    const val SELF_TRANSFER_PENDING = "SELF_TRANSFER_PENDING"
 }
 
 

@@ -157,6 +157,9 @@ interface AccountBalanceDao {
     """)
     fun getBalancesFromDate(startDate: LocalDateTime): Flow<List<AccountBalanceEntity>>
 
+    @Query("SELECT DISTINCT account_last4 FROM account_balances")
+    suspend fun getAllKnownAccountLast4s(): List<String>
+
     @Query("DELETE FROM account_balances WHERE bank_name = :bankName AND account_last4 = :accountLast4")
     suspend fun deleteAccount(bankName: String, accountLast4: String): Int
 

@@ -44,7 +44,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.launch
 import androidx.compose.ui.text.font.FontWeight
@@ -75,6 +75,8 @@ import com.pennywiseai.tracker.ui.viewmodel.SaveQuickRuleOutcome
 fun EditQuickKeywordRuleScreen(
     ruleId: String?,
     onNavigateBack: () -> Unit,
+    prefilledKeywords: String? = null,
+    prefilledName: String? = null,
     viewModel: QuickKeywordRulesViewModel = hiltViewModel(),
 ) {
     val quickRules by viewModel.quickRules.collectAsStateWithLifecycle()
@@ -87,7 +89,7 @@ fun EditQuickKeywordRuleScreen(
     val liveMatchStats by viewModel.liveMatchStats.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val existingRule = ruleId?.let { id -> quickRules.firstOrNull { it.id == id } }
     val existingInput = existingRule?.let { QuickKeywordRuleCompiler.decompile(it) }
     val isNewRule = existingRule == null
@@ -133,19 +135,19 @@ fun EditQuickKeywordRuleScreen(
             if (session != null && result.totalUpdated > 0) {
                 scope.launch {
                     val snackResult = snackbarHostState.showSnackbar(
-                        message = context.getString(
+                        message = resources.getString(
                             R.string.quick_keyword_undo_snackbar,
                             result.totalUpdated,
                             session.remainingMinutes(),
                         ),
-                        actionLabel = context.getString(R.string.quick_keyword_undo_action),
+                        actionLabel = resources.getString(R.string.quick_keyword_undo_action),
                         duration = SnackbarDuration.Long,
                     )
                     if (snackResult == SnackbarResult.ActionPerformed) {
                         viewModel.undoLastBatchApply { undone ->
                             scope.launch {
                                 snackbarHostState.showSnackbar(
-                                    context.getString(
+                                    resources.getString(
                                         if (undone) R.string.quick_keyword_undo_success
                                         else R.string.quick_keyword_undo_expired,
                                     ),
@@ -180,6 +182,14 @@ fun EditQuickKeywordRuleScreen(
             forceOverwriteExisting = existingInput.forceOverwriteExisting
             isActive = existingInput.isActive
             nameManuallyEdited = !existingInput.syncNameWithLabel
+        } else if (prefilledKeywords != null) {
+            keywordsText = prefilledKeywords
+            matchField = QuickKeywordMatchField.SMS_TEXT
+            if (prefilledName != null) {
+                name = prefilledName
+                nameManuallyEdited = true
+                syncNameWithLabel = false
+            }
         }
     }
 
@@ -342,7 +352,7 @@ fun EditQuickKeywordRuleScreen(
                     viewModel.undoLastBatchApply { undone ->
                         scope.launch {
                             snackbarHostState.showSnackbar(
-                                context.getString(
+                                resources.getString(
                                     if (undone) R.string.quick_keyword_undo_success
                                     else R.string.quick_keyword_undo_expired,
                                 ),

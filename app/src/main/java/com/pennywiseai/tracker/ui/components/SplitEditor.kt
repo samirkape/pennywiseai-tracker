@@ -116,7 +116,13 @@ fun SplitEditor(
                     onRemove = {
                         if (splits.size > 2) {
                             val newSplits = splits.toMutableList()
-                            newSplits.removeAt(index)
+                            val removed = newSplits.removeAt(index)
+                            if (newSplits.isNotEmpty()) {
+                                val lastIdx = newSplits.lastIndex
+                                newSplits[lastIdx] = newSplits[lastIdx].copy(
+                                    amount = newSplits[lastIdx].amount + removed.amount,
+                                )
+                            }
                             onSplitsChanged(newSplits)
                         }
                     },
@@ -130,12 +136,14 @@ fun SplitEditor(
                 onClick = {
                     val usedCategories = splits.map { it.category }.toSet()
                     val nextCategory = availableCategories.firstOrNull { it !in usedCategories } ?: "Others"
-                    val newSplit = SplitItem(
+                    val withNew = splits + SplitItem(
                         id = 0,
                         category = nextCategory,
-                        amount = remaining.coerceAtLeast(BigDecimal.ZERO)
+                        amount = BigDecimal.ZERO,
                     )
-                    onSplitsChanged(splits + newSplit)
+                    val sumFirst = withNew.dropLast(1).fold(BigDecimal.ZERO) { acc, s -> acc + s.amount }
+                    val lastAmt = (totalAmount - sumFirst).coerceAtLeast(BigDecimal.ZERO)
+                    onSplitsChanged(withNew.dropLast(1) + withNew.last().copy(amount = lastAmt))
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = availableCategories.size > splits.size

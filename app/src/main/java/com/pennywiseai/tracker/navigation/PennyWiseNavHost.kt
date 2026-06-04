@@ -125,6 +125,9 @@ fun PennyWiseNavHost(
                 onNavigateToBudgets = {
                     navController.navigate(BudgetGroups) { launchSingleTop = true }
                 },
+                onNavigateToSubscriptions = {
+                    navController.navigate(Subscriptions) { launchSingleTop = true }
+                },
                 onNavigateToExchangeRates = {
                     navController.navigate(ExchangeRates) { launchSingleTop = true }
                 },
@@ -137,6 +140,22 @@ fun PennyWiseNavHost(
                 onNavigateToPayPeriodSettings = {
                     navController.navigate(PayPeriodSettings) { launchSingleTop = true }
                 }
+            )
+        }
+
+        composable<Subscriptions>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+        ) {
+            com.pennywiseai.tracker.presentation.subscriptions.SubscriptionsScreen(
+                onNavigateBack = {
+                    navController.safePopBackStack()
+                },
+                onAddSubscriptionClick = {
+                    navController.navigate(AddTransaction()) { launchSingleTop = true }
+                },
             )
         }
 
@@ -234,6 +253,16 @@ fun PennyWiseNavHost(
                         launchSingleTop = true
                     }
                 },
+                onCreateRule = { smsBody, sender ->
+                    navController.navigate(
+                        EditQuickKeywordRule(
+                            prefilledKeywords = smsBody,
+                            prefilledName = sender,
+                        )
+                    ) {
+                        launchSingleTop = true
+                    }
+                },
             )
         }
         
@@ -304,6 +333,8 @@ fun PennyWiseNavHost(
             com.pennywiseai.tracker.ui.screens.rules.EditQuickKeywordRuleScreen(
                 ruleId = route.ruleId,
                 onNavigateBack = { navController.safePopBackStack() },
+                prefilledKeywords = route.prefilledKeywords,
+                prefilledName = route.prefilledName,
             )
         }
 

@@ -329,8 +329,18 @@ fun AnalyticsScreen(
                                                 contentDescription = null,
                                                 modifier = Modifier.size(Dimensions.Icon.small)
                                             )
+                                            TransactionTypeFilter.CC_BILL_PAYMENT -> Icon(
+                                                Icons.Default.Payment,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(Dimensions.Icon.small)
+                                            )
                                             TransactionTypeFilter.INVESTMENT -> Icon(
                                                 Icons.AutoMirrored.Filled.ShowChart,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(Dimensions.Icon.small)
+                                            )
+                                            TransactionTypeFilter.EXCLUDED -> Icon(
+                                                Icons.Default.VisibilityOff,
                                                 contentDescription = null,
                                                 modifier = Modifier.size(Dimensions.Icon.small)
                                             )
@@ -417,6 +427,17 @@ fun AnalyticsScreen(
                     investmentInsights = uiState.investmentInsights,
                     paymentModeBreakdown = uiState.paymentModeBreakdown,
                     onSpendingClick = { drillDownToTransactions(category = categoryFilter) },
+                    onOutflowClick = { selectedTypes ->
+                        val typeName = if (selectedTypes.size == 1) {
+                            selectedTypes.first().name
+                        } else {
+                            TransactionTypeFilter.ALL.name
+                        }
+                        drillDownToTransactions(
+                            category = categoryFilter,
+                            transactionType = typeName,
+                        )
+                    },
                     onInvestmentClick = {
                         drillDownToTransactions(
                             transactionType = TransactionTypeFilter.INVESTMENT.name,

@@ -31,7 +31,11 @@ import com.pennywiseai.tracker.ui.icons.CategoryMapping
 import com.pennywiseai.tracker.ui.theme.Dimensions
 import com.pennywiseai.tracker.ui.theme.Spacing
 
-/** Right-side pill on the metric tile footer. */
+/**
+ * Shared **tile grammar** for analytics ([docs/analytics-tiles.md](../../../../../docs/analytics-tiles.md)).
+ *
+ * Right-side pill on the metric tile footer.
+ */
 sealed interface AnalyticsTilePill {
     data class Category(val name: String) : AnalyticsTilePill
     data class Labeled(
@@ -70,32 +74,18 @@ fun AnalyticsMetricTile(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = content.topLabel,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        letterSpacing = 1.sp,
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    val isLong = content.primaryValue.length > 14
-                    Text(
-                        text = content.primaryValue,
-                        style = if (isLong) {
-                            MaterialTheme.typography.headlineMedium
-                        } else {
-                            MaterialTheme.typography.headlineLarge
-                        },
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
+                Text(
+                    text = content.topLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = 1.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
                 Box(
                     modifier = Modifier
                         .background(
@@ -123,6 +113,20 @@ fun AnalyticsMetricTile(
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(2.dp))
+            val isLong = content.primaryValue.length > 14
+            Text(
+                text = content.primaryValue,
+                style = if (isLong) {
+                    MaterialTheme.typography.headlineMedium
+                } else {
+                    MaterialTheme.typography.headlineLarge
+                },
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
 
             Spacer(modifier = Modifier.height(Spacing.md))
             HorizontalDivider(

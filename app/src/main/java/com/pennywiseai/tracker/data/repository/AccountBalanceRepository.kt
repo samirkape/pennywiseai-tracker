@@ -155,4 +155,8 @@ class AccountBalanceRepository @Inject constructor(
     suspend fun setAccountProfile(bankName: String, accountLast4: String, profileId: Long): Int {
         return accountBalanceDao.setAccountProfile(bankName, accountLast4, profileId)
     }
+
+    suspend fun getAllKnownAccountLast4s(): List<String> {
+        return accountBalanceDao.getAllKnownAccountLast4s()
+    }
 }

@@ -38,9 +38,9 @@ import com.pennywiseai.tracker.ui.viewmodel.MainViewModel
 import com.pennywiseai.tracker.ui.viewmodel.ThemeViewModel
 import com.pennywiseai.tracker.ui.viewmodel.SpotlightViewModel
 import com.pennywiseai.tracker.navigation.safePopBackStack
+import com.pennywiseai.tracker.core.Constants
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
-import android.util.Log
 
 @Composable
 fun MainScreen(
@@ -65,11 +65,18 @@ fun MainScreen(
     // Haze state for blur effects
     val hazeState = remember { HazeState() }
 
-    val isHomeScreen = baseRoute == "home"
+    val isBottomNavTabRoute = baseRoute in setOf(
+        Constants.Routes.HOME,
+        Constants.Routes.BUDGETS,
+        Constants.Routes.ANALYTICS,
+        Constants.Routes.SETTINGS,
+    )
+    val isHomeScreen = baseRoute == Constants.Routes.HOME
 
-    // Back from non-Home tab goes to Home instead of popping (prevents overlap)
-    BackHandler(enabled = !isHomeScreen) {
-        navController.navigate("home") {
+    // Back from a bottom tab other than Home switches to Home (avoids stack overlap).
+    // Pushed routes (transactions, optional chat, etc.) use normal pop via system back.
+    BackHandler(enabled = !isHomeScreen && isBottomNavTabRoute) {
+        navController.navigate(Constants.Routes.HOME) {
             popUpTo(navController.graph.startDestinationId) {
                 saveState = true
             }
@@ -114,7 +121,7 @@ fun MainScreen(
         // NavHost — NO padding, fills the full screen
         NavHost(
             navController = navController,
-            startDestination = "home",
+            startDestination = Constants.Routes.HOME,
             modifier = Modifier
                 .fillMaxSize()
                 .hazeSource(hazeState),
@@ -123,7 +130,7 @@ fun MainScreen(
             popEnterTransition = { EnterTransition.None },
             popExitTransition = { ExitTransition.None }
         ) {
-            composable("home") {
+            composable(Constants.Routes.HOME) {
                 val homeViewModel: com.pennywiseai.tracker.presentation.home.HomeViewModel = hiltViewModel()
                 val homeUiState by homeViewModel.uiState.collectAsState()
                 val transactionsPeriod = com.pennywiseai.tracker.presentation.common.defaultTimePeriodNavParam(
@@ -139,7 +146,7 @@ fun MainScreen(
                         ) { launchSingleTop = true }
                     },
                     onNavigateToSettings = {
-                        navController.navigate("settings") {
+                        navController.navigate(Constants.Routes.SETTINGS) {
                             launchSingleTop = true
                         }
                     },
@@ -154,7 +161,7 @@ fun MainScreen(
                         }
                     },
                     onNavigateToAnalytics = {
-                        navController.navigate("analytics") {
+                        navController.navigate(Constants.Routes.ANALYTICS) {
                             launchSingleTop = true
                         }
                     },
@@ -169,7 +176,7 @@ fun MainScreen(
                         }
                     },
                     onNavigateToBudgets = {
-                        navController.navigate("budgets") {
+                        navController.navigate(Constants.Routes.BUDGETS) {
                             popUpTo(navController.graph.startDestinationId) {
                                 saveState = true
                             }
@@ -313,7 +320,7 @@ fun MainScreen(
                         ) { launchSingleTop = true }
                     },
                     onNavigateToSettings = {
-                        navController.navigate("settings") {
+                        navController.navigate(Constants.Routes.SETTINGS) {
                             launchSingleTop = true
                         }
                     }
@@ -325,7 +332,7 @@ fun MainScreen(
                     onNavigateBack = {
                         if (navController.currentBackStackEntry?.lifecycle?.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) {
                             if (!navController.popBackStack()) {
-                                navController.navigate("home") {
+                                navController.navigate(Constants.Routes.HOME) {
                                     popUpTo(navController.graph.startDestinationId) {
                                         saveState = true
                                     }
@@ -343,13 +350,8 @@ fun MainScreen(
                 )
             }
 
-            composable("analytics") {
+            composable(Constants.Routes.ANALYTICS) {
                 com.pennywiseai.tracker.ui.screens.analytics.AnalyticsScreen(
-                    onNavigateToChat = {
-                        navController.navigate("chat") {
-                            launchSingleTop = true
-                        }
-                    },
                     onNavigateToTransaction = { transactionId ->
                         rootNavController?.navigate(
                             com.pennywiseai.tracker.navigation.TransactionDetail(transactionId)
@@ -408,7 +410,7 @@ fun MainScreen(
                         }
                     },
                     onNavigateToHome = {
-                        navController.navigate("home") {
+                        navController.navigate(Constants.Routes.HOME) {
                             popUpTo(navController.graph.startDestinationId) {
                                 saveState = true
                             }
@@ -420,14 +422,27 @@ fun MainScreen(
                         navController.navigate("behavioral_stats") {
                             launchSingleTop = true
                         }
-                    }
+                    },
                 )
             }
 
-            composable("budgets") {
+            if (Constants.Features.AI_CHAT_ENABLED) {
+                composable(Constants.Routes.CHAT) {
+                    com.pennywiseai.tracker.ui.screens.chat.ChatScreen(
+                        onNavigateBack = { navController.safePopBackStack() },
+                        onNavigateToSettings = {
+                            navController.navigate(Constants.Routes.SETTINGS) {
+                                launchSingleTop = true
+                            }
+                        },
+                    )
+                }
+            }
+
+            composable(Constants.Routes.BUDGETS) {
                 com.pennywiseai.tracker.presentation.budgetgroups.BudgetGroupsScreen(
                     onNavigateBack = {
-                        navController.navigate("home") {
+                        navController.navigate(Constants.Routes.HOME) {
                             popUpTo(navController.graph.startDestinationId) {
                                 saveState = true
                             }
@@ -460,7 +475,7 @@ fun MainScreen(
                 )
             }
 
-            composable("settings") {
+            composable(Constants.Routes.SETTINGS) {
                 SettingsScreen(
                     themeViewModel = themeViewModel,
                     onNavigateBack = {
@@ -492,12 +507,17 @@ fun MainScreen(
                         ) { launchSingleTop = true }
                     },
                     onNavigateToBudgets = {
-                        navController.navigate("budgets") {
+                        navController.navigate(Constants.Routes.BUDGETS) {
                             popUpTo(navController.graph.startDestinationId) {
                                 saveState = true
                             }
                             launchSingleTop = true
                             restoreState = true
+                        }
+                    },
+                    onNavigateToSubscriptions = {
+                        navController.navigate("subscriptions") {
+                            launchSingleTop = true
                         }
                     },
                     onNavigateToLoans = {
@@ -597,10 +617,13 @@ fun MainScreen(
         }
 
         // Bottom navigation OVERLAID on content
-        if (baseRoute in listOf("home", "budgets", "analytics", "settings")) {
-            // #region agent log
-            Log.d("DBG_f852e3", "{\"sessionId\":\"f852e3\",\"runId\":\"post-fix\",\"hypothesisId\":\"H2_H3\",\"location\":\"MainScreen:583\",\"message\":\"rendering bottom nav\",\"navBarStyle\":\"${themeState.navBarStyle}\",\"blurEffects\":${themeState.blurEffectsEnabled},\"route\":\"$baseRoute\"}")
-            // #endregion
+        if (baseRoute in listOf(
+                Constants.Routes.HOME,
+                Constants.Routes.BUDGETS,
+                Constants.Routes.ANALYTICS,
+                Constants.Routes.SETTINGS,
+            )
+        ) {
             PennyWiseBottomNavigation(
                 navController = navController,
                 currentDestination = navBackStackEntry?.destination,
@@ -612,7 +635,7 @@ fun MainScreen(
         }
 
         // Spotlight Tutorial overlay - outside Scaffold to overlay everything
-        if (baseRoute == "home" && spotlightState.showTutorial && spotlightState.fabPosition != null) {
+        if (baseRoute == Constants.Routes.HOME && spotlightState.showTutorial && spotlightState.fabPosition != null) {
             val homeViewModel: com.pennywiseai.tracker.presentation.home.HomeViewModel? =
                 navController.currentBackStackEntry?.let { hiltViewModel(it) }
 

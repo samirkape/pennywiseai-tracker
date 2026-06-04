@@ -11,7 +11,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -289,6 +288,17 @@ private fun BudgetGroupsContent(
                 )
             ) {
                 BudgetHeroTile(summary = summary, currency = uiState.currency)
+            }
+        }
+
+        if (groupCount > 0) {
+            item {
+                Text(
+                    text = "Your budgets",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = Spacing.sm)
+                )
             }
         }
 
@@ -822,14 +832,22 @@ private fun BudgetHeroTile(
         animatedProgress = (overallPct / 100f).coerceIn(0f, 1f)
     }
 
-    PennyWiseCardV2(
-        modifier = modifier.fillMaxWidth()
+    val onHero = MaterialTheme.colorScheme.onPrimaryContainer
+    val onHeroMuted = onHero.copy(alpha = 0.72f)
+    val heroDivider = onHero.copy(alpha = 0.14f)
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        tonalElevation = 1.dp
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
-            // Header row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -837,8 +855,8 @@ private fun BudgetHeroTile(
             ) {
                 Text(
                     text = "Overall Budget",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = onHero
                 )
                 if (hasLimitBudgets) {
                     Text(
@@ -852,7 +870,6 @@ private fun BudgetHeroTile(
                 }
             }
 
-            // Primary hero number
             if (hasLimitBudgets) {
                 val remainingAbs = (summary.totalLimitBudget - summary.totalLimitSpent).abs()
                 Text(
@@ -861,20 +878,19 @@ private fun BudgetHeroTile(
                     } else {
                         "${CurrencyFormatter.formatCurrency(summary.totalLimitBudget - summary.totalLimitSpent, currency)} remaining"
                     },
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                     color = statusColor,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
 
-                // Overall progress bar
                 val barShape = RoundedCornerShape(50)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(8.dp)
+                        .height(12.dp)
                         .clip(barShape)
-                        .background(statusColor.copy(alpha = 0.15f))
+                        .background(statusColor.copy(alpha = 0.22f))
                 ) {
                     Box(
                         modifier = Modifier
@@ -885,18 +901,16 @@ private fun BudgetHeroTile(
                     )
                 }
 
-                // Spent of total
                 Text(
                     text = "Spent ${CurrencyFormatter.formatCurrency(summary.totalLimitSpent, currency)} of ${CurrencyFormatter.formatCurrency(summary.totalLimitBudget, currency)}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = onHeroMuted
                 )
             }
 
-            // Metrics row: savings rate · daily allowance · days left
             val hasSavings = summary.savingsRate > 0f || summary.netSavings > BigDecimal.ZERO
             if (hasSavings || summary.daysRemaining > 0 || summary.dailyAllowance > BigDecimal.ZERO) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                HorizontalDivider(color = heroDivider)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(Spacing.md)
@@ -906,19 +920,19 @@ private fun BudgetHeroTile(
                             Text(
                                 text = "Net Saved",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = onHeroMuted
                             )
                             Text(
                                 text = CurrencyFormatter.formatCurrency(summary.netSavings, currency),
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = onHero,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = "${summary.savingsRate.toInt()}% saved",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = onHeroMuted
                             )
                         }
                     }
@@ -927,19 +941,19 @@ private fun BudgetHeroTile(
                             Text(
                                 text = "Daily Budget",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = onHeroMuted
                             )
                             Text(
                                 text = CurrencyFormatter.formatCurrency(summary.dailyAllowance, currency),
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = onHero,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = "${summary.daysRemaining} days left",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = onHeroMuted
                             )
                         }
                     }
@@ -948,7 +962,7 @@ private fun BudgetHeroTile(
                             Text(
                                 text = "Breached",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = onHeroMuted
                             )
                             Text(
                                 text = "$overBudgetCount",
@@ -958,7 +972,7 @@ private fun BudgetHeroTile(
                             Text(
                                 text = if (overBudgetCount == 1) "budget over" else "budgets over",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = onHeroMuted
                             )
                         }
                     }

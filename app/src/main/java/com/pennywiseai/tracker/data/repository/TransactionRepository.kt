@@ -1,5 +1,6 @@
 package com.pennywiseai.tracker.data.repository
 
+import com.pennywiseai.tracker.data.database.dao.BulkCategoryPreviewDaoRow
 import com.pennywiseai.tracker.data.database.dao.TransactionDao
 import com.pennywiseai.tracker.data.database.dao.TransactionReceiptDao
 import com.pennywiseai.tracker.data.database.dao.TransactionSplitDao
@@ -17,6 +18,7 @@ import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.YearMonth
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.min
@@ -27,6 +29,96 @@ class TransactionRepository @Inject constructor(
     private val transactionSplitDao: TransactionSplitDao,
     private val transactionReceiptDao: TransactionReceiptDao
 ) {
+    companion object {
+        /** Dummy lower bound when SQL `applySince` flag is off (date predicate ignored). */
+        private val EPOCH_NOT_BEFORE: LocalDateTime = LocalDateTime.of(1970, 1, 1, 0, 0)
+
+        private const val RENAME_CANDIDATE_SQL_LIMIT = 500
+
+        /**
+         * Up to six LIKE tokens (padded with "") for [TransactionDao.getDistinctMerchantNamesForRenameCandidates].
+         * Uses word splits from the original label (min length 2), longer words from the new label (min 4),
+         * and an optional letters-only prefix of the original for SMS-style strings.
+         */
+        internal fun buildRenameSearchTokens(originalMerchant: String, newMerchantName: String): List<String> {
+            fun sanitize(part: String): String = part.replace("%", "").replace("_", "").trim()
+
+            val ordered = LinkedHashSet<String>()
+            fun collectWords(source: String, minLen: Int) {
+                for (part in source.trim().split(Regex("[^A-Za-z0-9]+"))) {
+                    val t = sanitize(part)
+                    if (t.length >= minLen) ordered.add(t)
+                }
+            }
+            collectWords(originalMerchant, minLen = 2)
+            collectWords(newMerchantName, minLen = 4)
+
+            val letters = originalMerchant.lowercase().filter { it.isLetter() }
+            if (letters.length >= 4) {
+                val chunk = sanitize(letters.take(8))
+                if (chunk.length >= 4) ordered.add(chunk)
+            }
+            if (ordered.isEmpty()) {
+                val fb = sanitize(originalMerchant)
+                if (fb.length >= 2) ordered.add(fb.take(16))
+            }
+            val list = ordered.take(6).toMutableList()
+            while (list.size < 6) list.add("")
+            return list
+        }
+    }
+
+    /** In-memory undo for the last bulk category-by-merchant update (single slot). */
+    private val lastBulkCategoryUndo = AtomicReference<List<Pair<Long, String>>?>(null)
+
+    suspend fun captureBulkCategoryUndoSnapshot(
+        merchantName: String,
+        excludeId: Long,
+        notBefore: LocalDateTime?,
+    ): List<Pair<Long, String>> {
+        val trimmed = merchantName.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        val applySince = if (notBefore == null) 0 else 1
+        val sinceCutoff = notBefore ?: EPOCH_NOT_BEFORE
+        return transactionDao.getIdCategoryPairsForBulkCategoryUpdate(
+            trimmed,
+            excludeId,
+            applySince,
+            sinceCutoff,
+        ).map { it.id to it.category }
+    }
+
+    suspend fun getBulkCategoryPreviewForMerchant(
+        merchantName: String,
+        excludeId: Long,
+        notBefore: LocalDateTime?,
+        limit: Int = 20,
+    ): List<BulkCategoryPreviewDaoRow> {
+        val trimmed = merchantName.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        val applySince = if (notBefore == null) 0 else 1
+        val sinceCutoff = notBefore ?: EPOCH_NOT_BEFORE
+        return transactionDao.getBulkCategoryPreviewRows(
+            trimmed,
+            excludeId,
+            applySince,
+            sinceCutoff,
+            limit,
+        )
+    }
+
+    fun rememberBulkCategoryUndo(pairs: List<Pair<Long, String>>) {
+        lastBulkCategoryUndo.set(if (pairs.isEmpty()) null else pairs)
+    }
+
+    suspend fun undoLastBulkCategoryUpdate(): Boolean {
+        val pairs = lastBulkCategoryUndo.getAndSet(null) ?: return false
+        for ((id, category) in pairs) {
+            transactionDao.updateTransactionCategoryById(id, category, LocalDateTime.now())
+        }
+        return true
+    }
+
     fun getAllTransactions(): Flow<List<TransactionEntity>> = 
         transactionDao.getAllTransactions()
     
@@ -185,18 +277,63 @@ class TransactionRepository @Inject constructor(
         transactionDao.updateTransaction(transaction.copy(isDeleted = false))
     }
     
-    suspend fun updateCategoryForMerchant(merchantName: String, newCategory: String) {
-        transactionDao.updateCategoryForMerchant(merchantName, newCategory)
+    suspend fun updateCategoryForMerchant(
+        merchantName: String,
+        newCategory: String,
+        notBefore: LocalDateTime? = null,
+    ) {
+        val applySince = if (notBefore == null) 0 else 1
+        val sinceCutoff = notBefore ?: EPOCH_NOT_BEFORE
+        transactionDao.updateCategoryForMerchant(
+            merchantName,
+            newCategory,
+            LocalDateTime.now(),
+            applySince,
+            sinceCutoff,
+        )
+    }
+
+    suspend fun bulkUpdateTypeAndTransferKindForMerchant(
+        merchantName: String,
+        type: TransactionType,
+        transferKind: String?,
+        excludeId: Long,
+        notBefore: LocalDateTime?,
+    ): Int {
+        val trimmed = merchantName.trim()
+        if (trimmed.isEmpty()) return 0
+        val applySince = if (notBefore == null) 0 else 1
+        val sinceCutoff = notBefore ?: EPOCH_NOT_BEFORE
+        return transactionDao.bulkUpdateTypeAndTransferKindForMerchant(
+            trimmed,
+            type,
+            transferKind,
+            excludeId,
+            LocalDateTime.now(),
+            applySince,
+            sinceCutoff,
+        )
     }
 
     suspend fun updateMerchantNameForMerchant(oldMerchantName: String, newMerchantName: String) {
-        transactionDao.updateMerchantNameForMerchant(oldMerchantName, newMerchantName)
+        transactionDao.updateMerchantNameForMerchant(oldMerchantName, newMerchantName, LocalDateTime.now())
     }
-    
-    suspend fun getOtherTransactionCountForMerchant(merchantName: String, excludeId: Long): Int {
+
+    suspend fun getOtherTransactionCountForMerchant(
+        merchantName: String,
+        excludeId: Long,
+        notBefore: LocalDateTime? = null,
+    ): Int {
         val trimmed = merchantName.trim()
         if (trimmed.isEmpty()) return 0
-        return transactionDao.getActiveTransactionCountForMerchant(trimmed, excludeId)
+        val applySince = if (notBefore == null) 0 else 1
+        val sinceCutoff = notBefore ?: EPOCH_NOT_BEFORE
+        return transactionDao.getActiveTransactionCountForMerchant(
+            trimmed,
+            excludeId,
+            applySince,
+            sinceCutoff,
+        )
     }
 
     suspend fun findSimilarTransactionsForRename(
@@ -240,15 +377,23 @@ class TransactionRepository @Inject constructor(
         newMerchantName: String,
         excludeTransactionId: Long,
     ): List<MerchantRenameMatch> {
-        val knownMerchants = transactionDao.getDistinctMerchantNames()
-        val merchantDetails = knownMerchants.mapNotNull { merchant ->
-            val name = merchant.trim()
-            if (name.isEmpty()) return@mapNotNull null
-            val count = transactionDao.getActiveTransactionCountForMerchant(name, excludeTransactionId)
-            if (count <= 0) return@mapNotNull null
+        val newTrim = newMerchantName.trim()
+        val tokens = buildRenameSearchTokens(originalMerchant, newMerchantName)
+        val candidates = transactionDao.getDistinctMerchantNamesForRenameCandidates(
+            excludeId = excludeTransactionId,
+            newName = newTrim,
+            t0 = tokens[0],
+            t1 = tokens[1],
+            t2 = tokens[2],
+            t3 = tokens[3],
+            t4 = tokens[4],
+            t5 = tokens[5],
+            resultLimit = RENAME_CANDIDATE_SQL_LIMIT,
+        )
+        val merchantDetails = candidates.map { merchant ->
             MerchantRenameMatcher.MerchantMatchDetails(
-                merchantName = name,
-                transactionCount = count,
+                merchantName = merchant,
+                transactionCount = 1,
                 sample = MerchantRenameMatcher.MerchantSample(
                     amount = BigDecimal.ZERO,
                     currency = "",
@@ -269,12 +414,17 @@ class TransactionRepository @Inject constructor(
     }
 
     suspend fun getAllUsedTags(): List<String> {
-        return transactionDao.getDistinctTagStrings()
+        val flattened = transactionDao.getDistinctTagStrings()
             .flatMap { it.split(",") }
             .map { it.trim() }
             .filter { it.isNotBlank() }
-            .distinct()
-            .sorted()
+        val counts = flattened.groupingBy { it }.eachCount()
+        return counts.entries
+            .sortedWith(
+                compareByDescending<Map.Entry<String, Int>> { it.value }
+                    .thenBy { it.key },
+            )
+            .map { it.key }
     }
     
     // Additional methods for Home screen
@@ -472,6 +622,32 @@ class TransactionRepository @Inject constructor(
         )
 
     /**
+     * Gets transactions with splits, including excluded rows, for analytics aggregates.
+     */
+    fun getTransactionsWithSplitsFilteredIncludingExcluded(
+        startDate: LocalDate,
+        endDate: LocalDate,
+        currency: String
+    ): Flow<List<TransactionWithSplits>> =
+        transactionSplitDao.getTransactionsWithSplitsFilteredIncludingExcluded(
+            startDate.atStartOfDay(),
+            endDate.atTime(23, 59, 59),
+            currency
+        )
+
+    /**
+     * Gets transactions with splits across all currencies, including excluded rows.
+     */
+    fun getTransactionsWithSplitsAllCurrenciesIncludingExcluded(
+        startDate: LocalDate,
+        endDate: LocalDate
+    ): Flow<List<TransactionWithSplits>> =
+        transactionSplitDao.getTransactionsWithSplitsAllCurrenciesIncludingExcluded(
+            startDate.atStartOfDay(),
+            endDate.atTime(23, 59, 59)
+        )
+
+    /**
      * Gets a transaction with its splits synchronously.
      */
     suspend fun getTransactionWithSplitsSync(transactionId: Long): TransactionWithSplits? =
@@ -543,4 +719,13 @@ class TransactionRepository @Inject constructor(
 
     suspend fun deleteReceiptsForTransaction(transactionId: Long) =
         transactionReceiptDao.deleteReceiptsForTransaction(transactionId)
+
+    fun getPendingSelfTransfers(): Flow<List<TransactionEntity>> =
+        transactionDao.getPendingSelfTransfers()
+
+    fun getPendingSelfTransferCount(): Flow<Int> =
+        transactionDao.getPendingSelfTransferCount()
+
+    suspend fun updateTransferKind(id: Long, transferKind: String) =
+        transactionDao.updateTransferKind(id, transferKind, LocalDateTime.now())
 }

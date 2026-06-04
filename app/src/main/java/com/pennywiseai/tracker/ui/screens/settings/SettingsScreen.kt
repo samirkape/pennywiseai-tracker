@@ -79,6 +79,7 @@ fun SettingsScreen(
     onNavigateToManageAccounts: () -> Unit = {},
     onNavigateToRules: () -> Unit = {},
     onNavigateToBudgets: () -> Unit = {},
+    onNavigateToSubscriptions: () -> Unit = {},
     onNavigateToLoans: () -> Unit = {},
     onNavigateToTransactionGroups: () -> Unit = {},
     onNavigateToExchangeRates: () -> Unit = {},
@@ -179,7 +180,7 @@ fun SettingsScreen(
                     iconBgColor = orange_light,
                     iconTint = orange_dark,
                     title = "Appearance",
-                    subtitle = "Theme, colors, fonts & navigation",
+                    subtitle = stringResource(R.string.settings_appearance_subtitle),
                     onClick = onNavigateToAppearance,
                     position = ItemPosition.SINGLE
                 )
@@ -339,6 +340,15 @@ fun SettingsScreen(
                     title = "Budgets",
                     subtitle = "Track spending limits by category",
                     onClick = onNavigateToBudgets,
+                    position = ItemPosition.MIDDLE
+                )
+                SettingsNavItem(
+                    icon = Icons.Default.Subscriptions,
+                    iconBgColor = cyan_light,
+                    iconTint = cyan_dark,
+                    title = "Subscriptions",
+                    subtitle = "Recurring bills and services you track",
+                    onClick = onNavigateToSubscriptions,
                     position = ItemPosition.MIDDLE
                 )
                 SettingsNavItem(

@@ -12,6 +12,7 @@ import com.pennywiseai.tracker.ui.effects.overScrollVertical
 import com.pennywiseai.tracker.ui.effects.rememberOverscrollFlingBehavior
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.filled.Delete
@@ -25,7 +26,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.pennywiseai.tracker.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pennywiseai.tracker.data.repository.ModelState
 import com.pennywiseai.tracker.ui.components.CustomTitleTopAppBar
@@ -46,6 +49,7 @@ import java.util.Locale
 fun ChatScreen(
     modifier: Modifier = Modifier,
     viewModel: ChatViewModel = hiltViewModel(),
+    onNavigateBack: () -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
     val messages by viewModel.messages.collectAsStateWithLifecycle()
@@ -86,7 +90,16 @@ fun ChatScreen(
             CustomTitleTopAppBar(
                 scrollBehaviorSmall = scrollBehaviorSmall,
                 scrollBehaviorLarge = scrollBehaviorLarge,
-                title = "Spendly AI",
+                title = stringResource(R.string.app_ai_title, stringResource(R.string.app_name)),
+                hasBackButton = true,
+                navigationContent = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.cd_navigate_up),
+                        )
+                    }
+                },
                 hazeState = hazeState
             )
         }

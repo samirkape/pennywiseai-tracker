@@ -1,5 +1,10 @@
 <resources>
     <string name="app_name">Spendly</string>
+    <!-- User-facing product name; not overridden by debug (unlike app_name). -->
+    <string name="brand_display_name">Spendly</string>
+    <!-- Formatted: first arg is app display name (e.g. Spendly) -->
+    <string name="app_ai_title">%1$s AI</string>
+    <string name="cd_navigate_up">Navigate up</string>
     <string name="widget_name_budget">Budget Overview</string>
     <string name="widget_description_budget">Shows your monthly budget progress, savings, and daily allowance at a glance.</string>
     <string name="widget_loading">Loading widget…</string>
@@ -7,6 +12,7 @@
     <string name="widget_description_recent">View your monthly spend and latest transactions at a glance.</string>
     <string name="widget_name_add_transaction">Add Transaction</string>
     <string name="widget_description_add_transaction">Tap to quickly add a manual transaction without opening the app.</string>
+    <string name="settings_appearance_subtitle">Theme, colors, fonts, and navigation bar</string>
 
     <!-- Pay period (salary month) feature -->
     <string name="pay_period_title">Pay period</string>
@@ -52,12 +58,43 @@
     <string name="budget_period_error_range">End date must be on or after start date</string>
     <string name="budget_period_implicit_saved">Switched to automatic period end</string>
 
+    <!-- Pay period explorer: cumulative spend through a chosen day (Analytics + Home period sheet) -->
+    <string name="pay_period_explorer_title">Period timeline</string>
+    <string name="pay_period_explorer_hint">Spending matches Transactions and Analytics (debit and card spend, excluding loan-linked rows). Days after today are not shown.</string>
+    <string name="pay_period_explorer_spent_through">Spent through selected day</string>
+    <string name="pay_period_explorer_chart_caption">Cumulative spend in this period (selected currency)</string>
+    <string name="pay_period_explorer_view_transactions">View transactions in this period</string>
+
     <!-- Transaction edit: category suggestions -->
     <string name="txn_edit_suggested_merchant">Suggested for %1$s</string>
     <string name="txn_edit_suggested_today">Suggested · used today</string>
     <string name="txn_edit_suggested_chip">%1$s (suggested)</string>
     <string name="txn_edit_suggested_merchant_rename">Suggested name</string>
     <string name="txn_edit_suggested_merchant_rename_chip">%1$s</string>
+    <string name="txn_bulk_category_scope_label">Apply to transactions from</string>
+    <string name="txn_bulk_category_scope_all">All time</string>
+    <string name="txn_bulk_category_scope_90d">Last 90 days</string>
+    <string name="txn_bulk_category_scope_365d">Last 365 days</string>
+    <string name="txn_bulk_category_confirm_title">Apply to matching past transactions?</string>
+    <string name="txn_bulk_category_confirm_message">This will update %1$d other active transaction(s) matching merchant \"%2$s\" (case-insensitive), within: %3$s.</string>
+    <string name="txn_bulk_confirm_selected_line">Selected updates: %1$s</string>
+    <string name="txn_bulk_confirm_undo_note">After save completes, you can tap Undo on the banner to revert bulk category changes only.</string>
+    <string name="txn_bulk_category_confirm_apply">Apply</string>
+    <string name="txn_bulk_category_confirm_cancel">Cancel</string>
+    <string name="txn_bulk_category_preview_header">Sample of matching transactions</string>
+    <string name="txn_bulk_category_preview_row">%1$s · %2$s · %3$s</string>
+    <string name="txn_transfer_cc_bill_short">CC bill</string>
+    <string name="txn_bulk_section_past">Past transactions (same merchant)</string>
+    <string name="txn_bulk_past_category">Category</string>
+    <string name="txn_bulk_past_merchant">Merchant display name</string>
+    <string name="txn_bulk_past_type">Type and transfer kind</string>
+    <string name="txn_bulk_section_future">Future SMS from this bank</string>
+    <string name="txn_bulk_future_category">Remember category for the display name</string>
+    <string name="txn_bulk_future_merchant">Remember merchant alias (raw → display name)</string>
+    <string name="txn_bulk_undo_message">Category updated for %1$d other transaction(s). Undo restores their previous categories.</string>
+    <string name="txn_bulk_undo_action">Undo</string>
+    <string name="txn_bulk_undo_done">Bulk category change reverted</string>
+    <string name="txn_mapping_conflict_hint">Saved merchant mapping uses \"%1$s\"; new SMS may still categorize as that until you change it in Settings → Merchant mappings.</string>
     <string name="merchant_rename_review_title">Rename similar transactions?</string>
     <string name="merchant_rename_review_subtitle">Apply \"%1$s\" to matching past transactions</string>
     <string name="merchant_rename_review_progress">%1$d of %2$d</string>
@@ -82,7 +119,9 @@
 
     <string name="future_parsing_prompt_title">Remember for future SMS?</string>
     <string name="future_parsing_prompt_both">When SMS looks like \"%1$s\", use merchant \"%2$s\" and category \"%3$s\".</string>
-    <string name="future_parsing_prompt_merchant">When SMS looks like \"%1$s\", use merchant \"%2$s\" (category: %3$s).</string>
+    <string name="future_parsing_prompt_merchant">When the parsed merchant is \"%1$s\", use \"%2$s\" (category: %3$s). You can also remember similar wordings from this SMS below.</string>
+    <string name="future_parsing_sms_context_label">This transaction’s SMS (truncated)</string>
+    <string name="future_parsing_optional_aliases_intro">Also map these labels to the same display name when they appear as the merchant on new SMS:</string>
     <string name="future_parsing_prompt_category">For \"%1$s\", always use category \"%2$s\" on new SMS transactions.</string>
     <string name="future_parsing_prompt_confirm">Yes, remember</string>
     <string name="future_parsing_prompt_dismiss">Not now</string>
@@ -256,11 +295,24 @@
 
     <!-- Home hero & summary -->
     <string name="home_spent_so_far">Spent so far</string>
+    <string name="home_hero_show_metric">Show</string>
+    <string name="analytics_outflow_quick">Period outflow</string>
+    <string name="home_hero_metric_spending">Spending</string>
+    <string name="home_hero_metric_invested">Invested</string>
+    <string name="home_hero_metric_cc_bills">Card bill payments</string>
+    <string name="home_hero_metric_excluded">Excluded</string>
+    <string name="home_hero_trend_for_spending_only">Trend compares spending only</string>
     <string name="home_percent_of_income">%1$d%% of income</string>
     <string name="home_remaining">%1$s left</string>
     <string name="home_currency_section">Currency</string>
     <string name="home_summary_income">Income</string>
+    <string name="home_summary_top_spend">Top spend</string>
     <string name="home_summary_pace">Pace</string>
+    <string name="home_more_stats">More stats</string>
+    <string name="home_more_stats_subscriptions">Subscriptions</string>
+    <string name="home_more_stats_subscriptions_active">%d active</string>
+    <string name="home_more_stats_subscriptions_hint">Tap to manage</string>
+    <string name="home_also_invested">Also invested this month</string>
     <string name="home_pace_on_track">on track</string>
     <string name="home_pace_above_last">above last</string>
     <string name="home_income_today_none">this period</string>
@@ -268,15 +320,24 @@
     <string name="home_income_today_many">+%1$d today</string>
     <string name="home_top_category_unknown">—</string>
     <string name="home_top_category_empty">no spend yet</string>
-    <string name="home_top_category_sub">%1$d%% · %2$s</string>
+    <string name="home_top_category_sub">%1$s · %2$d%%</string>
     <string name="home_search">Search</string>
+    <string name="home_help">Tips for categories and tags</string>
+    <string name="home_help_title">Categories and tags</string>
+    <string name="home_help_categories_title">Categories</string>
+    <string name="home_help_categories_body">Open any transaction to choose a category. Suggested chips may appear based on the merchant or what you picked before. You can add custom categories from the add flow. When you save, you can optionally apply the same category to other transactions from that merchant.</string>
+    <string name="home_help_tags_title">Tags</string>
+    <string name="home_help_tags_body">In transaction details, add tags to group spending by trip, person, project, or anything you track. Tags are for your own organization and do not change budget totals. Use search on the transactions screen to find merchants, notes, and tags.</string>
+    <string name="home_help_got_it">Got it</string>
     <string name="home_period_day">Day %1$d of %2$d</string>
     <string name="home_hero_page_spend">Spend</string>
     <string name="home_hero_page_outflow">Outflow</string>
     <string name="home_total_outflow">Total outflow</string>
+    <string name="home_day_invested">Invested %1$s</string>
     <string name="home_incl_investments">incl. investments</string>
     <string name="home_spending_portion_label">Spending</string>
     <string name="home_invested_portion_label">Invested</string>
+    <string name="home_invested_share_inline">Invested %1$d%%</string>
     <string name="home_actions_title">Quick actions</string>
     <string name="home_action_refresh">Refresh</string>
     <string name="home_action_refresh_subtitle">Scan SMS for new transactions</string>
@@ -292,4 +353,45 @@
     <string name="home_feed_today">Today</string>
     <string name="home_feed_empty_today_headline">No transactions today</string>
     <string name="home_feed_empty_today_description">No transactions recorded yet today. Scan your SMS to import them automatically.</string>
+
+    <!-- Subscriptions screen -->
+    <string name="subs_screen_title">Subscriptions</string>
+    <string name="subs_section_active">Active Subscriptions</string>
+    <string name="subs_summary_monthly_title">Monthly Subscriptions</string>
+    <string name="subs_empty_headline">No subscriptions detected yet</string>
+    <string name="subs_empty_description">Sync SMS for mandates, add from the + button, or mark a transaction as recurring on save.</string>
+    <string name="subs_fab_add_cd">Add subscription</string>
+    <string name="subs_snackbar_hidden">%1$s hidden</string>
+    <string name="subs_snackbar_undo">Undo</string>
+    <string name="subs_delete_title">Delete subscription?</string>
+    <string name="subs_delete_message">Remove %1$s from this list. This does not delete past transactions. SMS-detected items may appear again after a scan.</string>
+    <string name="subs_delete_message_recurring_hint">Recurring is turned off on transactions that matched this manual subscription.</string>
+    <string name="subs_delete_confirm">Delete</string>
+    <string name="subs_action_cancel">Cancel</string>
+    <string name="subs_action_save">Save</string>
+    <string name="subs_action_ok">OK</string>
+    <string name="subs_edit_title">Edit subscription</string>
+    <string name="subs_edit_merchant">Merchant</string>
+    <string name="subs_edit_amount">Amount</string>
+    <string name="subs_edit_category_optional">Category (optional)</string>
+    <string name="subs_edit_next_payment">Next payment: %1$s</string>
+    <string name="subs_item_sms_available_cd">SMS available</string>
+    <string name="subs_item_no_date">• No date set</string>
+    <string name="subs_item_due_today">Due today</string>
+    <string name="subs_item_due_tomorrow">Due tomorrow</string>
+    <string name="subs_item_due_in_days">Due in %1$d days</string>
+    <string name="subs_item_category_bullet">• %1$s</string>
+    <string name="subs_item_menu_cd">Subscription actions</string>
+    <string name="subs_item_menu_edit">Edit</string>
+    <string name="subs_item_menu_hide">Hide from list</string>
+    <string name="subs_item_menu_show_sms">Show original SMS</string>
+    <string name="subs_item_menu_hide_sms">Hide original SMS</string>
+    <string name="subs_item_menu_delete">Delete permanently</string>
+    <string name="subs_item_notes_title">Notes</string>
+    <string name="subs_item_sms_title">Original SMS</string>
+
+    <plurals name="subs_active_subscription_count">
+        <item quantity="one">%d active subscription</item>
+        <item quantity="other">%d active subscriptions</item>
+    </plurals>
 </resources>

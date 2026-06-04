@@ -74,7 +74,13 @@ abstract class BaseIndianBankParser : BankParser() {
                 Regex("""\btowards\s+cred(?:\s+club)?\b""", RegexOption.IGNORE_CASE).containsMatchIn(m) ||
                 Regex("""\bupi\s+cred\b""", RegexOption.IGNORE_CASE).containsMatchIn(m)
 
-        return receivedOnCard || paidTowardsCard || bbpsCred || paidToCredApp
+        // CC bill payment confirmation where the bank says a payment was "credited to your card ending XXXX"
+        // (e.g. HDFC: "Online Payment of Rs.X... was credited to your card ending 8711 On DD/MMM/YYYY").
+        // These messages use "card ending" but never say "credit card", so ccContext is false above.
+        val creditedToCard = m.contains("credited to your card") ||
+            (m.contains("payment of") && m.contains("credited") && m.contains("card ending"))
+
+        return receivedOnCard || paidTowardsCard || bbpsCred || paidToCredApp || creditedToCard
     }
 
     /**

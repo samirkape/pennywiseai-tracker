@@ -30,6 +30,7 @@ import com.pennywiseai.tracker.ui.theme.Dimensions
 import com.pennywiseai.tracker.ui.theme.Spacing
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
+import com.pennywiseai.tracker.core.Constants
 
 data class FAQItem(
     val question: String,
@@ -50,95 +51,111 @@ fun FAQScreen(
 ) {
     val context = LocalContext.current
     
-    val faqCategories = remember {
-        listOf(
-            FAQCategory(
-                title = "Transaction Types",
-                icon = { Icon(Icons.Default.SwapHoriz, contentDescription = null) },
-                items = listOf(
-                    FAQItem(
-                        question = "Why are wallet transactions marked as Credit?",
-                        answer = "Wallet transactions (Amazon Pay, Paytm, etc.) are marked as Credit because they're charged to your bank account or credit card first, not direct bank debits. This helps track the actual payment method used."
-                    ),
-                    FAQItem(
-                        question = "What's the difference between the 5 transaction types?",
-                        answer = """• Expense: Money going out of your account (debits, purchases, bill payments)
+    val faqCategories = remember(Constants.Features.AI_CHAT_ENABLED) {
+        buildList {
+            add(
+                FAQCategory(
+                    title = "Transaction Types",
+                    icon = { Icon(Icons.Default.SwapHoriz, contentDescription = null) },
+                    items = listOf(
+                        FAQItem(
+                            question = "Why are wallet transactions marked as Credit?",
+                            answer = "Wallet transactions (Amazon Pay, Paytm, etc.) are marked as Credit because they're charged to your bank account or credit card first, not direct bank debits. This helps track the actual payment method used."
+                        ),
+                        FAQItem(
+                            question = "What's the difference between the 5 transaction types?",
+                            answer = """• Expense: Money going out of your account (debits, purchases, bill payments)
 • Income: Money coming into your account (salary, refunds, cashback)
 • Investment: Mutual funds, stocks, SIPs, trading accounts
 • Credit: Credit card transactions and wallet payments (money you'll pay later)
 • Transfer: Money moved between your own accounts (self-transfers)"""
-                    ),
-                    FAQItem(
-                        question = "When should I use Transfer vs Expense?",
-                        answer = "Use Transfer when moving money between your own accounts (e.g., savings to checking). These don't affect your net worth. Use Expense for actual spending."
-                    )
-                )
-            ),
-            FAQCategory(
-                title = "SMS Parsing",
-                icon = { Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null) },
-                items = listOf(
-                    FAQItem(
-                        question = "Why aren't my bank SMS being detected?",
-                        answer = "Check if your bank is supported in our list. If not, report it via GitHub. Ensure SMS permissions are granted and the sender format matches standard bank SMS patterns."
-                    ),
-                    FAQItem(
-                        question = "What happens to unrecognized SMS?",
-                        answer = "They're saved in 'Unrecognized Messages'. Tap Add as transaction to create one manually from the SMS text, or report the message to help improve parsing."
-                    ),
-                    FAQItem(
-                        question = "Why are some transactions duplicated?",
-                        answer = "Some banks send multiple SMS for the same transaction. The app tries to detect duplicates, but you can manually delete any that slip through."
-                    )
-                )
-            ),
-            FAQCategory(
-                title = "Privacy & Data",
-                icon = { Icon(Icons.Default.Security, contentDescription = null) },
-                items = listOf(
-                    FAQItem(
-                        question = "Is my financial data secure?",
-                        answer = "Yes! All data stays on your device. We don't have servers or cloud storage. The AI model runs locally for complete privacy."
-                    ),
-                    FAQItem(
-                        question = "Can I backup my data?",
-                        answer = "Currently, data is stored locally only. Export/backup features are planned for future updates."
-                    ),
-                    FAQItem(
-                        question = "What data does the app access?",
-                        answer = "Only SMS messages from known bank senders. We don't read personal messages or access other app data."
-                    )
-                )
-            ),
-            FAQCategory(
-                title = "AI Features",
-                icon = { Icon(Icons.Default.Psychology, contentDescription = null) },
-                items = listOf(
-                    FAQItem(
-                        question = "Why do I need to download the AI model?",
-                        answer = "The 750MB model enables on-device chat about your expenses without sending data to any server, ensuring complete privacy."
-                    ),
-                    FAQItem(
-                        question = "What can I ask the AI assistant?",
-                        answer = "You can ask about spending patterns, budget advice, transaction summaries, and general financial questions based on your data."
-                    )
-                )
-            ),
-            FAQCategory(
-                title = "Account Management",
-                icon = { Icon(Icons.Default.AccountBalance, contentDescription = null) },
-                items = listOf(
-                    FAQItem(
-                        question = "What are manual accounts?",
-                        answer = "Manual accounts let you track cash, investments, or accounts from unsupported banks. You update balances manually."
-                    ),
-                    FAQItem(
-                        question = "How do I track multiple accounts from the same bank?",
-                        answer = "The app automatically detects different accounts based on the last 4 digits shown in SMS."
+                        ),
+                        FAQItem(
+                            question = "When should I use Transfer vs Expense?",
+                            answer = "Use Transfer when moving money between your own accounts (e.g., savings to checking). These don't affect your net worth. Use Expense for actual spending."
+                        )
                     )
                 )
             )
-        )
+            add(
+                FAQCategory(
+                    title = "SMS Parsing",
+                    icon = { Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null) },
+                    items = listOf(
+                        FAQItem(
+                            question = "Why aren't my bank SMS being detected?",
+                            answer = "Check if your bank is supported in our list. If not, report it via GitHub. Ensure SMS permissions are granted and the sender format matches standard bank SMS patterns."
+                        ),
+                        FAQItem(
+                            question = "What happens to unrecognized SMS?",
+                            answer = "They're saved in 'Unrecognized Messages'. Tap Add as transaction to create one manually from the SMS text, or report the message to help improve parsing."
+                        ),
+                        FAQItem(
+                            question = "Why are some transactions duplicated?",
+                            answer = "Some banks send multiple SMS for the same transaction. The app tries to detect duplicates, but you can manually delete any that slip through."
+                        )
+                    )
+                )
+            )
+            add(
+                FAQCategory(
+                    title = "Privacy & Data",
+                    icon = { Icon(Icons.Default.Security, contentDescription = null) },
+                    items = listOf(
+                        FAQItem(
+                            question = "Is my financial data secure?",
+                            answer = if (Constants.Features.AI_CHAT_ENABLED) {
+                                "Yes! All data stays on your device. We don't have servers or cloud storage. The AI model runs locally for complete privacy."
+                            } else {
+                                "Yes! Your transactions and settings are stored on your device. We don't run servers or cloud storage for your financial data."
+                            }
+                        ),
+                        FAQItem(
+                            question = "Can I backup my data?",
+                            answer = "Use Export Data in Settings to save a backup file to your device. You can restore from a backup on this device or a new one."
+                        ),
+                        FAQItem(
+                            question = "What data does the app access?",
+                            answer = "Only SMS messages from known bank senders. We don't read personal messages or access other app data."
+                        )
+                    )
+                )
+            )
+            if (Constants.Features.AI_CHAT_ENABLED) {
+                add(
+                    FAQCategory(
+                        title = "AI Features",
+                        icon = { Icon(Icons.Default.Psychology, contentDescription = null) },
+                        items = listOf(
+                            FAQItem(
+                                question = "Why do I need to download the AI model?",
+                                answer = "The 750MB model enables on-device chat about your expenses without sending data to any server, ensuring complete privacy."
+                            ),
+                            FAQItem(
+                                question = "What can I ask the AI assistant?",
+                                answer = "You can ask about spending patterns, budget advice, transaction summaries, and general financial questions based on your data."
+                            )
+                        )
+                    )
+                )
+            }
+            add(
+                FAQCategory(
+                    title = "Account Management",
+                    icon = { Icon(Icons.Default.AccountBalance, contentDescription = null) },
+                    items = listOf(
+                        FAQItem(
+                            question = "What are manual accounts?",
+                            answer = "Manual accounts let you track cash, investments, or accounts from unsupported banks. You update balances manually."
+                        ),
+                        FAQItem(
+                            question = "How do I track multiple accounts from the same bank?",
+                            answer = "The app automatically detects different accounts based on the last 4 digits shown in SMS."
+                        )
+                    )
+                )
+            )
+        }
     }
     
     var expandedCategories by remember { mutableStateOf(setOf<Int>()) }

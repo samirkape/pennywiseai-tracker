@@ -41,7 +41,10 @@ class CreditCardBillPaymentDetectionTest {
             "Payment of Rs.10,000 has been successfully credited towards your SBI Credit Card.",
             "Rs 3,000 paid via BBPS towards your Credit Card ending 7777.",
             "Payment of Rs.50000 has been successfully credited towards your ICICI Bank Credit Card - CRED",
-            "Sent Rs.5199.65 From HDFC Bank A/C *2518 To CRED Club On 17/05/26 Ref 650304962409"
+            "Sent Rs.5199.65 From HDFC Bank A/C *2518 To CRED Club On 17/05/26 Ref 650304962409",
+            // HDFC CC bill payment confirmation: "Online Payment...was credited to your card ending XXXX"
+            "HDFC Bank Cardmember, Online Payment of Rs.3102 vide Ref# 1521156481jdzLx was credited to your card ending 8711 On 01/JUN/2026_value Date 01/JUN/2026",
+            "HDFC Bank Cardmember, Online Payment of Rs.30000 vide Ref# 152114350TONPHy was credited to your card ending 9908 On 01/JUN/2026_value Date 01/JUN/2026"
         )
         val negatives = listOf(
             // Card purchases must not be treated as bill payments.
@@ -136,7 +139,34 @@ class CreditCardBillPaymentDetectionTest {
             )
         )
 
+        // HDFC card-side credit confirmation ("credited to your card ending") — previously INCOME.
+        val hdfcCardConfirmCases = listOf(
+            ParserTestCase(
+                name = "HDFC CC payment confirmation becomes TRANSFER not INCOME",
+                message = "HDFC Bank Cardmember, Online Payment of Rs.3102 vide Ref# 1521156481jdzLx was credited to your card ending 8711 On 01/JUN/2026_value Date 01/JUN/2026",
+                sender = "AX-HDFCBK-S",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("3102"),
+                    currency = "INR",
+                    type = TransactionType.TRANSFER,
+                    transferKind = TransferKinds.CC_BILL_PAYMENT
+                )
+            ),
+            ParserTestCase(
+                name = "HDFC CC payment confirmation (large amount) becomes TRANSFER not INCOME",
+                message = "HDFC Bank Cardmember, Online Payment of Rs.30000 vide Ref# 152114350TONPHy was credited to your card ending 9908 On 01/JUN/2026_value Date 01/JUN/2026",
+                sender = "AX-HDFCBK-S",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("30000"),
+                    currency = "INR",
+                    type = TransactionType.TRANSFER,
+                    transferKind = TransferKinds.CC_BILL_PAYMENT
+                )
+            )
+        )
+
         return ParserTestUtils.runTestSuite(hdfc, hdfcCases) +
+            ParserTestUtils.runTestSuite(hdfc, hdfcCardConfirmCases) +
             ParserTestUtils.runTestSuite(icici, iciciCases) +
             ParserTestUtils.runTestSuite(cred, credCases)
     }

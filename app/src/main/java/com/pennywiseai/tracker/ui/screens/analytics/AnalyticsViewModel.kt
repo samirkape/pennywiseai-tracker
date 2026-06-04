@@ -14,10 +14,12 @@ import com.pennywiseai.tracker.presentation.common.TimePeriod
 import com.pennywiseai.tracker.presentation.common.TransactionTypeFilter
 import com.pennywiseai.tracker.presentation.common.defaultTimePeriod
 import com.pennywiseai.tracker.presentation.common.PaymentMode
+import com.pennywiseai.tracker.presentation.common.countsOnceTowardCcBillPaymentTotal
 import com.pennywiseai.tracker.presentation.common.matchesAnalyticsSpendingFilter
 import com.pennywiseai.tracker.presentation.common.paymentMode
 import com.pennywiseai.tracker.presentation.common.getDateRangeForPeriod
 import com.pennywiseai.tracker.presentation.common.getDateRangeForYearMonthNavigation
+import com.pennywiseai.tracker.presentation.common.isCcBillPayment
 import com.pennywiseai.tracker.presentation.common.resolveDateRangeForSelection
 import com.pennywiseai.tracker.utils.CurrencyUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -257,10 +259,19 @@ class AnalyticsViewModel @Inject constructor(
                     TransactionTypeFilter.TRANSFER -> allTransactionsWithSplits.filter {
                         it.transaction.transactionType == com.pennywiseai.tracker.data.database.entity.TransactionType.TRANSFER
                     }
+                    TransactionTypeFilter.CC_BILL_PAYMENT -> allTransactionsWithSplits.filter {
+                        it.transaction.isCcBillPayment()
+                    }
                     TransactionTypeFilter.INVESTMENT -> allTransactionsWithSplits.filter {
                         it.transaction.transactionType == com.pennywiseai.tracker.data.database.entity.TransactionType.INVESTMENT
                     }
-                }).filter { it.transaction.loanId == null }
+                    TransactionTypeFilter.EXCLUDED -> allTransactionsWithSplits.filter {
+                        it.transaction.isExcludedFromTracking
+                    }
+                }).let { base ->
+                    if (transactionTypeFilter == TransactionTypeFilter.EXCLUDED) base
+                    else base.filter { it.transaction.loanId == null }
+                }
 
                 // Compute available categories BEFORE applying category filter
                 val allCategoryNames = filteredTransactionsWithSplits
@@ -437,8 +448,21 @@ class AnalyticsViewModel @Inject constructor(
                     ).first()
                 }
 
+                val outflowTransactionsWithSplits = if (filterState.isUnifiedMode) {
+                    transactionRepository.getTransactionsWithSplitsAllCurrenciesIncludingExcluded(
+                        startDate = dateRange.first,
+                        endDate = dateRange.second,
+                    ).first()
+                } else {
+                    transactionRepository.getTransactionsWithSplitsFilteredIncludingExcluded(
+                        startDate = dateRange.first,
+                        endDate = dateRange.second,
+                        currency = filterState.currency,
+                    ).first()
+                }
+
                 val periodOutflow = computePeriodOutflow(
-                    allTransactionsWithSplits = allTransactionsWithSplits,
+                    allTransactionsWithSplits = outflowTransactionsWithSplits,
                     isUnified = isUnified,
                     displayCurrency = displayCurrency,
                 )
@@ -711,13 +735,21 @@ class AnalyticsViewModel @Inject constructor(
     ): PeriodOutflowSummary? {
         var spending = BigDecimal.ZERO
         var invested = BigDecimal.ZERO
+        var ccBillPayments = BigDecimal.ZERO
+        var excluded = BigDecimal.ZERO
         var spendingCount = 0
         var investmentCount = 0
+        var ccBillPaymentCount = 0
+        var excludedCount = 0
 
         for (item in allTransactionsWithSplits) {
             val tx = item.transaction
-            if (tx.isExcludedFromTracking) continue
             val amount = convertAmount(tx.amount, tx.currency, displayCurrency, isUnified)
+            if (tx.isExcludedFromTracking) {
+                excluded += amount
+                excludedCount++
+                continue
+            }
             when {
                 tx.matchesAnalyticsSpendingFilter() -> {
                     spending += amount
@@ -728,18 +760,28 @@ class AnalyticsViewModel @Inject constructor(
                     investmentCount++
                 }
             }
+            if (tx.countsOnceTowardCcBillPaymentTotal()) {
+                ccBillPayments += amount
+                ccBillPaymentCount++
+            }
         }
 
-        val total = spending + invested
-        if (total <= BigDecimal.ZERO) return null
+        if (
+            spending <= BigDecimal.ZERO &&
+            invested <= BigDecimal.ZERO &&
+            ccBillPayments <= BigDecimal.ZERO &&
+            excluded <= BigDecimal.ZERO
+        ) return null
 
         return PeriodOutflowSummary(
-            total = total,
             spending = spending,
             invested = invested,
-            transactionCount = spendingCount + investmentCount,
+            ccBillPayments = ccBillPayments,
+            excluded = excluded,
             spendingTransactionCount = spendingCount,
             investmentTransactionCount = investmentCount,
+            ccBillPaymentTransactionCount = ccBillPaymentCount,
+            excludedTransactionCount = excludedCount,
             currency = displayCurrency,
         )
     }
@@ -983,12 +1025,14 @@ data class AnalyticsUiState(
 
 /** Spending plus investments for the active period (independent of type filter). */
 data class PeriodOutflowSummary(
-    val total: BigDecimal,
     val spending: BigDecimal,
     val invested: BigDecimal,
-    val transactionCount: Int,
+    val ccBillPayments: BigDecimal,
+    val excluded: BigDecimal,
     val spendingTransactionCount: Int,
     val investmentTransactionCount: Int,
+    val ccBillPaymentTransactionCount: Int,
+    val excludedTransactionCount: Int,
     val currency: String,
 )
 

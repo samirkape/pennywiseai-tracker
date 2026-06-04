@@ -4,6 +4,7 @@ import com.pennywiseai.tracker.data.database.entity.AccountBalanceEntity
 import com.pennywiseai.tracker.data.database.entity.ProfileEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionType
+import com.pennywiseai.tracker.data.database.entity.TransferKind
 import com.pennywiseai.tracker.utils.DateRangeUtils
 import java.time.LocalDate
 import java.time.YearMonth
@@ -126,13 +127,30 @@ fun TransactionEntity.matchesPaymentModeGroup(group: PaymentModeGroup): Boolean 
         paymentMode() == PaymentMode.CREDIT_CARD || paymentMode() == PaymentMode.BANK_ACCOUNT
 }
 
+/** True when this row is a credit card bill payment (bank/card leg), not card spend. */
+fun TransactionEntity.isCcBillPayment(): Boolean =
+    transactionType == TransactionType.TRANSFER && transferKind == TransferKind.CC_BILL_PAYMENT
+
+/**
+ * Counts each linked CC bill pair once (see [com.pennywiseai.tracker.domain.usecase.CreditCardPaymentLinker]).
+ */
+fun TransactionEntity.countsOnceTowardCcBillPaymentTotal(): Boolean {
+    if (!isCcBillPayment() || loanId != null || isExcludedFromTracking) return false
+    val otherId = linkedTransactionId ?: return true
+    return id < otherId
+}
+
 enum class TransactionTypeFilter(val label: String) {
     ALL("All"),
     INCOME("Income"),
     EXPENSE("Spending"),
     CREDIT("Credit Card"),
     TRANSFER("Transfer"),
-    INVESTMENT("Investment")
+    /** Card bill payments only (TRANSFER + CC_BILL_PAYMENT). */
+    CC_BILL_PAYMENT("CC payment"),
+    INVESTMENT("Investment"),
+    /** Rows marked excluded from tracking (any type). */
+    EXCLUDED("Excluded"),
 }
 
 /**

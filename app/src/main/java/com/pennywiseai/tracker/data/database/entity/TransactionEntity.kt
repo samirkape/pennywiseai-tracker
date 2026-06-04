@@ -120,6 +120,8 @@ data class TransactionEntity(
 object TransferKind {
     const val CC_BILL_PAYMENT = "CC_BILL_PAYMENT"
     const val SELF_TRANSFER = "SELF_TRANSFER"
+    /** Auto-detected as a possible self-transfer; awaiting user confirmation. */
+    const val SELF_TRANSFER_PENDING = "SELF_TRANSFER_PENDING"
     const val OTHERS_TRANSFER = "OTHERS_TRANSFER"
 }
 

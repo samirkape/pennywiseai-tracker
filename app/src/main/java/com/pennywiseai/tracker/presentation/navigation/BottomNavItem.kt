@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.pennywiseai.tracker.core.Constants
 
 sealed class BottomNavItem(
     val route: String,
@@ -13,25 +14,25 @@ sealed class BottomNavItem(
     val icon: ImageVector
 ) {
     data object Home : BottomNavItem(
-        route = "home",
+        route = Constants.Routes.HOME,
         title = "Home",
         icon = Icons.Default.Home
     )
 
     data object Budgets : BottomNavItem(
-        route = "budgets",
+        route = Constants.Routes.BUDGETS,
         title = "Budgets",
         icon = Icons.Default.AccountBalanceWallet
     )
 
     data object Analytics : BottomNavItem(
-        route = "analytics",
+        route = Constants.Routes.ANALYTICS,
         title = "Analytics",
         icon = Icons.Default.Analytics
     )
 
     data object Settings : BottomNavItem(
-        route = "settings",
+        route = Constants.Routes.SETTINGS,
         title = "Settings",
         icon = Icons.Default.Settings
     )

@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.pennywiseai.tracker.data.database.entity.BudgetImpactType
 import com.pennywiseai.tracker.data.database.entity.TransactionType
+import com.pennywiseai.tracker.data.database.entity.TransferKind
 import com.pennywiseai.tracker.domain.model.displayName
 import com.pennywiseai.tracker.domain.model.getAccountType
 import com.pennywiseai.tracker.presentation.accounts.AccountType
@@ -299,6 +300,49 @@ fun TransactionTabContent(
                             border = FilterChipDefaults.filterChipBorder(
                                 borderWidth = 0.dp,
                                 selected = channelSelected,
+                                enabled = true
+                            )
+                        )
+                    }
+                }
+            }
+
+            // ── Transfer kind (Transfer only) ──
+            if (uiState.transactionType == TransactionType.TRANSFER) {
+                val transferKinds = listOf(
+                    TransferKind.SELF_TRANSFER to "Self transfer",
+                    TransferKind.OTHERS_TRANSFER to "To others",
+                    TransferKind.CC_BILL_PAYMENT to "Credit card bill",
+                )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                ) {
+                    transferKinds.forEach { (kind, label) ->
+                        val selected = uiState.transferKind == kind
+                        FilterChip(
+                            selected = selected,
+                            onClick = { viewModel.updateTransferKind(kind) },
+                            label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            leadingIcon = if (selected) {
+                                {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(Dimensions.Icon.small)
+                                    )
+                                }
+                            } else null,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(0.7f),
+                                labelColor = MaterialTheme.colorScheme.onSurface
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                borderWidth = 0.dp,
+                                selected = selected,
                                 enabled = true
                             )
                         )
@@ -827,7 +871,8 @@ fun ReceiptPickerSection(
     receiptUris: List<android.net.Uri>,
     onReceiptAdded: (android.net.Uri) -> Unit,
     onReceiptRemoved: (Int) -> Unit,
-    onCreateCameraUri: () -> android.net.Uri
+    onCreateCameraUri: () -> android.net.Uri,
+    showOptionalCaption: Boolean = true,
 ) {
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -842,11 +887,13 @@ fun ReceiptPickerSection(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
-        Text(
-            text = "Receipt (Optional)",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        if (showOptionalCaption) {
+            Text(
+                text = "Receipt (Optional)",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
         if (receiptUris.isNotEmpty()) {
             LazyRow(

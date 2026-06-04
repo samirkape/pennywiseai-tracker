@@ -47,6 +47,7 @@ fun UnrecognizedSmsScreen(
     modifier: Modifier = Modifier,
     onNavigateBack: () -> Unit,
     onAddAsTransaction: (Long) -> Unit = {},
+    onCreateRule: (smsBody: String, sender: String) -> Unit = { _, _ -> },
     viewModel: UnrecognizedSmsViewModel = hiltViewModel(),
 ) {
     val unrecognizedMessages by viewModel.unrecognizedMessages.collectAsStateWithLifecycle()
@@ -233,7 +234,8 @@ fun UnrecognizedSmsScreen(
                             onDelete = {
                                 selectedMessage = message
                                 showDeleteConfirmation = true
-                            }
+                            },
+                            onCreateRule = { onCreateRule(message.smsBody, message.sender) }
                         )
                     }
                 }
@@ -286,6 +288,7 @@ private fun UnrecognizedSmsItem(
     onAddAsTransaction: () -> Unit,
     onReport: () -> Unit,
     onDelete: () -> Unit,
+    onCreateRule: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     PennyWiseCardV2(
@@ -337,7 +340,7 @@ private fun UnrecognizedSmsItem(
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            // Action buttons
+            // Primary action buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
@@ -355,6 +358,25 @@ private fun UnrecognizedSmsItem(
                     Spacer(modifier = Modifier.width(Spacing.xs))
                     Text("Add as transaction")
                 }
+                FilledTonalButton(
+                    onClick = onCreateRule,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(
+                        Icons.Default.Key,
+                        contentDescription = null,
+                        modifier = Modifier.size(Dimensions.Icon.small),
+                    )
+                    Spacer(modifier = Modifier.width(Spacing.xs))
+                    Text("Create rule")
+                }
+            }
+            // Secondary icon actions
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 if (!message.reported) {
                     FilledTonalButton(onClick = onReport) {
                         Icon(
@@ -363,21 +385,13 @@ private fun UnrecognizedSmsItem(
                             modifier = Modifier.size(Dimensions.Icon.small),
                         )
                     }
-                    IconButton(onClick = onDelete) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete",
-                            tint = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                } else {
-                    IconButton(onClick = onDelete) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete",
-                            tint = MaterialTheme.colorScheme.error,
-                        )
-                    }
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
         }

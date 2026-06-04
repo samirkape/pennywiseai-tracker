@@ -3,6 +3,10 @@
 ## Overview
 PennyWise follows Material 3 design principles with a focus on simplicity, clarity, and user-centric design. This document outlines the visual design system, theming approach, and layout guidelines.
 
+For **screen shell patterns** (hero home vs standard list/detail, tablet direction), see [scaffold-patterns.md](scaffold-patterns.md).
+
+For **navigation graphs and back behavior**, see [navigation.md](navigation.md).
+
 ## Theme System
 
 ### Material You Integration

@@ -51,8 +51,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import androidx.compose.ui.res.stringResource
 import com.pennywiseai.tracker.R
+import coil.compose.AsyncImage
 import com.pennywiseai.tracker.ui.effects.BlurredAnimatedVisibility
 import com.pennywiseai.tracker.ui.effects.LocalBlurEffects
 import dev.chrisbanes.haze.ExperimentalHazeApi
@@ -200,16 +201,19 @@ private fun LargerTopAppBar(
             }
         },
         actions = {
+            // Two top bars (large + regular) crossfade on scroll. Only one should host actions or
+            // the same row paints twice. Home keeps collapsedFraction ≈ 0, so actions stay here.
             BlurredAnimatedVisibility(
-                visible = !isHomeScreen,
+                visible = collapsedFraction <= 0.5f,
                 enter = fadeIn() + scaleIn(),
                 exit = fadeOut() + scaleOut()
             ) {
                 actionContent()
             }
         },
-        collapsedHeight = TopAppBarDefaults.LargeAppBarCollapsedHeight,
-        expandedHeight = if (isHomeScreen) TopAppBarDefaults.LargeAppBarCollapsedHeight else 110.dp,
+        // Home hides the large title in content below; keep this strip short so status bar → hero is tight.
+        collapsedHeight = if (isHomeScreen) 52.dp else TopAppBarDefaults.LargeAppBarCollapsedHeight,
+        expandedHeight = if (isHomeScreen) 52.dp else 110.dp,
         windowInsets = WindowInsets(0.dp),
         scrollBehavior = scrollBehaviorLarge,
         modifier = Modifier
@@ -353,7 +357,7 @@ private fun RegularTopAppBar(
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = userName.ifBlank { "Spendly" },
+                            text = stringResource(R.string.app_name),
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Start,
@@ -387,7 +391,9 @@ private fun RegularTopAppBar(
                 }
             },
             actions = {
-                actionContent()
+                if (collapsedFraction > 0.5f) {
+                    actionContent()
+                }
             },
             scrollBehavior = scrollBehaviorSmall,
             windowInsets = WindowInsets(0.dp),

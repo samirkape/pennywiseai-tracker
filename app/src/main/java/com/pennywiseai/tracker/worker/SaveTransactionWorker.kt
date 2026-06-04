@@ -11,6 +11,7 @@ import com.pennywiseai.tracker.data.database.entity.TransactionSplitEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionType
 import com.pennywiseai.tracker.data.receipt.ReceiptManager
 import com.pennywiseai.tracker.data.repository.AccountBalanceRepository
+import com.pennywiseai.tracker.data.repository.SubscriptionRepository
 import com.pennywiseai.tracker.data.repository.TransactionRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -27,6 +28,7 @@ class SaveTransactionWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val transactionRepository: TransactionRepository,
+    private val subscriptionRepository: SubscriptionRepository,
     private val accountBalanceRepository: AccountBalanceRepository,
     private val receiptManager: ReceiptManager,
 ) : CoroutineWorker(appContext, workerParams) {
@@ -41,11 +43,17 @@ class SaveTransactionWorker @AssistedInject constructor(
         private const val KEY_REMOVED_RECEIPT_IDS = "removed_receipt_ids"
         private const val KEY_REMOVED_RECEIPT_PATHS = "removed_receipt_paths"
         private const val KEY_UPDATE_CATEGORY_FOR_MERCHANT = "update_category_for_merchant"
+        private const val KEY_BULK_CATEGORY_NOT_BEFORE_ISO = "bulk_category_not_before_iso"
+        private const val KEY_BULK_CATEGORY_MERCHANT_NAME = "bulk_category_merchant_name"
+        private const val KEY_BULK_SYNC_MERCHANT_NAME = "bulk_sync_merchant_name"
+        private const val KEY_BULK_SYNC_TRANSACTION_TYPE = "bulk_sync_transaction_type"
         private const val KEY_SHOW_SPLIT_EDITOR = "show_split_editor"
         private const val KEY_HAS_ORIGINAL_SPLITS = "has_original_splits"
         private const val KEY_SPLITS_JSON = "splits_json"
 
         const val OUTPUT_ERROR = "save_error"
+        /** Number of other transactions bulk-updated (undo restores these rows). */
+        const val OUTPUT_BULK_CATEGORY_UNDO_COUNT = "output_bulk_category_undo_count"
 
         private val lenientJson = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 
@@ -57,6 +65,10 @@ class SaveTransactionWorker @AssistedInject constructor(
             removedReceiptIds: List<Long>,
             removedReceiptPaths: List<String>,
             updateCategoryForMerchant: Boolean,
+            bulkCategoryNotBeforeIso: String,
+            bulkCategoryMerchantName: String = "",
+            bulkSyncMerchantName: Boolean = false,
+            bulkSyncTransactionType: Boolean = false,
             showSplitEditor: Boolean,
             hasOriginalSplits: Boolean,
             splits: List<SplitPatch>,
@@ -68,6 +80,10 @@ class SaveTransactionWorker @AssistedInject constructor(
             KEY_REMOVED_RECEIPT_IDS to removedReceiptIds.toLongArray(),
             KEY_REMOVED_RECEIPT_PATHS to removedReceiptPaths.toTypedArray(),
             KEY_UPDATE_CATEGORY_FOR_MERCHANT to updateCategoryForMerchant,
+            KEY_BULK_CATEGORY_NOT_BEFORE_ISO to bulkCategoryNotBeforeIso,
+            KEY_BULK_CATEGORY_MERCHANT_NAME to bulkCategoryMerchantName,
+            KEY_BULK_SYNC_MERCHANT_NAME to bulkSyncMerchantName,
+            KEY_BULK_SYNC_TRANSACTION_TYPE to bulkSyncTransactionType,
             KEY_SHOW_SPLIT_EDITOR to showSplitEditor,
             KEY_HAS_ORIGINAL_SPLITS to hasOriginalSplits,
             KEY_SPLITS_JSON to lenientJson.encodeToString(splits),
@@ -93,6 +109,12 @@ class SaveTransactionWorker @AssistedInject constructor(
             val removedReceiptIds = inputData.getLongArray(KEY_REMOVED_RECEIPT_IDS) ?: LongArray(0)
             val removedReceiptPaths = inputData.getStringArray(KEY_REMOVED_RECEIPT_PATHS) ?: emptyArray()
             val updateCategoryForMerchant = inputData.getBoolean(KEY_UPDATE_CATEGORY_FOR_MERCHANT, false)
+            val bulkCategoryNotBeforeIso = inputData.getString(KEY_BULK_CATEGORY_NOT_BEFORE_ISO).orEmpty()
+            val bulkCategoryNotBefore: LocalDateTime? =
+                bulkCategoryNotBeforeIso.takeIf { it.isNotBlank() }?.let { LocalDateTime.parse(it) }
+            val bulkCategoryMerchantName = inputData.getString(KEY_BULK_CATEGORY_MERCHANT_NAME).orEmpty()
+            val bulkSyncMerchantName = inputData.getBoolean(KEY_BULK_SYNC_MERCHANT_NAME, false)
+            val bulkSyncTransactionType = inputData.getBoolean(KEY_BULK_SYNC_TRANSACTION_TYPE, false)
             val showSplitEditor = inputData.getBoolean(KEY_SHOW_SPLIT_EDITOR, false)
             val hasOriginalSplits = inputData.getBoolean(KEY_HAS_ORIGINAL_SPLITS, false)
             val splitsJson = inputData.getString(KEY_SPLITS_JSON) ?: "[]"
@@ -140,6 +162,11 @@ class SaveTransactionWorker @AssistedInject constructor(
 
             transactionRepository.updateTransaction(updated)
 
+            subscriptionRepository.syncRecurringWithSubscriptions(
+                before = existing,
+                after = updated,
+            )
+
             // Update account balance if account was changed
             val accountChanged = originalBank != updated.bankName || originalAccount != updated.accountNumber
             if (accountChanged && updated.bankName != null && updated.accountNumber != null) {
@@ -180,12 +207,54 @@ class SaveTransactionWorker @AssistedInject constructor(
                 transactionRepository.removeSplits(updated.id)
             }
 
-            // Bulk category update for merchant
-            if (updateCategoryForMerchant) {
-                transactionRepository.updateCategoryForMerchant(updated.merchantName, updated.category)
+            var bulkCategoryUndoCount = 0
+            val bulkMerchantKey = bulkCategoryMerchantName.trim().ifEmpty { updated.merchantName.trim() }
+
+            if (bulkSyncMerchantName && bulkMerchantKey.isNotEmpty() &&
+                !bulkMerchantKey.equals(updated.merchantName.trim(), ignoreCase = true)
+            ) {
+                transactionRepository.updateMerchantNameForMerchant(
+                    bulkMerchantKey,
+                    updated.merchantName,
+                )
             }
 
-            Result.success()
+            val merchantKeyForBulkFollowUps = if (bulkSyncMerchantName) {
+                updated.merchantName.trim()
+            } else {
+                bulkMerchantKey
+            }
+
+            if (updateCategoryForMerchant && merchantKeyForBulkFollowUps.isNotEmpty()) {
+                val snapshot = transactionRepository.captureBulkCategoryUndoSnapshot(
+                    merchantKeyForBulkFollowUps,
+                    updated.id,
+                    bulkCategoryNotBefore,
+                )
+                transactionRepository.updateCategoryForMerchant(
+                    merchantKeyForBulkFollowUps,
+                    updated.category,
+                    bulkCategoryNotBefore,
+                )
+                if (snapshot.isNotEmpty()) {
+                    transactionRepository.rememberBulkCategoryUndo(snapshot)
+                    bulkCategoryUndoCount = snapshot.size
+                }
+            }
+
+            if (bulkSyncTransactionType && merchantKeyForBulkFollowUps.isNotEmpty()) {
+                transactionRepository.bulkUpdateTypeAndTransferKindForMerchant(
+                    merchantName = merchantKeyForBulkFollowUps,
+                    type = updated.transactionType,
+                    transferKind = updated.transferKind,
+                    excludeId = updated.id,
+                    notBefore = bulkCategoryNotBefore,
+                )
+            }
+
+            Result.success(
+                workDataOf(OUTPUT_BULK_CATEGORY_UNDO_COUNT to bulkCategoryUndoCount),
+            )
         } catch (e: Exception) {
             if (runAttemptCount < 2) {
                 Result.retry()

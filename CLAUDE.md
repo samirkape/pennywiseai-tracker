@@ -7,6 +7,8 @@ PennyWise is a minimalist, AI-powered expense tracker for Android that automatic
 Please reference these documents when working on this project:
 - **Architecture**: `/docs/architecture.md` - MVVM + Clean Architecture patterns, layer responsibilities
 - **Design System**: `/docs/design.md` - Material 3 theming, colors, typography, components
+- **Navigation**: `/docs/navigation.md` - root vs main shell, back behavior, duplicate entry points
+- **Screen shells**: `/docs/scaffold-patterns.md` - hero vs standard scaffold patterns
 - **PRD**: `/prd.md` - Product requirements, features, timeline
 
 ## Key Technical Decisions
@@ -17,6 +19,7 @@ Please reference these documents when working on this project:
 5. **Database**: Room for local storage
 6. **AI/ML**: MediaPipe LLM (Qwen 2.5) for on-device processing
 7. **Background**: WorkManager for SMS scanning
+8. **AI chat (optional)**: `Constants.Features.AI_CHAT_ENABLED` gates the inner-shell chat route (`Routes.CHAT`). When `false`, the chat composable is not registered and there is no in-app navigation to it (LLM / chat UI code may remain for future enablement).
 
 ## Design Principles
 - **Material You**: Dynamic color from wallpaper (Android 12+)
@@ -41,6 +44,17 @@ Working on Phase 1: Core Foundation (Project setup, Material 3 theming, Room dat
 - Build: `./gradlew build`
 - Test: `./gradlew test`
 - Lint: `./gradlew lint`
+
+## Device Deployment (After UI/Code Changes)
+After making changes, always build and install the debug APK on the connected device:
+```
+./gradlew :app:assembleStandardDebug --quiet && \
+adb install -r app/build/outputs/apk/standard/debug/app-standard-arm64-v8a-debug.apk
+```
+- The connected device ID is `R5CW61GQRTB` (use `-s R5CW61GQRTB` if multiple devices are connected)
+- The debug app package is `com.pennywiseai.tracker.debug` (separate from the release build)
+- After install, relaunch with: `adb -s R5CW61GQRTB shell am force-stop com.pennywiseai.tracker.debug && adb -s R5CW61GQRTB shell am start -n com.pennywiseai.tracker.debug/com.pennywiseai.tracker.MainActivity`
+- You can take a screenshot to verify UI changes: `adb -s R5CW61GQRTB exec-out screencap -p > /tmp/screen.png`
 
 ## Versioning Strategy
 We follow Semantic Versioning (SemVer) - MAJOR.MINOR.PATCH:

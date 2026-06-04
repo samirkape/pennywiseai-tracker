@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.work.WorkInfo
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -13,6 +15,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -21,9 +25,9 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Help
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Savings
 import androidx.compose.material.icons.filled.Settings
@@ -31,10 +35,13 @@ import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -52,9 +59,7 @@ import kotlinx.coroutines.delay
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.pennywiseai.tracker.R
-import com.pennywiseai.tracker.data.database.entity.SubscriptionEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionType
-import com.pennywiseai.tracker.ui.components.BrandIcon
 import com.pennywiseai.tracker.ui.components.PennyWiseCard
 import com.pennywiseai.tracker.ui.components.cards.PennyWiseCardV2
 import com.pennywiseai.tracker.ui.components.PennyWiseEmptyState
@@ -62,7 +67,7 @@ import com.pennywiseai.tracker.ui.components.PayPeriodSalarySuggestionDialog
 import com.pennywiseai.tracker.ui.components.SmsParsingProgressDialog
 import com.pennywiseai.tracker.ui.components.cards.GroupCard
 import com.pennywiseai.tracker.ui.components.cards.HomeHeroPager
-import com.pennywiseai.tracker.ui.components.cards.HomeSummaryStrip
+import com.pennywiseai.tracker.ui.screens.payperiod.PayPeriodExplorerContent
 import com.pennywiseai.tracker.ui.components.cards.TransactionItem
 import com.pennywiseai.tracker.ui.components.cards.formatStatAmount
 import com.pennywiseai.tracker.ui.components.skeleton.TransactionItemSkeleton
@@ -85,6 +90,12 @@ import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.time.LocalDate
 
+/**
+ * Primary dashboard: hero balances and charts, date-scoped feed, and recent activity.
+ * Layout follows **Pattern A — Hero home** ([docs/scaffold-patterns.md](../../../../../docs/scaffold-patterns.md)):
+ * collapsing [CustomTitleTopAppBar], then scrollable content. Secondary actions also live in the quick-actions
+ * sheet (menu FAB) to avoid crowding the hero.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -120,6 +131,8 @@ fun HomeScreen(
     // State for full resync confirmation dialog and quick-actions sheet
     var showFullResyncDialog by remember { mutableStateOf(false) }
     var showActionsSheet by remember { mutableStateOf(false) }
+    var showHomeHelpDialog by remember { mutableStateOf(false) }
+    var showSpendTimelineSheet by remember { mutableStateOf(false) }
 
     // Profile filter dropdown state
     var showProfileFilterMenu by remember { mutableStateOf(false) }
@@ -215,6 +228,8 @@ fun HomeScreen(
         }
     }
 
+    val spendTimelineSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
     uiState.payPeriodSuggestion?.let { suggestion ->
         PayPeriodSalarySuggestionDialog(
             suggestion = suggestion,
@@ -231,7 +246,7 @@ fun HomeScreen(
             CustomTitleTopAppBar(
                 scrollBehaviorSmall = scrollBehaviorSmall,
                 scrollBehaviorLarge = scrollBehaviorLarge,
-                title = "Spendly",
+                title = stringResource(R.string.brand_display_name),
                 isHomeScreen = true,
                 userName = uiState.userName,
                 profileImageUri = uiState.profileImageUri,
@@ -275,6 +290,32 @@ fun HomeScreen(
                                 selectedProfileId = uiState.selectedProfileId,
                                 onProfileSelected = { viewModel.updateSelectedProfile(it) },
                                 onDismiss = { showProfileFilterMenu = false }
+                            )
+                        }
+                        // Tips (categories and tags)
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    color = if (blurEffects) containerColor.copy(0.5f) else containerColor,
+                                    shape = CircleShape,
+                                )
+                                .clickable(
+                                    onClick = {
+                                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                        showHomeHelpDialog = true
+                                    },
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Help,
+                                contentDescription = stringResource(R.string.home_help),
+                                tint = MaterialTheme.colorScheme.inverseSurface,
+                                modifier = Modifier.size(Dimensions.Icon.medium),
                             )
                         }
                         // Search
@@ -340,7 +381,8 @@ fun HomeScreen(
                 .overScrollVertical(),
             flingBehavior = rememberOverscrollFlingBehavior { lazyListState },
             contentPadding = PaddingValues(
-                top = paddingValues.calculateTopPadding() + 8.dp,
+                // Must match full top inset: pulling this up clips the in-list brand title under status bar / clip.
+                top = paddingValues.calculateTopPadding(),
                 bottom = Dimensions.Component.bottomBarHeight + 96.dp
             ),
             verticalArrangement = Arrangement.spacedBy(Spacing.sm)
@@ -358,13 +400,37 @@ fun HomeScreen(
                         animationSpec = tween(300)
                     )
                 ) {
-                    if (!uiState.isBalanceReady) {
-                        com.pennywiseai.tracker.ui.components.skeleton.BalanceCardSkeleton(
-                            modifier = Modifier.padding(horizontal = Dimensions.Padding.content)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Dimensions.Padding.content),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.brand_display_name),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onBackground,
                         )
-                    } else {
-                        HomeHeroPager(
-                            modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
+                        if (!uiState.isBalanceReady) {
+                            com.pennywiseai.tracker.ui.components.skeleton.BalanceCardSkeleton(
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            val loan = uiState.loanSummary
+                            val loanSubtitle = loan?.let { ls ->
+                                when {
+                                    ls.totalLentRemaining > java.math.BigDecimal.ZERO &&
+                                        ls.totalBorrowedRemaining > java.math.BigDecimal.ZERO ->
+                                        "${ls.activeLoans.size} active"
+                                    ls.totalLentRemaining > java.math.BigDecimal.ZERO ->
+                                        CurrencyFormatter.formatCurrency(ls.totalLentRemaining, uiState.selectedCurrency)
+                                    else ->
+                                        CurrencyFormatter.formatCurrency(ls.totalBorrowedRemaining, uiState.selectedCurrency)
+                                }
+                            }
+                            HomeHeroPager(
+                                modifier = Modifier.fillMaxWidth(),
                             blurEffects = blurEffects,
                             hazeState = hazeStateHero,
                             monthlyChange = uiState.monthlyChange,
@@ -390,59 +456,47 @@ fun HomeScreen(
                             onNavigateToBudgets = onNavigateToBudgets,
                             onShowBreakdown = { viewModel.showBreakdownDialog() },
                             onOpenPayPeriodSettings = onNavigateToPayPeriodSettings,
-                        )
+                            onSpendSoFarClick = if (
+                                uiState.payPeriodStartEpochDay >= 0L &&
+                                uiState.payPeriodEndEpochDay >= 0L
+                            ) {
+                                { showSpendTimelineSheet = true }
+                            } else {
+                                null
+                            },
+                            moreStatsIncomeText = formatStatAmount(uiState.currentMonthIncome, uiState.selectedCurrency),
+                            moreStatsIncomeSubLabel = uiState.incomeTodayLabel,
+                            moreStatsTopCategoryName = uiState.topCategoryName,
+                            moreStatsTopCategorySubLabel = uiState.topCategorySubLabel,
+                            moreStatsPaceText = uiState.dailyAverageLabel,
+                            moreStatsPaceSubLabel = uiState.paceLabel,
+                            moreStatsLoanLabel = if (loan != null) "Lent/Borrowed" else null,
+                            moreStatsLoanText = loanSubtitle,
+                            onMoreStatsIncomeClick = { onNavigateToTransactions(transactionsPeriod) },
+                            onMoreStatsTopCategoryClick = { onNavigateToTransactions(transactionsPeriod) },
+                            onMoreStatsPaceClick = onNavigateToAnalytics,
+                            onMoreStatsLoanClick = if (loan != null) onNavigateToLoans else null,
+                            moreStatsSubscriptionsLabel = stringResource(R.string.home_more_stats_subscriptions),
+                            moreStatsSubscriptionsValue = if (uiState.activeSubscriptionCount > 0) {
+                                stringResource(
+                                    R.string.home_more_stats_subscriptions_active,
+                                    uiState.activeSubscriptionCount,
+                                )
+                            } else {
+                                stringResource(R.string.home_more_stats_subscriptions_hint)
+                            },
+                            onMoreStatsSubscriptionsClick = onNavigateToSubscriptions,
+                            )
+                        }
                     }
                 }
             }
 
-            // 2. Summary strip (20ms)
+            // 2. Feed header — day zone (20ms)
             item {
                 val visible = remember { mutableStateOf(hasAnimated) }
                 LaunchedEffect(Unit) {
                     if (!hasAnimated) { delay(20); visible.value = true }
-                }
-                AnimatedVisibility(
-                    visible = visible.value,
-                    enter = fadeIn(tween(300)) + slideInVertically(
-                        initialOffsetY = { slideOffsetPx },
-                        animationSpec = tween(300)
-                    )
-                ) {
-                    val loan = uiState.loanSummary
-                    val loanSubtitle = loan?.let { ls ->
-                        when {
-                            ls.totalLentRemaining > java.math.BigDecimal.ZERO &&
-                                ls.totalBorrowedRemaining > java.math.BigDecimal.ZERO ->
-                                "${ls.activeLoans.size} active"
-                            ls.totalLentRemaining > java.math.BigDecimal.ZERO ->
-                                CurrencyFormatter.formatCurrency(ls.totalLentRemaining, uiState.selectedCurrency)
-                            else ->
-                                CurrencyFormatter.formatCurrency(ls.totalBorrowedRemaining, uiState.selectedCurrency)
-                        }
-                    }
-                    HomeSummaryStrip(
-                        modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
-                        incomeText = formatStatAmount(uiState.currentMonthIncome, uiState.selectedCurrency),
-                        incomeSubLabel = uiState.incomeTodayLabel,
-                        onIncomeClick = { onNavigateToTransactions(transactionsPeriod) },
-                        topCategoryName = uiState.topCategoryName,
-                        topCategorySubLabel = uiState.topCategorySubLabel,
-                        onTopCategoryClick = { onNavigateToTransactions(transactionsPeriod) },
-                        paceText = uiState.dailyAverageLabel,
-                        paceSubLabel = uiState.paceLabel,
-                        onPaceClick = onNavigateToAnalytics,
-                        loanLabel = if (loan != null) "Lent/Borrowed" else null,
-                        loanText = loanSubtitle,
-                        onLoanClick = if (loan != null) onNavigateToLoans else null,
-                    )
-                }
-            }
-
-            // 3. Feed header — date scrubber (40ms)
-            item {
-                val visible = remember { mutableStateOf(hasAnimated) }
-                LaunchedEffect(Unit) {
-                    if (!hasAnimated) { delay(40); visible.value = true }
                 }
                 AnimatedVisibility(
                     visible = visible.value,
@@ -457,7 +511,8 @@ fun HomeScreen(
                         onNavigateToTransactions = onNavigateToTransactions,
                         onNavigateDateBy = viewModel::navigateDateBy,
                         onNavigateToDate = viewModel::navigateToDate,
-                        getDailyExpenses = viewModel::getDailyExpensesForMonth,
+                        getDailyExpensesForMonth = viewModel::getDailyExpensesForMonth,
+                        getDailyExpensesBetween = viewModel::getDailyExpensesBetween,
                         modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
                     )
                 }
@@ -607,7 +662,7 @@ fun HomeScreen(
                 elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
             ) {
                 Icon(
-                    imageVector = Icons.Default.Add,
+                    imageVector = Icons.Default.Menu,
                     contentDescription = stringResource(R.string.home_actions_fab),
                 )
             }
@@ -624,6 +679,55 @@ fun HomeScreen(
             onAnalytics = onNavigateToAnalytics,
             onFullResync = { showFullResyncDialog = true },
         )
+
+        if (showHomeHelpDialog) {
+            AlertDialog(
+                onDismissRequest = { showHomeHelpDialog = false },
+                title = {
+                    Text(
+                        text = stringResource(R.string.home_help_title),
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                },
+                text = {
+                    val scrollState = rememberScrollState()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(scrollState),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.md),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.home_help_categories_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = stringResource(R.string.home_help_categories_body),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = stringResource(R.string.home_help_tags_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = stringResource(R.string.home_help_tags_body),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showHomeHelpDialog = false }) {
+                        Text(stringResource(R.string.home_help_got_it))
+                    }
+                },
+            )
+        }
 
         // Full Resync Confirmation Dialog
         if (showFullResyncDialog) {
@@ -685,6 +789,40 @@ fun HomeScreen(
                 currency = uiState.selectedCurrency,
                 onDismiss = { viewModel.hideBreakdownDialog() }
             )
+        }
+
+        if (showSpendTimelineSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showSpendTimelineSheet = false },
+                sheetState = spendTimelineSheetState,
+                dragHandle = { BottomSheetDefaults.DragHandle() },
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = Spacing.xl),
+                ) {
+                    Text(
+                        text = stringResource(R.string.pay_period_explorer_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(
+                            horizontal = Dimensions.Padding.content,
+                            vertical = Spacing.sm,
+                        ),
+                    )
+                    PayPeriodExplorerContent(
+                        periodStartEpochDay = uiState.payPeriodStartEpochDay,
+                        periodEndEpochDay = uiState.payPeriodEndEpochDay,
+                        modifier = Modifier.fillMaxWidth(),
+                        showViewTransactionsButton = true,
+                        onViewTransactions = {
+                            showSpendTimelineSheet = false
+                            onNavigateToTransactions(transactionsPeriod)
+                        },
+                    )
+                }
+            }
         }
 
     }
@@ -857,141 +995,6 @@ private fun BreakdownRow(
     }
 }
 
-@Composable
-private fun UpcomingSubscriptionsCard(
-    subscriptions: List<SubscriptionEntity>,
-    totalAmount: BigDecimal,
-    currency: String = "INR",
-    onClick: () -> Unit = {},
-    blurEffects: Boolean = false,
-    hazeState: HazeState? = null
-) {
-    val containerColor = if (blurEffects)
-        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-    else MaterialTheme.colorScheme.secondaryContainer
-
-    PennyWiseCardV2(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(
-                if (blurEffects && hazeState != null) Modifier
-                    .clip(RoundedCornerShape(Dimensions.CornerRadius.large))
-                    .hazeEffect(
-                        state = hazeState,
-                        block = fun HazeEffectScope.() {
-                            style = HazeDefaults.style(
-                                backgroundColor = Color.Transparent,
-                                tint = HazeDefaults.tint(containerColor),
-                                blurRadius = 20.dp,
-                                noiseFactor = -1f,
-                            )
-                            blurredEdgeTreatment = BlurredEdgeTreatment.Unbounded
-                        }
-                    )
-                else Modifier
-            ),
-        onClick = onClick,
-        colors = CardDefaults.cardColors(
-            containerColor = containerColor
-        ),
-        contentPadding = Dimensions.Padding.content
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                if (subscriptions.isNotEmpty()) {
-                    val maxIcons = 4
-                    val visibleSubs = subscriptions.take(maxIcons)
-                    val extraCount = subscriptions.size - maxIcons
-                    Box {
-                        visibleSubs.forEachIndexed { index, sub ->
-                            BrandIcon(
-                                merchantName = sub.merchantName,
-                                size = 32.dp,
-                                modifier = Modifier
-                                    .offset(x = (index * 20).dp)
-                                    .zIndex((maxIcons - index).toFloat())
-                                    .border(
-                                        width = 2.dp,
-                                        color = MaterialTheme.colorScheme.surface,
-                                        shape = CircleShape
-                                    )
-                                    .clip(CircleShape)
-                            )
-                        }
-                        if (extraCount > 0) {
-                            Box(
-                                modifier = Modifier
-                                    .offset(x = (visibleSubs.size * 20).dp)
-                                    .zIndex(0f)
-                                    .size(32.dp)
-                                    .border(
-                                        width = 2.dp,
-                                        color = MaterialTheme.colorScheme.surface,
-                                        shape = CircleShape
-                                    )
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "+$extraCount",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 10.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-                        // Spacer to reserve the width of the stacked icons
-                        Spacer(
-                            modifier = Modifier
-                                .width(
-                                    ((visibleSubs.size - 1) * 20 + 32 + if (extraCount > 0) 20 else 0).dp
-                                )
-                                .height(32.dp)
-                        )
-                    }
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.CalendarToday,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.size(Dimensions.Icon.medium)
-                    )
-                }
-                Column {
-                    Text(
-                        text = "${subscriptions.size} active subscriptions",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                    Text(
-                        text = "Monthly total: ${CurrencyFormatter.formatCurrency(totalAmount, currency)}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = Dimensions.Alpha.subtitle)
-                    )
-                }
-            }
-            Text(
-                text = "View",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Medium
-            )
-        }
-    }
-}
-
 private enum class ListItemPosition { Top, Middle, Bottom, Single }
 
 @Composable
@@ -1036,6 +1039,174 @@ private fun MenuListItem(
     }
 }
 
+// ── Change this to switch between the two strip styles ───────────────────────
+private enum class DateStripStyle { DotTrack, NumberStrip }
+private val ACTIVE_DATE_STRIP = DateStripStyle.DotTrack
+
+// ── Variant A: dot-on-a-line strip ───────────────────────────────────────────
+@Composable
+private fun DayDotTrack(
+    days: List<LocalDate>,
+    selectedDate: LocalDate,
+    dailyTotals: Map<LocalDate, BigDecimal>,
+    onSelectDate: (LocalDate) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val today = LocalDate.now()
+    Box(modifier = modifier.fillMaxWidth()) {
+        // Connecting line behind the dots
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp)
+                .height(1.dp)
+                .background(
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                    RoundedCornerShape(1.dp),
+                ),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            days.forEach { date ->
+                val isSelected = date == selectedDate
+                val hasActivity = (dailyTotals[date] ?: BigDecimal.ZERO) > BigDecimal.ZERO
+                val isToday = date == today
+                val dotSize by animateDpAsState(
+                    targetValue = if (isSelected) 10.dp else if (hasActivity) 6.dp else 4.dp,
+                    animationSpec = tween(150),
+                    label = "dotSize",
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() },
+                        ) { onSelectDate(date) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = date.dayOfWeek.getDisplayName(
+                            java.time.format.TextStyle.NARROW,
+                            java.util.Locale.getDefault(),
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 9.sp,
+                        color = if (isSelected) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(dotSize)
+                            .background(
+                                color = when {
+                                    isSelected -> MaterialTheme.colorScheme.primary
+                                    hasActivity -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                                    else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                                },
+                                shape = CircleShape,
+                            ),
+                    )
+                    Text(
+                        text = date.dayOfMonth.toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = if (isSelected) 11.sp else 10.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isSelected) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ── Variant D: number strip with accent underline ────────────────────────────
+@Composable
+private fun DayNumberStrip(
+    days: List<LocalDate>,
+    selectedDate: LocalDate,
+    dailyTotals: Map<LocalDate, BigDecimal>,
+    onSelectDate: (LocalDate) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val today = LocalDate.now()
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+    val underlineColor = MaterialTheme.colorScheme.primary
+        days.forEach { date ->
+            val isSelected = date == selectedDate
+            val hasActivity = (dailyTotals[date] ?: BigDecimal.ZERO) > BigDecimal.ZERO
+            val underlineAlpha by animateFloatAsState(
+                targetValue = if (isSelected) 1f else 0f,
+                animationSpec = tween(150),
+                label = "underline",
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() },
+                    ) { onSelectDate(date) }
+                    .padding(bottom = 3.dp)
+                    .drawBehind {
+                        // Accent underline — color captured outside drawBehind scope
+                        val lineY = size.height
+                        drawLine(
+                            color = underlineColor.copy(alpha = underlineAlpha),
+                            start = androidx.compose.ui.geometry.Offset(size.width * 0.2f, lineY),
+                            end = androidx.compose.ui.geometry.Offset(size.width * 0.8f, lineY),
+                            strokeWidth = 2.dp.toPx(),
+                            cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                        )
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = date.dayOfWeek.getDisplayName(
+                        java.time.format.TextStyle.NARROW,
+                        java.util.Locale.getDefault(),
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 9.sp,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (isSelected) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                )
+                Text(
+                    text = date.dayOfMonth.toString(),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontSize = if (isSelected) 13.sp else 11.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isSelected) MaterialTheme.colorScheme.onSurface
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                )
+                // Spend activity dot — tiny, only on days with transactions
+                Box(
+                    modifier = Modifier
+                        .size(3.dp)
+                        .background(
+                            color = if (hasActivity)
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isSelected) 0.7f else 0.35f)
+                            else
+                                androidx.compose.ui.graphics.Color.Transparent,
+                            shape = CircleShape,
+                        ),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun HomeFeedDateNavigator(
     uiState: HomeUiState,
@@ -1043,148 +1214,148 @@ private fun HomeFeedDateNavigator(
     onNavigateToTransactions: (String) -> Unit,
     onNavigateDateBy: (Int) -> Unit,
     onNavigateToDate: (LocalDate) -> Unit,
-    getDailyExpenses: (LocalDate) -> kotlinx.coroutines.flow.Flow<Map<LocalDate, BigDecimal>>,
+    getDailyExpensesForMonth: (LocalDate) -> kotlinx.coroutines.flow.Flow<Map<LocalDate, BigDecimal>>,
+    getDailyExpensesBetween: (LocalDate, LocalDate) -> kotlinx.coroutines.flow.Flow<Map<LocalDate, BigDecimal>>,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier) {
-        val today = LocalDate.now()
-        val yesterday = today.minusDays(1)
-        val selectedDate = uiState.selectedDate
-        var showDatePicker by remember { mutableStateOf(false) }
-        val dateLabel = when (selectedDate) {
-            today -> "Today"
-            yesterday -> "Yesterday"
-            else -> selectedDate.format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy"))
-        }
-        val netSpend = remember(uiState.recentItems, uiState.isUnifiedMode) {
-            uiState.recentItems.fold(BigDecimal.ZERO) { acc, item ->
-                when (item) {
-                    is HomeRecentItem.SingleTransaction -> {
-                        val tx = item.transaction
-                        if (tx.isExcludedFromTracking) return@fold acc
-                        val amount = if (uiState.isUnifiedMode) {
-                            item.convertedAmount ?: tx.amount
-                        } else {
-                            tx.amount
-                        }
-                        when (tx.transactionType) {
-                            TransactionType.EXPENSE,
-                            TransactionType.CREDIT -> acc + amount
-                            TransactionType.INCOME -> acc - amount
-                            else -> acc
-                        }
-                    }
-                    is HomeRecentItem.GroupItem -> {
-                        item.transactions.fold(acc) { groupAcc, tx ->
-                            if (tx.isExcludedFromTracking) return@fold groupAcc
-                            val amount = if (uiState.isUnifiedMode) {
-                                item.convertedAmounts[tx.id] ?: tx.amount
-                            } else {
-                                tx.amount
-                            }
-                            when (tx.transactionType) {
-                                TransactionType.EXPENSE,
-                                TransactionType.CREDIT -> groupAcc + amount
-                                TransactionType.INCOME -> groupAcc - amount
-                                else -> groupAcc
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        val isDark = isSystemInDarkTheme()
-        val spendColor = if (isDark) expense_dark else expense_light
-        val incomeColor = if (isDark) income_dark else income_light
+    val today = LocalDate.now()
+    val selectedDate = uiState.selectedDate
+    var showDatePicker by remember { mutableStateOf(false) }
+    val isDark = isSystemInDarkTheme()
+    val spendColor = if (isDark) expense_dark else expense_light
+    val incomeColor = if (isDark) income_dark else income_light
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = Spacing.xs),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = { onNavigateDateBy(-1) },
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                        contentDescription = "Previous day",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Surface(
-                    onClick = { showDatePicker = true },
-                    shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text(
-                            text = dateLabel,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        if (netSpend != BigDecimal.ZERO) {
-                            val isNetIncome = netSpend < BigDecimal.ZERO
-                            val displayAmount = netSpend.abs()
-                            Text(
-                                text = "${if (isNetIncome) "+" else "-"} ${
-                                    CurrencyFormatter.formatCurrency(
-                                        displayAmount,
-                                        uiState.selectedCurrency,
-                                    )
-                                }",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isNetIncome) incomeColor else spendColor,
-                            )
-                        }
-                    }
-                }
-                IconButton(
-                    onClick = { onNavigateDateBy(1) },
-                    modifier = Modifier.size(32.dp),
-                    enabled = selectedDate < today,
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "Next day",
-                        tint = if (selectedDate < today) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                        },
-                    )
-                }
-            }
-            TextButton(onClick = { onNavigateToTransactions(transactionsPeriod) }) {
-                Text("View all")
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = null,
-                    modifier = Modifier.size(Dimensions.Icon.small),
-                )
+    val netSpend = remember(uiState.recentItems, uiState.isUnifiedMode) {
+        var net = BigDecimal.ZERO
+        fun apply(tx: com.pennywiseai.tracker.data.database.entity.TransactionEntity, amount: BigDecimal) {
+            if (tx.isExcludedFromTracking) return
+            when (tx.transactionType) {
+                TransactionType.EXPENSE,
+                TransactionType.CREDIT -> net += amount
+                TransactionType.INCOME -> net -= amount
+                else -> Unit
             }
         }
+        uiState.recentItems.forEach { item ->
+            when (item) {
+                is HomeRecentItem.SingleTransaction -> {
+                    val tx = item.transaction
+                    apply(tx, if (uiState.isUnifiedMode) item.convertedAmount ?: tx.amount else tx.amount)
+                }
+                is HomeRecentItem.GroupItem -> {
+                    item.transactions.forEach { tx ->
+                        apply(tx, if (uiState.isUnifiedMode) item.convertedAmounts[tx.id] ?: tx.amount else tx.amount)
+                    }
+                }
+            }
+        }
+        net
+    }
 
-        if (showDatePicker) {
-            CalendarBottomSheet(
+    val isNetIncome = netSpend < BigDecimal.ZERO
+    val hasSpend = netSpend != BigDecimal.ZERO
+
+    val stripStart = today.minusDays(6)
+    val dailyTotals by produceState(
+        initialValue = emptyMap<LocalDate, BigDecimal>(),
+        key1 = stripStart,
+        key2 = today,
+    ) {
+        getDailyExpensesBetween(stripStart, today).collect { value = it }
+    }
+
+    // Must track [today]: a bare remember { } freezes the 7-day window from first composition
+    // (strip would never roll forward after midnight or when returning to Home days later).
+    val stripDays = remember(today) { (6 downTo 0).map { today.minusDays(it.toLong()) } }
+
+    val dayLabel = when (selectedDate) {
+        today -> "Today"
+        today.minusDays(1) -> "Yesterday"
+        else -> selectedDate.format(java.time.format.DateTimeFormatter.ofPattern("EEE, MMM d"))
+    }.uppercase()
+
+    // Column wrapper is required — this composable is called inside AnimatedVisibility
+    // which uses Box internally; without it siblings would overlap instead of stack.
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+    ) {
+        // ── Date strip (A: dot track  |  D: number strip) ────────────────────
+        when (ACTIVE_DATE_STRIP) {
+            DateStripStyle.DotTrack -> DayDotTrack(
+                days = stripDays,
                 selectedDate = selectedDate,
-                today = today,
-                selectedCurrency = uiState.selectedCurrency,
-                getDailyExpenses = getDailyExpenses,
-                onDismiss = { showDatePicker = false },
-                onDateSelected = { picked ->
-                    onNavigateToDate(picked)
-                    showDatePicker = false
-                },
+                dailyTotals = dailyTotals,
+                onSelectDate = onNavigateToDate,
+            )
+            DateStripStyle.NumberStrip -> DayNumberStrip(
+                days = stripDays,
+                selectedDate = selectedDate,
+                dailyTotals = dailyTotals,
+                onSelectDate = onNavigateToDate,
             )
         }
+
+        // ── Copilot-style section header ──────────────────────────────────────
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { showDatePicker = true }
+                        .padding(top = 2.dp, bottom = 2.dp, end = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = dayLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.6.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        contentDescription = "Change day",
+                        modifier = Modifier
+                            .size(14.dp)
+                            .graphicsLayer { rotationZ = -90f },
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    )
+                }
+                if (hasSpend) {
+                    Text(
+                        text = "${if (isNetIncome) "+" else ""}${
+                            CurrencyFormatter.formatCurrency(netSpend.abs(), uiState.selectedCurrency)
+                        }",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isNetIncome) incomeColor else spendColor,
+                    )
+                }
+            }
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+            )
+        }
+    }
+
+    if (showDatePicker) {
+        CalendarBottomSheet(
+            selectedDate = selectedDate,
+            today = today,
+            selectedCurrency = uiState.selectedCurrency,
+            getDailyExpenses = getDailyExpensesForMonth,
+            onDismiss = { showDatePicker = false },
+            onDateSelected = { picked ->
+                onNavigateToDate(picked)
+                showDatePicker = false
+            },
+        )
     }
 }
 

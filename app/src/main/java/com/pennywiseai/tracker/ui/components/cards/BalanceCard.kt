@@ -1,8 +1,12 @@
 package com.pennywiseai.tracker.ui.components.cards
 
 import android.view.HapticFeedbackConstants
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -36,6 +40,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -64,7 +72,8 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 
 /**
- * Hero spend: period context, amount, trend sparkline, and remaining headroom.
+ * Hero spend: period context, amount, trend sparkline, remaining headroom,
+ * and a collapsible "More stats" fold for secondary period metrics.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,10 +94,30 @@ fun HeroSpendCard(
     onToggleSpendingMode: () -> Unit,
     onCurrencySelect: (String) -> Unit,
     onNavigateToTransactions: () -> Unit,
+    /** When set, a short tap on the “Spend so far” row opens this (e.g. timeline sheet) instead of Transactions. */
+    onSpendSoFarClick: (() -> Unit)? = null,
     onNavigateToBudgets: () -> Unit,
     onShowBreakdown: () -> Unit,
     onOpenPayPeriodSettings: (() -> Unit)? = null,
     onPeriodChipClick: (() -> Unit)? = null,
+    currentMonthInvestment: BigDecimal = BigDecimal.ZERO,
+    onNavigateToInvestmentTransactions: (() -> Unit)? = null,
+    // More-stats fold data — all optional; fold hidden when all null/empty
+    moreStatsIncomeText: String? = null,
+    moreStatsIncomeSubLabel: String? = null,
+    moreStatsTopCategoryName: String? = null,
+    moreStatsTopCategorySubLabel: String? = null,
+    moreStatsPaceText: String? = null,
+    moreStatsPaceSubLabel: String? = null,
+    moreStatsLoanLabel: String? = null,
+    moreStatsLoanText: String? = null,
+    moreStatsSubscriptionsLabel: String? = null,
+    moreStatsSubscriptionsValue: String? = null,
+    onMoreStatsIncomeClick: (() -> Unit)? = null,
+    onMoreStatsTopCategoryClick: (() -> Unit)? = null,
+    onMoreStatsPaceClick: (() -> Unit)? = null,
+    onMoreStatsLoanClick: (() -> Unit)? = null,
+    onMoreStatsSubscriptionsClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     blurEffects: Boolean = false,
     hazeState: HazeState = remember { HazeState() },
@@ -98,6 +127,14 @@ fun HeroSpendCard(
     var showOptionsSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val useExternalPeriodSheet = onPeriodChipClick != null
+    var moreStatsExpanded by remember { mutableStateOf(false) }
+    val hasSubscriptionsMoreStat = onMoreStatsSubscriptionsClick != null &&
+        !moreStatsSubscriptionsLabel.isNullOrEmpty()
+    val hasMoreStats = !moreStatsIncomeText.isNullOrEmpty() ||
+        !moreStatsTopCategoryName.isNullOrEmpty() ||
+        !moreStatsPaceText.isNullOrEmpty() ||
+        !moreStatsLoanLabel.isNullOrEmpty() ||
+        hasSubscriptionsMoreStat
 
     val spendingIncreased = monthlyChange >= BigDecimal.ZERO
     val deltaColor = if (spendingIncreased) {
@@ -116,28 +153,33 @@ fun HeroSpendCard(
     }
 
     val incomeForProgress = currentMonthIncome.coerceAtLeast(BigDecimal.ZERO)
-    val spendFraction = if (incomeForProgress > BigDecimal.ZERO) {
-        currentMonthExpenses
-            .divide(incomeForProgress, 4, RoundingMode.HALF_UP)
-            .toFloat()
-            .coerceIn(0f, 1f)
-    } else {
-        0f
-    }
-    val percentOfIncome = if (incomeForProgress > BigDecimal.ZERO) {
-        currentMonthExpenses
-            .multiply(BigDecimal(100))
-            .divide(incomeForProgress, 0, RoundingMode.HALF_UP)
-            .toInt()
-    } else {
-        0
-    }
-    val remainingFormatted = CurrencyFormatter.formatCurrency(
-        currentMonthTotal.coerceAtLeast(BigDecimal.ZERO),
-        currency,
-    )
+
+    fun pct(amount: BigDecimal): Int =
+        if (incomeForProgress > BigDecimal.ZERO)
+            amount.multiply(BigDecimal(100))
+                .divide(incomeForProgress, 0, RoundingMode.HALF_UP)
+                .toInt()
+        else 0
+
+    fun fraction(amount: BigDecimal): Float =
+        if (incomeForProgress > BigDecimal.ZERO)
+            amount.divide(incomeForProgress, 4, RoundingMode.HALF_UP)
+                .toFloat().coerceIn(0f, 1f)
+        else 0f
+
+    val spendFraction = fraction(currentMonthExpenses)
+    val investmentFraction = fraction(currentMonthInvestment)
+        .coerceIn(0f, (1f - spendFraction).coerceAtLeast(0f))
+
+    val spentPercent = pct(currentMonthExpenses)
+    val investedPercent = pct(currentMonthInvestment)
+
+    // "Left" = income minus both expenses AND investments — true available cash
+    val trueRemaining = (currentMonthTotal - currentMonthInvestment).coerceAtLeast(BigDecimal.ZERO)
+    val remainingFormatted = CurrencyFormatter.formatCurrency(trueRemaining, currency)
 
     PennyWiseCardV2(
+        contentPadding = Spacing.sm,
         modifier = modifier
             .fillMaxWidth()
             .then(
@@ -180,7 +222,7 @@ fun HeroSpendCard(
                     onClick = {
                         view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                         if (useExternalPeriodSheet) {
-                            onPeriodChipClick?.invoke()
+                            onPeriodChipClick!!.invoke()
                         } else {
                             showOptionsSheet = true
                         }
@@ -214,7 +256,11 @@ fun HeroSpendCard(
                         role = Role.Button,
                         onClick = {
                             view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                            onNavigateToTransactions()
+                            if (onSpendSoFarClick != null) {
+                                onSpendSoFarClick()
+                            } else {
+                                onNavigateToTransactions()
+                            }
                         },
                         onLongClick = {
                             view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
@@ -259,6 +305,60 @@ fun HeroSpendCard(
                 }
             }
 
+            if (currentMonthInvestment > BigDecimal.ZERO) {
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                val investmentColor = if (isDark) income_dark else income_light
+                val investedFormatted = CurrencyFormatter.formatCurrency(currentMonthInvestment, currency)
+                Surface(
+                    onClick = {
+                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        onNavigateToInvestmentTransactions?.invoke()
+                    },
+                    shape = RoundedCornerShape(Dimensions.CornerRadius.small),
+                    color = investmentColor.copy(alpha = 0.1f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            androidx.compose.foundation.Canvas(modifier = Modifier.size(6.dp)) {
+                                drawCircle(color = investmentColor)
+                            }
+                            Text(
+                                text = stringResource(R.string.home_also_invested),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = investmentColor,
+                            )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                text = investedFormatted,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = investmentColor,
+                            )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = investmentColor,
+                            )
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(Spacing.sm))
 
             Surface(
@@ -274,7 +374,8 @@ fun HeroSpendCard(
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs),
                 ) {
                     SpendProgressBar(
-                        progress = spendFraction,
+                        expenseFraction = spendFraction,
+                        investmentFraction = investmentFraction,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Row(
@@ -282,11 +383,31 @@ fun HeroSpendCard(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = stringResource(R.string.home_percent_of_income, percentOfIncome),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        // Left: "X% spent · Y% invested"  (or just "X% spent" when no investments)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = "$spentPercent% spent",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (investedPercent > 0) {
+                                Text(
+                                    text = "·",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                )
+                                val investColor = if (isDark) income_dark else income_light
+                                Text(
+                                    text = "$investedPercent% invested",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = investColor,
+                                )
+                            }
+                        }
+                        // Right: "₹X left →"
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -304,6 +425,145 @@ fun HeroSpendCard(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    }
+                }
+            }
+
+            if (hasMoreStats) {
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                Surface(
+                    onClick = {
+                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        moreStatsExpanded = !moreStatsExpanded
+                    },
+                    color = Color.Transparent,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.home_more_stats),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        val chevronRotation by animateFloatAsState(
+                            targetValue = if (moreStatsExpanded) 270f else 90f,
+                            animationSpec = tween(200),
+                            label = "chevron",
+                        )
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(16.dp)
+                                .graphicsLayer { rotationZ = chevronRotation },
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                AnimatedVisibility(visible = moreStatsExpanded) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                        ) {
+                            if (!moreStatsIncomeText.isNullOrEmpty()) {
+                                HeroMoreStatCell(
+                                    label = stringResource(R.string.home_summary_income),
+                                    value = moreStatsIncomeText,
+                                    subLabel = moreStatsIncomeSubLabel,
+                                    onClick = onMoreStatsIncomeClick,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                            if (!moreStatsTopCategoryName.isNullOrEmpty()) {
+                                HeroMoreStatCell(
+                                    label = stringResource(R.string.home_summary_top_spend),
+                                    value = moreStatsTopCategoryName,
+                                    subLabel = moreStatsTopCategorySubLabel,
+                                    onClick = onMoreStatsTopCategoryClick,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                            if (!moreStatsPaceText.isNullOrEmpty()) {
+                                HeroMoreStatCell(
+                                    label = stringResource(R.string.home_summary_pace),
+                                    value = moreStatsPaceText,
+                                    subLabel = moreStatsPaceSubLabel,
+                                    onClick = onMoreStatsPaceClick,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                        if (!moreStatsLoanLabel.isNullOrEmpty() && !moreStatsLoanText.isNullOrEmpty()) {
+                            Surface(
+                                onClick = { onMoreStatsLoanClick?.invoke() },
+                                shape = RoundedCornerShape(Dimensions.CornerRadius.small),
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = moreStatsLoanLabel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Text(
+                                        text = moreStatsLoanText,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                }
+                            }
+                        }
+                        if (!moreStatsSubscriptionsLabel.isNullOrEmpty() && onMoreStatsSubscriptionsClick != null) {
+                            Surface(
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                    onMoreStatsSubscriptionsClick.invoke()
+                                },
+                                shape = RoundedCornerShape(Dimensions.CornerRadius.small),
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = moreStatsSubscriptionsLabel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Text(
+                                        text = moreStatsSubscriptionsValue.orEmpty(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(Spacing.xs))
                     }
                 }
             }
@@ -467,16 +727,46 @@ private fun HeroSparkline(
 
 @Composable
 internal fun SpendProgressBar(
-    progress: Float,
+    expenseFraction: Float,
+    investmentFraction: Float = 0f,
     modifier: Modifier = Modifier,
 ) {
-    LinearProgressIndicator(
-        progress = { progress },
-        modifier = modifier.height(6.dp),
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        strokeCap = StrokeCap.Round,
-    )
+    val isDark = isSystemInDarkTheme()
+    val expenseColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+    val investmentColor = if (isDark) income_dark else income_light
+    val trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+    val totalFraction = (expenseFraction + investmentFraction).coerceIn(0f, 1f)
+
+    Box(
+        modifier = modifier
+            .height(6.dp)
+            .clip(RoundedCornerShape(3.dp)),
+    ) {
+        // Track background
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(trackColor),
+        )
+        // Investment segment — drawn first (fills from 0 to total), shows as green
+        if (totalFraction > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(totalFraction)
+                    .background(investmentColor),
+            )
+        }
+        // Expense segment — overlays investment from left, shows expense color
+        if (expenseFraction > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(expenseFraction)
+                    .background(expenseColor),
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -509,6 +799,53 @@ private fun SheetOptionRow(
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HeroMoreStatCell(
+    label: String,
+    value: String,
+    subLabel: String?,
+    onClick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    val view = LocalView.current
+    Surface(
+        onClick = {
+            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            onClick?.invoke()
+        },
+        modifier = modifier,
+        shape = RoundedCornerShape(Dimensions.CornerRadius.small),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+            )
+            if (!subLabel.isNullOrEmpty()) {
+                Text(
+                    text = subLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }

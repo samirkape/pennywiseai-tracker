@@ -13,6 +13,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -20,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.stringResource
@@ -39,14 +39,15 @@ import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -74,7 +75,6 @@ import com.pennywiseai.tracker.ui.components.CustomTitleTopAppBar
 import com.pennywiseai.tracker.ui.components.GroupedListItem
 import com.pennywiseai.tracker.ui.components.ListItemPosition
 import com.pennywiseai.tracker.ui.components.PennyWiseCard
-import com.pennywiseai.tracker.ui.components.PreferenceSwitch
 import com.pennywiseai.tracker.ui.components.cards.SectionHeaderV2
 import com.pennywiseai.tracker.ui.components.listItemPadding
 import com.pennywiseai.tracker.ui.components.toShape
@@ -114,68 +114,48 @@ private val editTopShape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, 
 private val editBottomShape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
 private val editFullShape = RoundedCornerShape(16.dp)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BulkCategoryUpdateCard(
-    merchantName: String,
-    categoryName: String,
-    transactionCount: Int,
-    isEnabled: Boolean,
-    onToggle: () -> Unit,
-) {
-    val countLabel = if (transactionCount == 1) "1 other transaction" else "$transactionCount other transactions"
-    val warningContainerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
-    val warningContentColor = MaterialTheme.colorScheme.onErrorContainer
-
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = if (isEnabled) warningContainerColor else MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onToggle)
+private fun BulkCategoryDateScopeRow(viewModel: TransactionDetailViewModel) {
+    val scope by viewModel.bulkCategoryDateScope.collectAsStateWithLifecycle()
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(Spacing.xs)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+        Text(
+            text = stringResource(R.string.txn_bulk_category_scope_label),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            SegmentedButton(
+                selected = scope == BulkCategoryDateScope.ALL_TIME,
+                onClick = { viewModel.setBulkCategoryDateScope(BulkCategoryDateScope.ALL_TIME) },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
             ) {
-                Icon(
-                    imageVector = Icons.Default.Warning,
-                    contentDescription = null,
-                    tint = if (isEnabled) warningContentColor else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(Dimensions.Icon.small)
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Apply category to $countLabel?",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (isEnabled) warningContentColor else MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "Sets \"$categoryName\" for all \"$merchantName\" transactions",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (isEnabled) warningContentColor.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = isEnabled,
-                    onCheckedChange = { onToggle() },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = MaterialTheme.colorScheme.onErrorContainer,
-                        checkedTrackColor = MaterialTheme.colorScheme.errorContainer,
-                    )
+                Text(
+                    stringResource(R.string.txn_bulk_category_scope_all),
+                    style = MaterialTheme.typography.labelSmall,
                 )
             }
-            if (isEnabled) {
-                HorizontalDivider(color = warningContentColor.copy(alpha = 0.2f))
+            SegmentedButton(
+                selected = scope == BulkCategoryDateScope.LAST_90_DAYS,
+                onClick = { viewModel.setBulkCategoryDateScope(BulkCategoryDateScope.LAST_90_DAYS) },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+            ) {
                 Text(
-                    text = "This will overwrite the category on $countLabel. This cannot be undone.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = warningContentColor.copy(alpha = 0.9f)
+                    stringResource(R.string.txn_bulk_category_scope_90d),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            SegmentedButton(
+                selected = scope == BulkCategoryDateScope.LAST_365_DAYS,
+                onClick = { viewModel.setBulkCategoryDateScope(BulkCategoryDateScope.LAST_365_DAYS) },
+                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+            ) {
+                Text(
+                    stringResource(R.string.txn_bulk_category_scope_365d),
+                    style = MaterialTheme.typography.labelSmall,
                 )
             }
         }
@@ -186,13 +166,213 @@ private fun BulkCategoryUpdateCard(
 private fun EditSectionLabel(label: String) {
     Text(
         text = label,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.primary,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurface,
         fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(horizontal = 2.dp)
+        modifier = Modifier.padding(start = 2.dp, end = 2.dp, top = Spacing.xs),
     )
 }
 
+@Composable
+private fun EditScreenDivider() {
+    HorizontalDivider(
+        modifier = Modifier.fillMaxWidth(),
+        thickness = Dimensions.Component.dividerThickness,
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f),
+    )
+}
+
+@Composable
+private fun MoreOptionsSwitchRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    leadingIcon: @Composable () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.md, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Box(
+            modifier = Modifier.size(24.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                leadingIcon()
+            }
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PreSaveBulkOptionsSheet(
+    state: PreSaveBulkState,
+    viewModel: TransactionDetailViewModel,
+) {
+    val applyToPast by viewModel.applyToPast.collectAsStateWithLifecycle()
+    val applyToFuture by viewModel.applyToFuture.collectAsStateWithLifecycle()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val showPastSection = state.existingCount > 0 &&
+        (state.categoryChanged || state.merchantChanged || state.typeChanged)
+    val showFutureSection = (state.categoryChanged && !state.isSelfTransfer) || state.merchantChanged
+
+    // Build field summary strings
+    val pastFields = buildList {
+        if (state.categoryChanged && !state.isSelfTransfer) add("Category")
+        if (state.merchantChanged) add("Merchant name")
+        if (state.typeChanged) add("Type")
+    }.joinToString(" · ")
+    val futureFields = buildList {
+        if (state.categoryChanged && !state.isSelfTransfer) add("Category")
+        if (state.merchantChanged) add("Merchant name")
+    }.joinToString(" · ")
+
+    ModalBottomSheet(
+        onDismissRequest = { viewModel.dismissPreSaveBulkSheet() },
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.md)
+                .padding(bottom = Spacing.xl),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md),
+        ) {
+            Text(
+                text = "Saving will also...",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+
+            if (showPastSection) {
+                BulkConfirmRow(
+                    checked = applyToPast,
+                    onCheckedChange = { viewModel.toggleApplyToPast() },
+                    title = if (state.existingCount == 1)
+                        "Update 1 past transaction"
+                    else
+                        "Update ${state.existingCount} past transactions",
+                    subtitle = pastFields,
+                    footer = if (applyToPast && state.categoryChanged && !state.isSelfTransfer) {
+                        { BulkCategoryDateScopeRow(viewModel = viewModel) }
+                    } else null,
+                )
+            }
+
+            if (showFutureSection) {
+                BulkConfirmRow(
+                    checked = applyToFuture,
+                    onCheckedChange = { viewModel.toggleApplyToFuture() },
+                    title = "Auto-apply to future transactions",
+                    subtitle = futureFields,
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm, Alignment.End),
+            ) {
+                OutlinedButton(onClick = { viewModel.saveWithoutBulkOptions() }) {
+                    Text("Skip")
+                }
+                Button(onClick = { viewModel.saveWithBulkOptions() }) {
+                    Text("Confirm & Save")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BulkConfirmRow(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    title: String,
+    subtitle: String,
+    footer: (@Composable () -> Unit)? = null,
+) {
+    val cardColor = MaterialTheme.colorScheme.surfaceContainerLow
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = cardColor,
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onCheckedChange(!checked) }
+                    .padding(start = Spacing.sm, end = Spacing.md, top = Spacing.sm, bottom = Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+            ) {
+                Checkbox(
+                    checked = checked,
+                    onCheckedChange = null,
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = if (checked) MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (subtitle.isNotEmpty()) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            if (footer != null && checked) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = Spacing.md),
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                ) {
+                    footer()
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun EditOptionsSection(
     transaction: TransactionEntity,
@@ -210,165 +390,213 @@ private fun EditOptionsSection(
     val displayExisting = existingReceiptsEdit.filter { it.id !in removedReceiptIdsEdit }
     val displayReceiptUris = displayExisting.map { it.uri } + pendingReceiptUrisEdit
 
+    val groupedCardShape = ListItemPosition.Single.toShape()
+    val groupedCardColor = MaterialTheme.colorScheme.surfaceContainerLow
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
         EditSectionLabel(label = "More options")
 
-        Column(
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(ListItemPosition.Top.toShape())
-                .background(MaterialTheme.colorScheme.surfaceContainerLow),
+                .padding(listItemPadding),
+            shape = groupedCardShape,
+            color = groupedCardColor,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
         ) {
-            GroupedListItem(
-                headline = { Text("Classification") },
-                supporting = {
-                    Text(
-                        if (isEffectivelyBusiness) {
-                            "Counted as a business transaction"
-                        } else {
-                            "Counted as a personal transaction"
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.md, vertical = 12.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.WorkOutline,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                text = "Classification",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = if (isEffectivelyBusiness) {
+                                    "Counted as a business transaction"
+                                } else {
+                                    "Counted as a personal transaction"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
-                    )
-                },
-                leading = {
-                    Icon(
-                        Icons.Default.WorkOutline,
-                        contentDescription = null,
-                        modifier = Modifier.size(Dimensions.Icon.medium),
-                    )
-                },
-                shape = null,
-                padding = listItemPadding,
-            )
-            SingleChoiceSegmentedButtonRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Spacing.md)
-                    .padding(bottom = Spacing.sm),
-            ) {
-                SegmentedButton(
-                    selected = !isEffectivelyBusiness,
-                    onClick = {
-                        val newId = if (accountDefault == ProfileEntity.PERSONAL_ID) null else ProfileEntity.PERSONAL_ID
-                        viewModel.updateProfileId(newId)
-                    },
-                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                ) {
-                    Text("Personal")
-                }
-                SegmentedButton(
-                    selected = isEffectivelyBusiness,
-                    onClick = {
-                        val newId = if (accountDefault == ProfileEntity.BUSINESS_ID) null else ProfileEntity.BUSINESS_ID
-                        viewModel.updateProfileId(newId)
-                    },
-                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                ) {
-                    Text("Business")
-                }
-            }
-        }
-
-        PreferenceSwitch(
-            title = "Recurring",
-            subtitle = "Marks this as a repeating payment or income",
-            checked = transaction.isRecurring,
-            onCheckedChange = { viewModel.updateRecurringStatus(it) },
-            leadingIcon = {
-                Icon(
-                    Icons.Default.Repeat,
-                    contentDescription = null,
-                    modifier = Modifier.size(Dimensions.Icon.medium),
-                )
-            },
-        )
-
-        PreferenceSwitch(
-            title = "Exclude from tracking",
-            subtitle = "Hidden from budgets, totals, and analytics",
-            checked = transaction.isExcludedFromTracking,
-            onCheckedChange = { viewModel.updateExcludedFromTracking(it) },
-            leadingIcon = {
-                Icon(
-                    Icons.Default.VisibilityOff,
-                    contentDescription = null,
-                    modifier = Modifier.size(Dimensions.Icon.medium),
-                )
-            },
-            isLast = false,
-        )
-
-        GroupedListItem(
-            headline = { Text("Transaction group") },
-            supporting = {
-                Text(
-                    currentGroup?.name ?: "Organize related transactions together",
-                )
-            },
-            leading = {
-                Icon(
-                    Icons.Outlined.FolderOpen,
-                    contentDescription = null,
-                    modifier = Modifier.size(Dimensions.Icon.medium),
-                )
-            },
-            trailing = {
-                Icon(
-                    Icons.Default.ChevronRight,
-                    contentDescription = null,
-                    modifier = Modifier.size(Dimensions.Icon.small),
-                )
-            },
-            shape = ListItemPosition.Middle.toShape(),
-            padding = listItemPadding,
-            onClick = { viewModel.showGroupSheet() },
-        )
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(ListItemPosition.Bottom.toShape())
-                .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(Spacing.xs),
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    Icons.Default.Receipt,
-                    contentDescription = null,
-                    modifier = Modifier.size(Dimensions.Icon.medium),
-                    tint = MaterialTheme.colorScheme.secondary,
-                )
-                Column {
-                    Text(
-                        text = "Receipts",
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    Text(
-                        text = "Attach photos for your records",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            ReceiptPickerSection(
-                receiptUris = displayReceiptUris,
-                onReceiptAdded = { uri -> viewModel.addPendingReceiptUri(uri) },
-                onReceiptRemoved = { index ->
-                    if (index < displayExisting.size) {
-                        viewModel.removeExistingReceipt(displayExisting[index].id)
-                    } else {
-                        viewModel.removePendingReceiptUri(index - displayExisting.size)
                     }
-                },
-                onCreateCameraUri = { viewModel.createCameraUri() },
-            )
+                    SingleChoiceSegmentedButtonRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = Spacing.md),
+                    ) {
+                        SegmentedButton(
+                            selected = !isEffectivelyBusiness,
+                            onClick = {
+                                val newId = if (accountDefault == ProfileEntity.PERSONAL_ID) null else ProfileEntity.PERSONAL_ID
+                                viewModel.updateProfileId(newId)
+                            },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                        ) {
+                            Text("Personal")
+                        }
+                        SegmentedButton(
+                            selected = isEffectivelyBusiness,
+                            onClick = {
+                                val newId = if (accountDefault == ProfileEntity.BUSINESS_ID) null else ProfileEntity.BUSINESS_ID
+                                viewModel.updateProfileId(newId)
+                            },
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                        ) {
+                            Text("Business")
+                        }
+                    }
+                }
+
+                EditScreenDivider()
+
+                MoreOptionsSwitchRow(
+                    title = "Recurring",
+                    subtitle = "Marks this as a repeating payment or income",
+                    checked = transaction.isRecurring,
+                    onCheckedChange = { viewModel.updateRecurringStatus(it) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Repeat,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    },
+                )
+
+                EditScreenDivider()
+
+                MoreOptionsSwitchRow(
+                    title = "Exclude from tracking",
+                    subtitle = "Hidden from budgets, totals, and analytics",
+                    checked = transaction.isExcludedFromTracking,
+                    onCheckedChange = { viewModel.updateExcludedFromTracking(it) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.VisibilityOff,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    },
+                )
+
+                EditScreenDivider()
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.showGroupSheet() }
+                        .padding(horizontal = Spacing.md, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.FolderOpen,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = "Transaction group",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = currentGroup?.name ?: "Organize related transactions together",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (currentGroup != null) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                EditScreenDivider()
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.md, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.md),
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Receipt,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = "Receipts",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = "Attach photos for your records",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    ReceiptPickerSection(
+                        receiptUris = displayReceiptUris,
+                        onReceiptAdded = { uri -> viewModel.addPendingReceiptUri(uri) },
+                        onReceiptRemoved = { index ->
+                            if (index < displayExisting.size) {
+                                viewModel.removeExistingReceipt(displayExisting[index].id)
+                            } else {
+                                viewModel.removePendingReceiptUri(index - displayExisting.size)
+                            }
+                        },
+                        onCreateCameraUri = { viewModel.createCameraUri() },
+                        showOptionalCaption = false,
+                    )
+                }
+            }
         }
 
         transaction.bankName?.let { bankName ->
@@ -405,8 +633,6 @@ fun TransactionDetailScreen(
     val isSaving by viewModel.isSaving.collectAsStateWithLifecycle()
     val saveSuccess by viewModel.saveSuccess.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
-    val updateExistingTransactions by viewModel.updateExistingTransactions.collectAsStateWithLifecycle()
-    val existingTransactionCount by viewModel.existingTransactionCount.collectAsStateWithLifecycle()
     val merchantRenameReview by viewModel.merchantRenameReview.collectAsStateWithLifecycle()
     val futureParsingPrompt by viewModel.futureParsingPrompt.collectAsStateWithLifecycle()
     val showDeleteDialog by viewModel.showDeleteDialog.collectAsStateWithLifecycle()
@@ -414,6 +640,11 @@ fun TransactionDetailScreen(
     val deleteSuccess by viewModel.deleteSuccess.collectAsStateWithLifecycle()
     val accountPrimaryCurrency by viewModel.primaryCurrency.collectAsStateWithLifecycle()
     val convertedAmount by viewModel.convertedAmount.collectAsStateWithLifecycle()
+
+    val bulkCategorySaveConfirmParams by viewModel.bulkCategorySaveConfirm.collectAsStateWithLifecycle()
+    val bulkCategoryPreviewRows by viewModel.bulkCategoryPreviewRows.collectAsStateWithLifecycle()
+    val bulkCategoryUndoSnackCount by viewModel.bulkCategoryUndoSnackCount.collectAsStateWithLifecycle()
+    val preSaveBulkState by viewModel.preSaveBulkState.collectAsStateWithLifecycle()
 
     // Split state
     val splits by viewModel.splits.collectAsStateWithLifecycle()
@@ -437,7 +668,8 @@ fun TransactionDetailScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    
+    val resources = LocalResources.current
+
     // Show success snackbar
     LaunchedEffect(saveSuccess) {
         if (saveSuccess) {
@@ -456,7 +688,28 @@ fun TransactionDetailScreen(
             }
         }
     }
-    
+
+    LaunchedEffect(bulkCategoryUndoSnackCount) {
+        val n = bulkCategoryUndoSnackCount ?: return@LaunchedEffect
+        val message = resources.getString(R.string.txn_bulk_undo_message, n)
+        val undoAction = resources.getString(R.string.txn_bulk_undo_action)
+        val undoDone = resources.getString(R.string.txn_bulk_undo_done)
+        when (
+            snackbarHostState.showSnackbar(
+                message = message,
+                actionLabel = undoAction,
+                duration = SnackbarDuration.Long,
+            )
+        ) {
+            SnackbarResult.ActionPerformed -> {
+                viewModel.undoBulkCategoryFromSnackSuspend()
+                snackbarHostState.showSnackbar(undoDone)
+            }
+            else -> { /* dismissed without undo */ }
+        }
+        viewModel.clearBulkCategoryUndoSnack()
+    }
+
     LaunchedEffect(transactionId) {
         viewModel.loadTransaction(transactionId)
     }
@@ -467,8 +720,6 @@ fun TransactionDetailScreen(
             onNavigateBack()
         }
     }
-    
-    val context = LocalContext.current
 
     val scrollBehaviorSmall = TopAppBarDefaults.pinnedScrollBehavior()
     val scrollBehaviorLarge = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -498,7 +749,7 @@ fun TransactionDetailScreen(
                 scrollBehaviorLarge = scrollBehaviorLarge,
                 title = if (isEditMode) "Edit Transaction" else "Transaction Details",
                 hasBackButton = true,
-                hasActionButton = true,
+                hasActionButton = !isEditMode && transaction != null,
                 navigationContent = {
                     IconButton(onClick = {
                         if (isEditMode) {
@@ -534,8 +785,6 @@ fun TransactionDetailScreen(
                 transaction = txn,
                 isEditMode = isEditMode,
                 isSaving = isSaving,
-                updateExistingTransactions = updateExistingTransactions,
-                existingTransactionCount = existingTransactionCount,
                 viewModel = viewModel,
                 accountPrimaryCurrency = accountPrimaryCurrency,
                 convertedAmount = convertedAmount,
@@ -565,8 +814,98 @@ fun TransactionDetailScreen(
     futureParsingPrompt?.let { prompt ->
         FutureParsingPromptDialog(
             prompt = prompt,
-            onConfirm = { viewModel.confirmFutureParsing() },
+            onConfirm = { extras -> viewModel.confirmFutureParsing(extras) },
             onDismiss = { viewModel.dismissFutureParsing() },
+        )
+    }
+
+    bulkCategorySaveConfirmParams?.let { confirm ->
+        val scopeLabel = when (confirm.scope) {
+            BulkCategoryDateScope.ALL_TIME -> stringResource(R.string.txn_bulk_category_scope_all)
+            BulkCategoryDateScope.LAST_90_DAYS -> stringResource(R.string.txn_bulk_category_scope_90d)
+            BulkCategoryDateScope.LAST_365_DAYS -> stringResource(R.string.txn_bulk_category_scope_365d)
+        }
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissBulkCategorySave() },
+            title = { Text(stringResource(R.string.txn_bulk_category_confirm_title)) },
+            text = {
+                val previewDateFmt = remember {
+                    DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault())
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    Text(
+                        stringResource(
+                            R.string.txn_bulk_category_confirm_message,
+                            confirm.otherCount,
+                            confirm.merchantName,
+                            scopeLabel,
+                        )
+                    )
+                    val selectedPastParts = buildList {
+                        if (confirm.pastCategory) add(stringResource(R.string.txn_bulk_past_category))
+                        if (confirm.pastMerchant) add(stringResource(R.string.txn_bulk_past_merchant))
+                        if (confirm.pastType) add(stringResource(R.string.txn_bulk_past_type))
+                    }
+                    if (selectedPastParts.isNotEmpty()) {
+                        Text(
+                            stringResource(
+                                R.string.txn_bulk_confirm_selected_line,
+                                selectedPastParts.joinToString(", "),
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    Text(
+                        stringResource(R.string.txn_bulk_confirm_undo_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (bulkCategoryPreviewRows.isNotEmpty()) {
+                        Text(
+                            text = stringResource(R.string.txn_bulk_category_preview_header),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 220.dp),
+                            verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+                        ) {
+                            items(bulkCategoryPreviewRows, key = { it.id }) { row ->
+                                val amountLabel = CurrencyFormatter.formatCurrency(row.amount, row.currency)
+                                Text(
+                                    text = stringResource(
+                                        R.string.txn_bulk_category_preview_row,
+                                        row.dateTime.format(previewDateFmt),
+                                        amountLabel,
+                                        row.category,
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.confirmBulkCategorySave() }) {
+                    Text(stringResource(R.string.txn_bulk_category_confirm_apply))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissBulkCategorySave() }) {
+                    Text(stringResource(R.string.txn_bulk_category_confirm_cancel))
+                }
+            },
+        )
+    }
+
+    preSaveBulkState?.let { state ->
+        PreSaveBulkOptionsSheet(
+            state = state,
+            viewModel = viewModel,
         )
     }
 
@@ -675,8 +1014,6 @@ private fun TransactionDetailContent(
     transaction: TransactionEntity,
     isEditMode: Boolean,
     isSaving: Boolean,
-    updateExistingTransactions: Boolean,
-    existingTransactionCount: Int,
     viewModel: TransactionDetailViewModel,
     accountPrimaryCurrency: String,
     convertedAmount: BigDecimal?,
@@ -713,15 +1050,13 @@ private fun TransactionDetailContent(
                 )
 
                 Spacer(modifier = Modifier.height(Spacing.md))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                EditScreenDivider()
                 Spacer(modifier = Modifier.height(Spacing.sm))
 
                 EditSectionLabel(label = "Details")
                 Spacer(modifier = Modifier.height(Spacing.sm))
                 EditableExtractedInfoCard(
                     transaction = transaction,
-                    updateExistingTransactions = updateExistingTransactions,
-                    existingTransactionCount = existingTransactionCount,
                     accountProfileId = accountProfileId,
                     viewModel = viewModel,
                     splits = splits,
@@ -754,9 +1089,14 @@ private fun TransactionDetailContent(
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth(),
                 color = MaterialTheme.colorScheme.background,
-                shadowElevation = 8.dp,
-                tonalElevation = 2.dp
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp,
             ) {
+                HorizontalDivider(
+                    modifier = Modifier.fillMaxWidth(),
+                    thickness = Dimensions.Component.dividerThickness,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f),
+                )
                 Button(
                     onClick = { viewModel.saveChanges() },
                     enabled = !isSaving,
@@ -1513,7 +1853,7 @@ private fun EditableTransactionHeader(
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(Spacing.md)
+        verticalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
         // Amount and Currency
         val primaryCurrency by viewModel.primaryCurrency.collectAsStateWithLifecycle()
@@ -1625,12 +1965,10 @@ private fun EditableTransactionHeader(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(
-                            color = MaterialTheme.colorScheme.surfaceContainerLow,
-                            shape = RoundedCornerShape(0.dp)
-                        )
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(color = MaterialTheme.colorScheme.surfaceContainer)
+                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs),
                 ) {
                     Text(
                         text = stringResource(R.string.txn_edit_suggested_merchant_rename),
@@ -1700,25 +2038,32 @@ private fun EditableTransactionHeader(
                 }
             )
         }
-        FlowRow(
+        Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
-            topLevelTypes.forEach { type ->
+            for (type in topLevelTypes) {
                 val selected = if (type == TransactionType.EXPENSE) isExpenseSelected
-                               else transaction.transactionType == type
+                else transaction.transactionType == type
                 FilterChip(
+                    modifier = Modifier.weight(1f),
                     selected = selected,
                     onClick = { viewModel.updateTransactionType(type) },
-                    label = { Text(type.name.lowercase(Locale.getDefault()).replaceFirstChar { it.titlecase(Locale.getDefault()) }, maxLines = 1) },
+                    label = {
+                        Text(
+                            type.name.lowercase(Locale.getDefault())
+                                .replaceFirstChar { it.titlecase(Locale.getDefault()) },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
                     leadingIcon = if (selected) {
                         { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(Dimensions.Icon.small)) }
                     } else null,
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                         selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(0.7f),
+                        containerColor = MaterialTheme.colorScheme.surface,
                         labelColor = MaterialTheme.colorScheme.onSurface
                     ),
                     border = FilterChipDefaults.filterChipBorder(
@@ -1737,14 +2082,14 @@ private fun EditableTransactionHeader(
                 PaymentChannel.CASH to "Cash",
                 PaymentChannel.CREDIT_CARD to "Credit Card"
             )
-            FlowRow(
+            Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
-                channels.forEach { (channel, label) ->
+                for ((channel, label) in channels) {
                     val channelSelected = paymentChannel == channel
                     FilterChip(
+                        modifier = Modifier.weight(1f),
                         selected = channelSelected,
                         onClick = {
                             paymentChannel = channel
@@ -1753,14 +2098,14 @@ private fun EditableTransactionHeader(
                                 else TransactionType.EXPENSE
                             )
                         },
-                        label = { Text(label, maxLines = 1) },
+                        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         leadingIcon = if (channelSelected) {
                             { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(Dimensions.Icon.small)) }
                         } else null,
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                             selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(0.7f),
+                            containerColor = MaterialTheme.colorScheme.surface,
                             labelColor = MaterialTheme.colorScheme.onSurface
                         ),
                         border = FilterChipDefaults.filterChipBorder(
@@ -1773,31 +2118,32 @@ private fun EditableTransactionHeader(
             }
         }
 
-        // Transfer sub-chips (Transfer only): Self vs Others
+        // Transfer sub-chips (Transfer only)
         val isTransferSelected = transaction.transactionType == TransactionType.TRANSFER
         if (isTransferSelected) {
             val transferSubOptions = listOf(
-                TransferKind.SELF_TRANSFER to "Self",
-                TransferKind.OTHERS_TRANSFER to "Others"
+                TransferKind.SELF_TRANSFER to stringResource(R.string.txn_type_transfer_self),
+                TransferKind.OTHERS_TRANSFER to stringResource(R.string.txn_type_transfer_others),
+                TransferKind.CC_BILL_PAYMENT to stringResource(R.string.txn_transfer_cc_bill_short),
             )
-            FlowRow(
+            Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
-                transferSubOptions.forEach { (kind, label) ->
+                for ((kind, label) in transferSubOptions) {
                     val subSelected = transaction.transferKind == kind
                     FilterChip(
+                        modifier = Modifier.weight(1f),
                         selected = subSelected,
                         onClick = { viewModel.updateTransferKind(kind) },
-                        label = { Text(label, maxLines = 1) },
+                        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         leadingIcon = if (subSelected) {
                             { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(Dimensions.Icon.small)) }
                         } else null,
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                             selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(0.7f),
+                            containerColor = MaterialTheme.colorScheme.surface,
                             labelColor = MaterialTheme.colorScheme.onSurface
                         ),
                         border = FilterChipDefaults.filterChipBorder(
@@ -1815,7 +2161,6 @@ private fun EditableTransactionHeader(
             dateTime = transaction.dateTime,
             onDateTimeChange = { viewModel.updateDateTime(it) }
         )
-
     }
 }
 
@@ -1823,8 +2168,6 @@ private fun EditableTransactionHeader(
 @Composable
 private fun EditableExtractedInfoCard(
     transaction: TransactionEntity,
-    updateExistingTransactions: Boolean,
-    existingTransactionCount: Int,
     accountProfileId: Long?,
     viewModel: TransactionDetailViewModel,
     splits: List<SplitItem>,
@@ -1832,15 +2175,15 @@ private fun EditableExtractedInfoCard(
 ) {
     val categories by viewModel.categories.collectAsStateWithLifecycle(initialValue = emptyList())
     val currentGroup by viewModel.currentGroup.collectAsStateWithLifecycle()
+    val merchantMappingCategoryHint by viewModel.merchantMappingCategoryHint.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
-        // Account + Category (connected group)
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(1.5.dp)
+            verticalArrangement = Arrangement.spacedBy(1.5.dp),
         ) {
             if (transaction.transactionType == TransactionType.TRANSFER) {
                 AccountNumberField(
@@ -1876,6 +2219,14 @@ private fun EditableExtractedInfoCard(
                         primaryCategory = transaction.category,
                         viewModel = viewModel
                     )
+                    merchantMappingCategoryHint?.let { mappedCategory ->
+                        Text(
+                            text = stringResource(R.string.txn_mapping_conflict_hint, mappedCategory),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.padding(top = Spacing.xs),
+                        )
+                    }
                 }
             }
         }
@@ -1896,19 +2247,7 @@ private fun EditableExtractedInfoCard(
             }
         }
 
-        // Bulk category update card
         if (!showSplitEditor) {
-            if (existingTransactionCount > 0) {
-                Spacer(modifier = Modifier.height(Spacing.xs))
-                BulkCategoryUpdateCard(
-                    merchantName = transaction.merchantName,
-                    categoryName = transaction.category,
-                    transactionCount = existingTransactionCount,
-                    isEnabled = updateExistingTransactions,
-                    onToggle = { viewModel.toggleUpdateExistingTransactions() }
-                )
-            }
-
             if (transaction.transactionType == TransactionType.INCOME) {
                 BudgetImpactSection(viewModel = viewModel)
             }
@@ -1950,8 +2289,9 @@ private fun BudgetImpactSection(viewModel: TransactionDetailViewModel) {
     ) {
         Text(
             text = "Budget impact",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
         )
 
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -2038,19 +2378,15 @@ private fun CategoryMultiSelect(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                shape = editFullShape
-            )
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+            .padding(top = Spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
         // ── Category ──
         Text(
             text = "Category",
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary
+            color = MaterialTheme.colorScheme.onSurface,
         )
         if (suggestedCategories.isNotEmpty() && categorySuggestions.source != null) {
             val suggestionHeader = when (categorySuggestions.source) {
@@ -2127,14 +2463,15 @@ private fun CategoryMultiSelect(
 
         // ── Tags ──
         HorizontalDivider(
-            modifier = Modifier.padding(vertical = Spacing.xs),
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+            modifier = Modifier.padding(vertical = Spacing.sm),
+            thickness = Dimensions.Component.dividerThickness,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f),
         )
         Text(
             text = "Tags",
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
             text = "Free-form labels for search and organization. Don't affect budgets.",
@@ -2237,115 +2574,70 @@ private fun DateTimeField(
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
 
+    val dateLinePattern = remember { DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.getDefault()) }
+    val timePattern = remember { DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault()) }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
-        // Date button
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .background(
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    shape = RoundedCornerShape(Dimensions.CornerRadius.medium)
-                )
-                .padding(Spacing.sm)
-                .clickable(
-                    onClick = { showDatePicker = true },
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() }
-                ),
-            contentAlignment = Alignment.Center
+        FilledTonalButton(
+            onClick = { showDatePicker = true },
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(horizontal = Spacing.md, vertical = 14.dp),
+            shape = RoundedCornerShape(16.dp),
         ) {
             Row(
-                modifier = Modifier.padding(vertical = Spacing.xs),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
                 Icon(
-                    Icons.Default.CalendarToday,
+                    imageVector = Icons.Default.CalendarToday,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(Modifier.size(Spacing.sm))
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = dateTime.format(DateTimeFormatter.ofPattern("yyyy")),
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.bodyLarge
+                        text = "Date",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        text = dateTime.format(DateTimeFormatter.ofPattern("dd MMMM")),
-                        fontSize = 14.sp,
+                        text = dateTime.format(dateLinePattern),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
-                        style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
         }
 
-        // Time display
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = Spacing.sm, vertical = Spacing.sm)
-                .clickable { showTimePicker = true },
-            contentAlignment = Alignment.CenterEnd
+        FilledTonalButton(
+            onClick = { showTimePicker = true },
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(horizontal = Spacing.md, vertical = 14.dp),
+            shape = RoundedCornerShape(16.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.End
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
-                val hour = if (dateTime.hour % 12 == 0) 12 else dateTime.hour % 12
-                val minute = dateTime.minute
-                val amPm = if (dateTime.hour < 12) "AM" else "PM"
-                Box(
-                    modifier = Modifier
-                        .padding(4.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.primary.copy(0.2f),
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                ) {
-                    Text(
-                        text = String.format("%02d", hour),
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        lineHeight = 16.sp,
-                        modifier = Modifier.padding(5.dp)
-                    )
-                }
-                Text(text = ":", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
-                Box(
-                    modifier = Modifier
-                        .padding(4.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                ) {
-                    Text(
-                        text = String.format("%02d", minute),
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 16.sp,
-                        lineHeight = 16.sp,
-                        modifier = Modifier.padding(5.dp)
-                    )
-                }
-                Box(modifier = Modifier.padding(4.dp)) {
-                    Text(
-                        text = amPm,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 14.sp
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Schedule,
+                    contentDescription = null,
+                )
+                Text(
+                    text = dateTime.format(timePattern),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }

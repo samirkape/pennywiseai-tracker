@@ -47,7 +47,6 @@ import dev.chrisbanes.haze.HazeEffectScope
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import androidx.compose.ui.draw.BlurredEdgeTreatment
-import android.util.Log
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -72,10 +71,6 @@ fun PennyWiseBottomNavigation(
         BottomNavItem.Settings,
     )
     val containerColor = MaterialTheme.colorScheme.surface
-
-    // #region agent log
-    Log.d("DBG_f852e3", "{\"sessionId\":\"f852e3\",\"runId\":\"post-fix\",\"hypothesisId\":\"H1\",\"location\":\"PennyWiseBottomNavigation:75\",\"message\":\"nav render\",\"navBarStyle\":\"$navBarStyle\",\"blurEffects\":$blurEffects}")
-    // #endregion
 
     Box(modifier = modifier) {
         // NORMAL style NavigationBar

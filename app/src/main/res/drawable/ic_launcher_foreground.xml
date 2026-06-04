@@ -6,72 +6,98 @@
     android:viewportHeight="108">
 
     <!--
-        Spendly icon — rising bar chart + trend line + coin at peak
-        Safe zone: 18–90 on each axis. Bars centered in x 27–81.
-        Visual language: "your spending, tracked and growing smart"
+        Spendly — Smart Wallet foreground
+        Canvas: 108×108. Adaptive icon safe zone: x/y 18–90.
+        All content kept within 24–84 to survive circular/squircle masks.
+        Wallet body centered around (54, 54).
     -->
 
-    <!-- Ground baseline -->
+    <!-- ── WALLET BODY ─────────────────────────────────────────── -->
+    <!-- Main body: x=24 y=34 → x=84 y=82, rounded corners -->
     <path
-        android:pathData="M 20,85.5 L 88,85.5"
+        android:pathData="M 32,34 L 76,34 Q 84,34 84,42 L 84,74 Q 84,82 76,82 L 32,82 Q 24,82 24,74 L 24,42 Q 24,34 32,34 Z"
+        android:fillColor="#D9FFFFFF" />
+
+    <!-- Top flap (lighter, covers upper third) -->
+    <path
+        android:pathData="M 32,34 L 76,34 Q 84,34 84,42 L 84,52 L 24,52 L 24,42 Q 24,34 32,34 Z"
+        android:fillColor="#FFFFFFFF" />
+
+    <!-- Fold crease -->
+    <path
+        android:pathData="M 24,52 L 84,52"
         android:fillColor="#00000000"
-        android:strokeColor="#99FFFFFF"
+        android:strokeColor="#18000000"
+        android:strokeWidth="1.5" />
+
+    <!-- ── CARD SLOT (left of body) ─────────────────────────────── -->
+    <path
+        android:pathData="M 30,56 L 56,56 Q 60,56 60,60 L 60,78 Q 60,82 56,82 L 30,82 Q 26,82 26,78 L 26,60 Q 26,56 30,56 Z"
+        android:fillColor="#55FFFFFF" />
+
+    <!-- Gold chip -->
+    <path
+        android:pathData="M 30,60 L 36,60 Q 39,60 39,63 L 39,67 Q 39,70 36,70 L 30,70 Q 27,70 27,67 L 27,63 Q 27,60 30,60 Z"
+        android:fillColor="#FFD770" />
+
+    <!-- Card stripe (name/number hint) -->
+    <path
+        android:pathData="M 27,75 L 50,75"
+        android:fillColor="#00000000"
+        android:strokeColor="#44FFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round" />
+
+    <!-- ── COIN POCKET (right of body) ─────────────────────────── -->
+    <!-- Outer gold circle: cx=72 cy=69 r=11 → extends x=61–83 y=58–80 ✓ -->
+    <path android:pathData="M 61,69 A 11,11 0 1 0 83,69 A 11,11 0 1 0 61,69 Z"
+        android:fillColor="#FFD770" />
+    <!-- Inner ring -->
+    <path
+        android:pathData="M 64,69 A 8,8 0 1 0 80,69 A 8,8 0 1 0 64,69 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#C47C00"
+        android:strokeWidth="2" />
+    <!-- Rupee ₹ — two horizontal bars + descending stroke -->
+    <path
+        android:pathData="M 69,64.5 L 75,64.5"
+        android:fillColor="#00000000"
+        android:strokeColor="#C47C00"
+        android:strokeWidth="2"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M 69,67.5 L 74.5,67.5"
+        android:fillColor="#00000000"
+        android:strokeColor="#C47C00"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M 69,64.5 Q 69,72 74.5,75"
+        android:fillColor="#00000000"
+        android:strokeColor="#C47C00"
         android:strokeWidth="2"
         android:strokeLineCap="round" />
 
-    <!-- Bar 1 (shortest) — slightly translucent, rounded top corners only -->
+    <!-- ── SPARKLINE on flap ─────────────────────────────────── -->
     <path
-        android:pathData="M 27,85 L 27,79 Q 27,74 32,74 L 36,74 Q 41,74 41,79 L 41,85 Z"
-        android:fillColor="#AAFFFFFF" />
-
-    <!-- Bar 2 (medium) — rounded top corners -->
-    <path
-        android:pathData="M 47,85 L 47,63 Q 47,58 52,58 L 56,58 Q 61,58 61,63 L 61,85 Z"
-        android:fillColor="#CCFFFFFF" />
-
-    <!-- Bar 3 (tallest) — solid white, primary focus -->
-    <path
-        android:pathData="M 67,85 L 67,43 Q 67,38 72,38 L 76,38 Q 81,38 81,43 L 81,85 Z"
-        android:fillColor="#FFFFFFFF" />
-
-    <!-- Rising trend line connecting top-centers of bars, ends at coin -->
-    <path
-        android:pathData="M 34,74 C 44,74 46,58 54,58 C 62,58 64,28 74,28"
+        android:pathData="M 30,46 L 39,41 L 48,44 L 57,39 L 66,42"
         android:fillColor="#00000000"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="3"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
-
-    <!-- Glow halo around peak coin -->
-    <path
-        android:pathData="M 63,28 A 11,11 0 1,0 85,28 A 11,11 0 1,0 63,28 Z"
-        android:fillColor="#40FFFFFF" />
-
-    <!-- Coin at trend peak (solid white circle) -->
-    <path
-        android:pathData="M 67,28 A 7,7 0 1,0 81,28 A 7,7 0 1,0 67,28 Z"
-        android:fillColor="#FFFFFFFF" />
-
-    <!-- Small up-chevron above the coin to signal "upward" momentum -->
-    <path
-        android:pathData="M 70,19 L 74,15 L 78,19"
-        android:fillColor="#00000000"
-        android:strokeColor="#CCFFFFFF"
+        android:strokeColor="#77FFFFFF"
         android:strokeWidth="2.5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
+    <!-- Peak dot (aqua) -->
+    <path android:pathData="M 54.5,39 A 2.5,2.5 0 1 0 59.5,39 A 2.5,2.5 0 1 0 54.5,39 Z"
+        android:fillColor="#7FFFD4" />
 
-    <!-- Tiny sparkle dot top-left (visual balance) -->
+    <!-- ── SPARKLE STAR (top-right, within safe zone) ─────────── -->
+    <!-- 4-point star: center (76,28), half-size 7 → x=69–83, y=21–35 ✓ -->
     <path
-        android:pathData="M 26,26 A 2.5,2.5 0 1,0 31,26 A 2.5,2.5 0 1,0 26,26 Z"
-        android:fillColor="#66FFFFFF" />
+        android:pathData="M 76,21 L 77.8,26.2 L 83,27 L 77.8,27.8 L 76,33 L 74.2,27.8 L 69,27 L 74.2,26.2 Z"
+        android:fillColor="#FFD770" />
 
-    <!-- Tiny sparkle cross top-left -->
-    <path
-        android:pathData="M 28.5,22 L 28.5,30 M 24.5,26 L 32.5,26"
-        android:fillColor="#00000000"
-        android:strokeColor="#44FFFFFF"
-        android:strokeWidth="1.5"
-        android:strokeLineCap="round" />
+    <!-- Tiny secondary sparkle dot -->
+    <path android:pathData="M 80,21 A 2,2 0 1 0 84,21 A 2,2 0 1 0 80,21 Z"
+        android:fillColor="#BBFFFFFF" />
+
 </vector>

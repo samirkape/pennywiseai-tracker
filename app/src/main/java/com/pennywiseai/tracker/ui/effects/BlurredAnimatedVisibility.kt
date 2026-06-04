@@ -36,6 +36,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntSize
 
+@Suppress("UnusedTransitionTargetStateParameter")
 @Composable
 fun BlurredAnimatedVisibility(
     visible: Boolean,
@@ -52,7 +53,7 @@ fun BlurredAnimatedVisibility(
     val blurRadius by transition.animateFloat(
         label = "blurRadius",
         transitionSpec = { tween(durationMillis = 300) }
-    ) {
+    ) { _ ->
         if (transition.isRunning) 5f else 0f
     }
 

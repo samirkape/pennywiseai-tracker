@@ -12,7 +12,6 @@ import androidx.work.WorkManager
 import androidx.work.WorkInfo
 import com.pennywiseai.tracker.data.database.entity.AccountBalanceEntity
 import com.pennywiseai.tracker.data.database.entity.ProfileEntity
-import com.pennywiseai.tracker.data.database.entity.SubscriptionEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.data.manager.InAppUpdateManager
 import com.pennywiseai.tracker.data.manager.InAppReviewManager
@@ -21,6 +20,7 @@ import com.pennywiseai.tracker.data.preferences.UserPreferencesRepository
 import com.pennywiseai.tracker.presentation.common.buildProfileAccountKeys
 import com.pennywiseai.tracker.presentation.common.filterAccountsByProfile
 import com.pennywiseai.tracker.presentation.common.filterTransactionsByProfile
+import com.pennywiseai.tracker.presentation.common.matchesAnalyticsSpendingFilter
 import com.pennywiseai.tracker.data.repository.AccountBalanceRepository
 import com.pennywiseai.tracker.data.repository.ProfileRepository
 import com.pennywiseai.tracker.data.repository.LlmRepository
@@ -104,9 +104,32 @@ class HomeViewModel @Inject constructor(
     private val _smsScanWorkInfo = MutableStateFlow<WorkInfo?>(null)
     val smsScanWorkInfo: StateFlow<WorkInfo?> = _smsScanWorkInfo.asStateFlow()
 
-    // Store currency breakdown maps for quick access when switching currencies
-    private var currentMonthBreakdownMap: Map<String, TransactionRepository.MonthlyBreakdown> = emptyMap()
-    private var lastMonthBreakdownMap: Map<String, TransactionRepository.MonthlyBreakdown> = emptyMap()
+    // Store per-currency rollups for the pay/calendar period (quick access when switching currencies)
+    private var currentMonthRollupMap: Map<String, PeriodRollup> = emptyMap()
+    private var lastMonthRollupMap: Map<String, PeriodRollup> = emptyMap()
+
+    private data class PeriodRollup(
+        val income: BigDecimal,
+        val spending: BigDecimal,
+        val transfer: BigDecimal,
+        val investment: BigDecimal,
+    ) {
+        fun toMonthlyBreakdown(): TransactionRepository.MonthlyBreakdown =
+            TransactionRepository.MonthlyBreakdown(
+                total = income - spending,
+                income = income,
+                expenses = spending,
+            )
+
+        companion object {
+            val ZERO = PeriodRollup(
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+            )
+        }
+    }
 
     // Track if user has manually selected a currency to prevent auto-reset
     private var hasUserSelectedCurrency = false
@@ -299,24 +322,42 @@ class HomeViewModel @Inject constructor(
         return filterAccountsByProfile(allBalances, hiddenAccounts, _uiState.value.selectedProfileId)
     }
 
-    private fun computeBreakdownByCurrency(
+    private fun computePeriodRollupsByCurrency(
         transactions: List<TransactionEntity>
-    ): Map<String, TransactionRepository.MonthlyBreakdown> {
-        Log.d(TAG, "computeBreakdownByCurrency: totalTx=${transactions.size}")
-        val excluded = transactions.count { it.isExcludedFromTracking }
-        Log.d(TAG, "  excluded=$excluded, active=${transactions.size - excluded}")
+    ): Map<String, PeriodRollup> {
+        Log.d(TAG, "computePeriodRollupsByCurrency: totalTx=${transactions.size}")
+        val excludedCount = transactions.count { it.isExcludedFromTracking }
+        Log.d(TAG, "  excludedRows=$excludedCount, active=${transactions.size - excludedCount}")
         return transactions.groupBy { it.currency }.mapValues { (currency, txs) ->
-            val income = txs.filter { !it.isExcludedFromTracking && it.transactionType == TransactionType.INCOME }
-                .fold(BigDecimal.ZERO) { acc, tx -> acc + tx.amount }
-            val expenses = txs.filter { !it.isExcludedFromTracking && (it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT) }
-                .fold(BigDecimal.ZERO) { acc, tx -> acc + tx.amount }
+            var income = BigDecimal.ZERO
+            var spending = BigDecimal.ZERO
+            var transfer = BigDecimal.ZERO
+            var investment = BigDecimal.ZERO
+
+            for (tx in txs) {
+                if (tx.isExcludedFromTracking) continue
+                if (tx.loanId != null) continue
+
+                when (tx.transactionType) {
+                    TransactionType.INCOME -> income += tx.amount
+                    TransactionType.INVESTMENT -> investment += tx.amount
+                    TransactionType.TRANSFER -> transfer += tx.amount
+                    else -> Unit
+                }
+                if (tx.matchesAnalyticsSpendingFilter()) {
+                    spending += tx.amount
+                }
+            }
+
             val incomeTxs = txs.count { !it.isExcludedFromTracking && it.transactionType == TransactionType.INCOME }
-            val expenseTxs = txs.count { !it.isExcludedFromTracking && (it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT) }
-            Log.d(TAG, "  [$currency] incomeTxCount=$incomeTxs income=$income | expenseTxCount=$expenseTxs expenses=$expenses | net=${income - expenses}")
-            TransactionRepository.MonthlyBreakdown(
-                total = income - expenses,
+            val expenseTxs = txs.count { !it.isExcludedFromTracking && it.matchesAnalyticsSpendingFilter() }
+            Log.d(TAG, "  [$currency] incomeTxCount=$incomeTxs income=$income | expenseTxCount=$expenseTxs expenses=$spending | net=${income - spending} | inv=$investment")
+
+            PeriodRollup(
                 income = income,
-                expenses = expenses
+                spending = spending,
+                transfer = transfer,
+                investment = investment,
             )
         }
     }
@@ -377,6 +418,8 @@ class HomeViewModel @Inject constructor(
                 spendingPeriodLabel = spendingPeriodLabel,
                 useFinancialMonth = useFinancial,
                 periodDayLabel = periodDayLabel,
+                payPeriodStartEpochDay = spendingStart.toEpochDay(),
+                payPeriodEndEpochDay = periodEnd.toEpochDay(),
             )
             val prevFinancialEnd = financialStart.minusDays(1)
             val (prevFinancialStart, _) = budgetPeriodRange(prevFinancialEnd)
@@ -393,9 +436,9 @@ class HomeViewModel @Inject constructor(
                 userPreferencesRepository.selectedProfileId,
                 _cachedAccountBalances.filterNotNull()
             ) { transactions, profileId, balances ->
-                computeBreakdownByCurrency(filterTransactionsByProfile(transactions, profileId, buildProfileAccountKeys(balances)))
-            }.collect { breakdownByCurrency ->
-                updateBreakdownForSelectedCurrency(breakdownByCurrency, isCurrentMonth = true)
+                computePeriodRollupsByCurrency(filterTransactionsByProfile(transactions, profileId, buildProfileAccountKeys(balances)))
+            }.collect { rollupByCurrency ->
+                updateBreakdownForSelectedCurrency(rollupByCurrency, isCurrentMonth = true)
             }
         }
 
@@ -500,31 +543,15 @@ class HomeViewModel @Inject constructor(
         }
 
         launch {
-            // Investment / transfer totals for the active spending period (matches hero spend range)
-            combine(
-                transactionRepository.getTransactionsBetweenDates(
-                    startDate = spendingStart,
-                    endDate = now,
-                ),
-                userPreferencesRepository.selectedProfileId,
-                _cachedAccountBalances.filterNotNull()
-            ) { transactions, profileId, balances ->
-                filterTransactionsByProfile(transactions, profileId, buildProfileAccountKeys(balances))
-            }.collect { transactions ->
-                updateTransactionTypeTotals(transactions)
-            }
-        }
-
-        launch {
             // Load previous financial month breakdown for comparison
             combine(
                 transactionRepository.getTransactionsBetweenDates(prevFinancialStart, prevFinancialEnd),
                 userPreferencesRepository.selectedProfileId,
                 _cachedAccountBalances.filterNotNull()
             ) { transactions, profileId, balances ->
-                computeBreakdownByCurrency(filterTransactionsByProfile(transactions, profileId, buildProfileAccountKeys(balances)))
-            }.collect { breakdownByCurrency ->
-                updateBreakdownForSelectedCurrency(breakdownByCurrency, isCurrentMonth = false)
+                computePeriodRollupsByCurrency(filterTransactionsByProfile(transactions, profileId, buildProfileAccountKeys(balances)))
+            }.collect { rollupByCurrency ->
+                updateBreakdownForSelectedCurrency(rollupByCurrency, isCurrentMonth = false)
             }
         }
 
@@ -814,31 +841,10 @@ class HomeViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(recentItems = items, isLoading = false)
             }
         }
-        
+
         launch {
-            // Load all active subscriptions with conversion for unified mode
-            combine(
-                subscriptionRepository.getActiveSubscriptions(),
-                userPreferencesRepository.unifiedCurrencyMode,
-                userPreferencesRepository.displayCurrency
-            ) { subscriptions, isUnified, displayCurrency ->
-                Triple(subscriptions, isUnified, displayCurrency)
-            }.collect { (subscriptions, isUnified, displayCurrency) ->
-                val totalAmount = if (isUnified) {
-                    var total = java.math.BigDecimal.ZERO
-                    for (sub in subscriptions) {
-                        total += currencyConversionService.convertAmount(
-                            sub.amount, sub.currency, displayCurrency
-                        )
-                    }
-                    total
-                } else {
-                    subscriptions.sumOf { it.amount }
-                }
-                _uiState.value = _uiState.value.copy(
-                    upcomingSubscriptions = subscriptions,
-                    upcomingSubscriptionsTotal = totalAmount
-                )
+            subscriptionRepository.getActiveSubscriptions().collect { list ->
+                _uiState.value = _uiState.value.copy(activeSubscriptionCount = list.size)
             }
         }
         } // end dataLoadingJob
@@ -874,11 +880,16 @@ class HomeViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedDate = date, isLoading = true)
     }
 
-    /** Returns a Flow of per-day expense totals for [monthStart]'s month, respecting profile/currency filters. */
-    fun getDailyExpensesForMonth(monthStart: LocalDate): kotlinx.coroutines.flow.Flow<Map<LocalDate, BigDecimal>> {
-        val monthEnd = monthStart.withDayOfMonth(monthStart.lengthOfMonth())
-        return combine(
-            transactionRepository.getTransactionsBetweenDates(monthStart, monthEnd),
+    /**
+     * Per-day debit + card spend (excluding loan-linked rows), for [startInclusive]…[endInclusive],
+     * respecting profile and currency filters.
+     */
+    private fun dailySpendingTotalsFlow(
+        startInclusive: LocalDate,
+        endInclusive: LocalDate,
+    ): kotlinx.coroutines.flow.Flow<Map<LocalDate, BigDecimal>> =
+        combine(
+            transactionRepository.getTransactionsBetweenDates(startInclusive, endInclusive),
             userPreferencesRepository.selectedProfileId,
             _cachedAccountBalances.filterNotNull()
         ) { transactions, profileId, balances ->
@@ -908,6 +919,25 @@ class HomeViewModel @Inject constructor(
             }
             dailySums
         }
+
+    /** Returns a Flow of per-day expense totals for [monthStart]'s month, respecting profile/currency filters. */
+    fun getDailyExpensesForMonth(monthStart: LocalDate): kotlinx.coroutines.flow.Flow<Map<LocalDate, BigDecimal>> {
+        val monthEnd = monthStart.withDayOfMonth(monthStart.lengthOfMonth())
+        return dailySpendingTotalsFlow(monthStart, monthEnd)
+    }
+
+    /**
+     * Same totals as [getDailyExpensesForMonth] but for an arbitrary inclusive date range
+     * (used for the home 7-day strip so it stays correct across month boundaries).
+     */
+    fun getDailyExpensesBetween(
+        startInclusive: LocalDate,
+        endInclusive: LocalDate,
+    ): kotlinx.coroutines.flow.Flow<Map<LocalDate, BigDecimal>> {
+        require(!endInclusive.isBefore(startInclusive)) {
+            "endInclusive ($endInclusive) must not be before startInclusive ($startInclusive)"
+        }
+        return dailySpendingTotalsFlow(startInclusive, endInclusive)
     }
 
     fun refreshHiddenAccounts() {
@@ -1224,72 +1254,44 @@ class HomeViewModel @Inject constructor(
                 endDate = now,
             ).first()
             val transactions = filterTransactions(allTransactions)
-            updateTransactionTypeTotals(transactions)
+            refreshCurrentPeriodRollupFieldsFromTransactions(transactions)
         }
     }
 
-    private fun updateTransactionTypeTotals(transactions: List<TransactionEntity>) {
-        val selectedCurrency = _uiState.value.selectedCurrency
-        val isUnified = _uiState.value.isUnifiedMode
-        val nonLoanTransactions = transactions.filter {
-            it.loanId == null && !it.isExcludedFromTracking
-        }
-
-        if (isUnified) {
-            // Convert all transactions to display currency
-            viewModelScope.launch {
-                var transferTotal = BigDecimal.ZERO
-                var investmentTotal = BigDecimal.ZERO
-
-                for (tx in nonLoanTransactions) {
-                    val converted = currencyConversionService.convertAmount(tx.amount, tx.currency, selectedCurrency)
-                    when (tx.transactionType) {
-                        com.pennywiseai.tracker.data.database.entity.TransactionType.TRANSFER -> transferTotal += converted
-                        com.pennywiseai.tracker.data.database.entity.TransactionType.INVESTMENT -> investmentTotal += converted
-                        else -> { /* skip */ }
-                    }
-                }
-
-                _uiState.value = _uiState.value.copy(
-                    currentMonthTransfer = transferTotal,
-                    currentMonthInvestment = investmentTotal
-                )
+    private fun refreshCurrentPeriodRollupFieldsFromTransactions(transactions: List<TransactionEntity>) {
+        val rollupByCurrency = computePeriodRollupsByCurrency(transactions)
+        viewModelScope.launch {
+            val selectedCurrency = _uiState.value.selectedCurrency
+            val isUnified = _uiState.value.isUnifiedMode
+            val aggregated = if (isUnified) {
+                aggregatePeriodRollups(rollupByCurrency, selectedCurrency)
+            } else {
+                rollupByCurrency[selectedCurrency] ?: PeriodRollup.ZERO
             }
-        } else {
-            // Filter transactions by selected currency
-            val currencyTransactions = nonLoanTransactions.filter { it.currency == selectedCurrency }
-
-            val transferTotal = currencyTransactions
-                .filter { it.transactionType == com.pennywiseai.tracker.data.database.entity.TransactionType.TRANSFER }
-                .sumOf { it.amount }
-            val investmentTotal = currencyTransactions
-                .filter { it.transactionType == com.pennywiseai.tracker.data.database.entity.TransactionType.INVESTMENT }
-                .sumOf { it.amount }
-
             _uiState.value = _uiState.value.copy(
-                currentMonthTransfer = transferTotal,
-                currentMonthInvestment = investmentTotal
+                currentMonthInvestment = aggregated.investment,
+                currentMonthTransfer = aggregated.transfer,
             )
+            calculateMonthlyChange()
         }
     }
 
     private fun updateBreakdownForSelectedCurrency(
-        breakdownByCurrency: Map<String, TransactionRepository.MonthlyBreakdown>,
+        rollupByCurrency: Map<String, PeriodRollup>,
         isCurrentMonth: Boolean
     ) {
-        Log.d(TAG, "updateBreakdownForSelectedCurrency: isCurrentMonth=$isCurrentMonth, currencies=${breakdownByCurrency.keys}")
-        breakdownByCurrency.forEach { (cur, b) ->
+        Log.d(TAG, "updateBreakdownForSelectedCurrency: isCurrentMonth=$isCurrentMonth, currencies=${rollupByCurrency.keys}")
+        rollupByCurrency.forEach { (cur, r) ->
+            val b = r.toMonthlyBreakdown()
             Log.d(TAG, "  [$cur] income=${b.income} expenses=${b.expenses} net=${b.total}")
         }
-        // Store the breakdown map for later use when switching currencies
         if (isCurrentMonth) {
-            currentMonthBreakdownMap = breakdownByCurrency
+            currentMonthRollupMap = rollupByCurrency
         } else {
-            lastMonthBreakdownMap = breakdownByCurrency
+            lastMonthRollupMap = rollupByCurrency
         }
 
-        // Update available currencies — merge transaction currencies with existing account currencies
-        val transactionCurrencies = (currentMonthBreakdownMap.keys + lastMonthBreakdownMap.keys)
+        val transactionCurrencies = (currentMonthRollupMap.keys + lastMonthRollupMap.keys)
         val existingCurrencies = _uiState.value.availableCurrencies
         val availableCurrencies = (existingCurrencies + transactionCurrencies).distinct().sortedWith { a, b ->
             when {
@@ -1299,24 +1301,18 @@ class HomeViewModel @Inject constructor(
             }
         }
 
-        // Auto-select currency: prefer baseCurrency from preferences, then INR, then first available
         val currentSelectedCurrency = _uiState.value.selectedCurrency
         if (!availableCurrencies.contains(currentSelectedCurrency) && availableCurrencies.isNotEmpty()) {
-            // Need to get baseCurrency asynchronously
             viewModelScope.launch {
-                val baseCurrency = userPreferencesRepository.baseCurrency.first()
-                val selectedCurrency = if (availableCurrencies.contains(baseCurrency)) {
-                    baseCurrency
-                } else if (availableCurrencies.contains("INR")) {
-                    "INR"
-                } else {
-                    availableCurrencies.first()
+                val baseCurrencyPref = userPreferencesRepository.baseCurrency.first()
+                val selectedCurrency = when {
+                    availableCurrencies.contains(baseCurrencyPref) -> baseCurrencyPref
+                    availableCurrencies.contains("INR") -> "INR"
+                    else -> availableCurrencies.first()
                 }
-                // Update UI state with values for selected currency
                 updateUIStateForCurrency(selectedCurrency, availableCurrencies)
             }
         } else {
-            // Update UI state with values for selected currency
             updateUIStateForCurrency(currentSelectedCurrency, availableCurrencies)
         }
     }
@@ -1324,10 +1320,11 @@ class HomeViewModel @Inject constructor(
     private fun updateUIStateForCurrency(selectedCurrency: String, availableCurrencies: List<String>) {
         Log.d(TAG, "updateUIStateForCurrency: selectedCurrency=$selectedCurrency, isUnifiedMode=${_uiState.value.isUnifiedMode}")
         if (_uiState.value.isUnifiedMode) {
-            // Aggregate all currencies, converting to selectedCurrency (displayCurrency)
             viewModelScope.launch {
-                val currentBreakdown = aggregateBreakdowns(currentMonthBreakdownMap, selectedCurrency)
-                val lastBreakdown = aggregateBreakdowns(lastMonthBreakdownMap, selectedCurrency)
+                val currentAgg = aggregatePeriodRollups(currentMonthRollupMap, selectedCurrency)
+                val lastAgg = aggregatePeriodRollups(lastMonthRollupMap, selectedCurrency)
+                val currentBreakdown = currentAgg.toMonthlyBreakdown()
+                val lastBreakdown = lastAgg.toMonthlyBreakdown()
 
                 Log.d(TAG, "  [unified] current => income=${currentBreakdown.income} expenses=${currentBreakdown.expenses} net=${currentBreakdown.total}")
                 Log.d(TAG, "  [unified] last    => income=${lastBreakdown.income} expenses=${lastBreakdown.expenses} net=${lastBreakdown.total}")
@@ -1336,6 +1333,8 @@ class HomeViewModel @Inject constructor(
                     currentMonthTotal = currentBreakdown.total,
                     currentMonthIncome = currentBreakdown.income,
                     currentMonthExpenses = currentBreakdown.expenses,
+                    currentMonthInvestment = currentAgg.investment,
+                    currentMonthTransfer = currentAgg.transfer,
                     lastMonthTotal = lastBreakdown.total,
                     lastMonthIncome = lastBreakdown.income,
                     lastMonthExpenses = lastBreakdown.expenses,
@@ -1345,32 +1344,26 @@ class HomeViewModel @Inject constructor(
                 calculateMonthlyChange()
             }
         } else {
-            // Get breakdown for selected currency from stored maps
-            val currentBreakdown = currentMonthBreakdownMap[selectedCurrency] ?: TransactionRepository.MonthlyBreakdown(
-                total = BigDecimal.ZERO,
-                income = BigDecimal.ZERO,
-                expenses = BigDecimal.ZERO
-            )
-
-            val lastBreakdown = lastMonthBreakdownMap[selectedCurrency] ?: TransactionRepository.MonthlyBreakdown(
-                total = BigDecimal.ZERO,
-                income = BigDecimal.ZERO,
-                expenses = BigDecimal.ZERO
-            )
+            val currentAgg = currentMonthRollupMap[selectedCurrency] ?: PeriodRollup.ZERO
+            val lastAgg = lastMonthRollupMap[selectedCurrency] ?: PeriodRollup.ZERO
+            val currentBreakdown = currentAgg.toMonthlyBreakdown()
+            val lastBreakdown = lastAgg.toMonthlyBreakdown()
 
             Log.d(TAG, "  [single=$selectedCurrency] current => income=${currentBreakdown.income} expenses=${currentBreakdown.expenses} net=${currentBreakdown.total}")
             Log.d(TAG, "  [single=$selectedCurrency] last    => income=${lastBreakdown.income} expenses=${lastBreakdown.expenses} net=${lastBreakdown.total}")
-            if (currentMonthBreakdownMap[selectedCurrency] == null) {
-                Log.w(TAG, "  WARNING: no current-month breakdown for $selectedCurrency — returning zeros. Available: ${currentMonthBreakdownMap.keys}")
+            if (currentMonthRollupMap[selectedCurrency] == null) {
+                Log.w(TAG, "  WARNING: no current-month rollup for $selectedCurrency — returning zeros. Available: ${currentMonthRollupMap.keys}")
             }
-            if (lastMonthBreakdownMap[selectedCurrency] == null) {
-                Log.w(TAG, "  WARNING: no last-month breakdown for $selectedCurrency — returning zeros. Available: ${lastMonthBreakdownMap.keys}")
+            if (lastMonthRollupMap[selectedCurrency] == null) {
+                Log.w(TAG, "  WARNING: no last-month rollup for $selectedCurrency — returning zeros. Available: ${lastMonthRollupMap.keys}")
             }
 
             _uiState.value = _uiState.value.copy(
                 currentMonthTotal = currentBreakdown.total,
                 currentMonthIncome = currentBreakdown.income,
                 currentMonthExpenses = currentBreakdown.expenses,
+                currentMonthInvestment = currentAgg.investment,
+                currentMonthTransfer = currentAgg.transfer,
                 lastMonthTotal = lastBreakdown.total,
                 lastMonthIncome = lastBreakdown.income,
                 lastMonthExpenses = lastBreakdown.expenses,
@@ -1381,36 +1374,39 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private suspend fun aggregateBreakdowns(
-        breakdownMap: Map<String, TransactionRepository.MonthlyBreakdown>,
+    private suspend fun aggregatePeriodRollups(
+        rollupMap: Map<String, PeriodRollup>,
         targetCurrency: String
-    ): TransactionRepository.MonthlyBreakdown {
-        Log.d(TAG, "aggregateBreakdowns: targetCurrency=$targetCurrency, inputCurrencies=${breakdownMap.keys}")
-        var totalTotal = BigDecimal.ZERO
-        var totalIncome = BigDecimal.ZERO
-        var totalExpenses = BigDecimal.ZERO
+    ): PeriodRollup {
+        Log.d(TAG, "aggregatePeriodRollups: targetCurrency=$targetCurrency, inputCurrencies=${rollupMap.keys}")
+        var income = BigDecimal.ZERO
+        var spending = BigDecimal.ZERO
+        var transfer = BigDecimal.ZERO
+        var investment = BigDecimal.ZERO
 
-        for ((currency, breakdown) in breakdownMap) {
+        for ((currency, r) in rollupMap) {
             if (currency == targetCurrency) {
-                totalTotal += breakdown.total
-                totalIncome += breakdown.income
-                totalExpenses += breakdown.expenses
-                Log.d(TAG, "  [$currency] no conversion needed: income=${breakdown.income} expenses=${breakdown.expenses}")
+                income += r.income
+                spending += r.spending
+                transfer += r.transfer
+                investment += r.investment
             } else {
-                val convertedIncome = currencyConversionService.convertAmount(breakdown.income, currency, targetCurrency)
-                val convertedExpenses = currencyConversionService.convertAmount(breakdown.expenses, currency, targetCurrency)
-                val convertedTotal = currencyConversionService.convertAmount(breakdown.total, currency, targetCurrency)
-                Log.d(TAG, "  [$currency→$targetCurrency] income: ${breakdown.income}→$convertedIncome | expenses: ${breakdown.expenses}→$convertedExpenses")
-                totalTotal += convertedTotal
-                totalIncome += convertedIncome
-                totalExpenses += convertedExpenses
+                val convertedIncome = currencyConversionService.convertAmount(r.income, currency, targetCurrency)
+                val convertedSpending = currencyConversionService.convertAmount(r.spending, currency, targetCurrency)
+                val convertedTransfer = currencyConversionService.convertAmount(r.transfer, currency, targetCurrency)
+                val convertedInvestment = currencyConversionService.convertAmount(r.investment, currency, targetCurrency)
+                income += convertedIncome
+                spending += convertedSpending
+                transfer += convertedTransfer
+                investment += convertedInvestment
             }
         }
 
-        return TransactionRepository.MonthlyBreakdown(
-            total = totalTotal,
-            income = totalIncome,
-            expenses = totalExpenses
+        return PeriodRollup(
+            income = income,
+            spending = spending,
+            transfer = transfer,
+            investment = investment,
         )
     }
 
@@ -1517,11 +1513,8 @@ class HomeViewModel @Inject constructor(
             } else {
                 0
             }
-            topEntry.key to context.getString(
-                R.string.home_top_category_sub,
-                share,
-                CurrencyFormatter.formatCurrency(topEntry.value, selectedCurrency),
-            )
+            CurrencyFormatter.formatCurrency(topEntry.value, selectedCurrency) to
+                context.getString(R.string.home_top_category_sub, topEntry.key, share)
         }
 
         val daysElapsed = ChronoUnit.DAYS.between(periodStart, now).toInt().coerceAtLeast(0) + 1
@@ -1560,7 +1553,6 @@ data class HomeUiState(
     val currentMonthTotal: BigDecimal = BigDecimal.ZERO,
     val currentMonthIncome: BigDecimal = BigDecimal.ZERO,
     val currentMonthExpenses: BigDecimal = BigDecimal.ZERO,
-    val currentMonthCreditCard: BigDecimal = BigDecimal.ZERO,
     val currentMonthTransfer: BigDecimal = BigDecimal.ZERO,
     val currentMonthInvestment: BigDecimal = BigDecimal.ZERO,
     val lastMonthTotal: BigDecimal = BigDecimal.ZERO,
@@ -1570,8 +1562,7 @@ data class HomeUiState(
     val monthlyChangePercent: Int = 0,
     val recentTransactions: List<TransactionEntity> = emptyList(), // kept for widget compat
     val recentItems: List<HomeRecentItem> = emptyList(),
-    val upcomingSubscriptions: List<SubscriptionEntity> = emptyList(),
-    val upcomingSubscriptionsTotal: BigDecimal = BigDecimal.ZERO,
+    val activeSubscriptionCount: Int = 0,
     val spendingPeriodLabel: String = "",
     val useFinancialMonth: Boolean = true,
     val accountBalances: List<AccountBalanceEntity> = emptyList(),
@@ -1590,6 +1581,8 @@ data class HomeUiState(
     val transactionHeatmap: Map<Long, Int> = emptyMap(),
     val isBalanceReady: Boolean = false,
     val lastMonthSpendingHistory: List<BigDecimal> = emptyList(),
+    val payPeriodStartEpochDay: Long = -1L,
+    val payPeriodEndEpochDay: Long = -1L,
     val loanSummary: LoanSummary? = null,
     val selectedProfileId: Long? = null,
     val profiles: List<ProfileEntity> = emptyList(),

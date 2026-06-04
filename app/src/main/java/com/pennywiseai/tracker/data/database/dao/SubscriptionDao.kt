@@ -22,6 +22,9 @@ interface SubscriptionDao {
     @Query("SELECT * FROM subscriptions WHERE next_payment_date <= :date AND state = 'ACTIVE' ORDER BY next_payment_date ASC")
     fun getUpcomingSubscriptions(date: LocalDate): Flow<List<SubscriptionEntity>>
     
+    @Query("SELECT * FROM subscriptions WHERE merchant_name = :merchantName AND state = 'ACTIVE'")
+    suspend fun getActiveSubscriptionsForMerchant(merchantName: String): List<SubscriptionEntity>
+
     @Query("SELECT * FROM subscriptions WHERE merchant_name = :merchantName AND state = 'ACTIVE' LIMIT 1")
     suspend fun getActiveSubscriptionByMerchant(merchantName: String): SubscriptionEntity?
     

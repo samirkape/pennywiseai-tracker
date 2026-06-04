@@ -12,6 +12,7 @@ import com.pennywiseai.tracker.data.database.entity.CategoryEntity
 import com.pennywiseai.tracker.data.preferences.UserPreferencesRepository
 import com.pennywiseai.tracker.data.database.entity.LoanDirection
 import com.pennywiseai.tracker.data.database.entity.LoanEntity
+import com.pennywiseai.tracker.data.database.entity.MerchantAliasEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionSplitEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionType
@@ -29,17 +30,51 @@ import com.pennywiseai.tracker.domain.model.FutureParsingPromptState
 import com.pennywiseai.tracker.domain.model.TransactionRenameCandidate
 import com.pennywiseai.tracker.data.database.entity.TransactionGroupEntity
 import com.pennywiseai.tracker.core.Constants
+import com.pennywiseai.tracker.data.database.dao.BulkCategoryPreviewDaoRow
 import com.pennywiseai.tracker.worker.SaveTransactionWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.pennywiseai.tracker.utils.MerchantAliasAuditor
 import com.pennywiseai.tracker.utils.MerchantNameMatcher
+import com.pennywiseai.tracker.utils.SmsMerchantAliasHints
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.math.BigDecimal
 import java.time.LocalDateTime
 import javax.inject.Inject
+
+/** Limits which past transactions match bulk category propagation by `date_time`. */
+enum class BulkCategoryDateScope {
+    ALL_TIME,
+    LAST_90_DAYS,
+    LAST_365_DAYS,
+}
+
+data class BulkCategorySaveConfirmParams(
+    val merchantName: String,
+    val category: String,
+    val otherCount: Int,
+    val scope: BulkCategoryDateScope,
+    val pastCategory: Boolean,
+    val pastMerchant: Boolean,
+    val pastType: Boolean,
+)
+
+/** State emitted on Save when the user has changed category or merchant and there are
+ *  past/future transactions that can be bulk-updated. The UI shows a bottom sheet so
+ *  the user can decide before the save actually commits. */
+data class PreSaveBulkState(
+    val existingCount: Int,
+    val isSelfTransfer: Boolean,
+    val categoryChanged: Boolean,
+    val merchantChanged: Boolean,
+    val typeChanged: Boolean,
+    val merchantName: String = "",
+)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -100,13 +135,37 @@ class TransactionDetailViewModel @Inject constructor(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
     
-    private val _updateExistingTransactions = MutableStateFlow(false)
-    val updateExistingTransactions: StateFlow<Boolean> = _updateExistingTransactions.asStateFlow()
-    
     private val _existingTransactionCount = MutableStateFlow(0)
 
     private val _originalMerchantNameOnEdit = MutableStateFlow<String?>(null)
     private val _originalCategoryOnEdit = MutableStateFlow<String?>(null)
+    private val _originalTypeOnEdit = MutableStateFlow<TransactionType?>(null)
+    val originalMerchantAtEditStart: StateFlow<String?> = _originalMerchantNameOnEdit.asStateFlow()
+    val originalCategoryAtEditStart: StateFlow<String?> = _originalCategoryOnEdit.asStateFlow()
+
+    /** Past rows: overwrite category for same merchant match. */
+    private val _bulkPastCategory = MutableStateFlow(false)
+    val bulkPastCategory: StateFlow<Boolean> = _bulkPastCategory.asStateFlow()
+    /** Past rows: rename merchant to match this edit. */
+    private val _bulkPastMerchant = MutableStateFlow(false)
+    val bulkPastMerchant: StateFlow<Boolean> = _bulkPastMerchant.asStateFlow()
+    /** Past rows: set transaction type and transfer kind to match this edit. */
+    private val _bulkPastType = MutableStateFlow(false)
+    val bulkPastType: StateFlow<Boolean> = _bulkPastType.asStateFlow()
+
+    /** Future SMS: save merchant→category mapping for the display name. */
+    private val _bulkIncomingCategory = MutableStateFlow(false)
+    val bulkIncomingCategory: StateFlow<Boolean> = _bulkIncomingCategory.asStateFlow()
+    /** Future SMS: save raw→display merchant alias. */
+    private val _bulkIncomingMerchant = MutableStateFlow(false)
+    val bulkIncomingMerchant: StateFlow<Boolean> = _bulkIncomingMerchant.asStateFlow()
+
+    /** Master toggles for the pre-save bulk sheet (Option 3 confirmation framing). */
+    private val _applyToPast = MutableStateFlow(false)
+    val applyToPast: StateFlow<Boolean> = _applyToPast.asStateFlow()
+    private val _applyToFuture = MutableStateFlow(false)
+    val applyToFuture: StateFlow<Boolean> = _applyToFuture.asStateFlow()
+
     private val _allKnownMerchants = MutableStateFlow<List<String>>(emptyList())
     private val _suggestedMerchantRenames = MutableStateFlow<List<String>>(emptyList())
     val suggestedMerchantRenames: StateFlow<List<String>> = _suggestedMerchantRenames.asStateFlow()
@@ -139,7 +198,25 @@ class TransactionDetailViewModel @Inject constructor(
     val deleteSuccess: StateFlow<Boolean> = _deleteSuccess.asStateFlow()
     val existingTransactionCount: StateFlow<Int> = _existingTransactionCount.asStateFlow()
 
-    // Budget impact state (for INCOME transactions only)
+    private val _bulkCategoryDateScope = MutableStateFlow(BulkCategoryDateScope.ALL_TIME)
+    val bulkCategoryDateScope: StateFlow<BulkCategoryDateScope> = _bulkCategoryDateScope.asStateFlow()
+
+    private val _bulkCategorySaveConfirm = MutableStateFlow<BulkCategorySaveConfirmParams?>(null)
+    val bulkCategorySaveConfirm: StateFlow<BulkCategorySaveConfirmParams?> =
+        _bulkCategorySaveConfirm.asStateFlow()
+
+    private val _preSaveBulkState = MutableStateFlow<PreSaveBulkState?>(null)
+    val preSaveBulkState: StateFlow<PreSaveBulkState?> = _preSaveBulkState.asStateFlow()
+
+    private val _bulkCategoryPreviewRows = MutableStateFlow<List<BulkCategoryPreviewDaoRow>>(emptyList())
+    val bulkCategoryPreviewRows: StateFlow<List<BulkCategoryPreviewDaoRow>> =
+        _bulkCategoryPreviewRows.asStateFlow()
+
+    private val _bulkCategoryUndoSnackCount = MutableStateFlow<Int?>(null)
+    val bulkCategoryUndoSnackCount: StateFlow<Int?> = _bulkCategoryUndoSnackCount.asStateFlow()
+
+    private val _merchantMappingCategoryHint = MutableStateFlow<String?>(null)
+    val merchantMappingCategoryHint: StateFlow<String?> = _merchantMappingCategoryHint.asStateFlow()
     private val _budgetImpactType = MutableStateFlow<BudgetImpactType?>(null)
     val budgetImpactType: StateFlow<BudgetImpactType?> = _budgetImpactType.asStateFlow()
 
@@ -407,6 +484,7 @@ class TransactionDetailViewModel @Inject constructor(
         _transaction.value?.let { txn ->
             _originalMerchantNameOnEdit.value = txn.merchantName
             _originalCategoryOnEdit.value = txn.category
+            _originalTypeOnEdit.value = txn.transactionType
             viewModelScope.launch {
                 loadKnownMerchants()
                 loadMerchantRenameSuggestion(txn.merchantName)
@@ -421,16 +499,46 @@ class TransactionDetailViewModel @Inject constructor(
         if (trimmed.isEmpty()) {
             _existingTransactionCount.value = 0
             _merchantSuggestionCategories.value = emptyList()
-            if (_updateExistingTransactions.value) {
-                _updateExistingTransactions.value = false
-            }
+            _merchantMappingCategoryHint.value = null
+            clearPastBulkSelections()
             return
         }
+        val keyForBulkCount = effectiveBulkCategoryMerchantKey(trimmed)
         _existingTransactionCount.value = transactionRepository.getOtherTransactionCountForMerchant(
-            trimmed,
+            keyForBulkCount,
             txnId,
+            notBeforeForCurrentBulkScope(),
         )
+        if (_existingTransactionCount.value == 0 &&
+            _bulkCategoryDateScope.value != BulkCategoryDateScope.ALL_TIME
+        ) {
+            _bulkCategoryDateScope.value = BulkCategoryDateScope.ALL_TIME
+            _existingTransactionCount.value = transactionRepository.getOtherTransactionCountForMerchant(
+                keyForBulkCount,
+                txnId,
+                null,
+            )
+        }
+        if (_existingTransactionCount.value == 0) {
+            clearPastBulkSelections()
+        }
         loadMerchantCategorySuggestions(trimmed, txnId)
+        updateMerchantMappingCategoryHint(trimmed)
+    }
+
+    private suspend fun updateMerchantMappingCategoryHint(merchantTrimmed: String) {
+        if (merchantTrimmed.isEmpty()) {
+            _merchantMappingCategoryHint.value = null
+            return
+        }
+        val mapped = merchantMappingRepository.getCategoryForMerchant(merchantTrimmed)
+        val currentCat = _editableTransaction.value?.category
+        _merchantMappingCategoryHint.value =
+            if (mapped != null && currentCat != null && !mapped.equals(currentCat, ignoreCase = true)) {
+                mapped
+            } else {
+                null
+            }
     }
 
     private suspend fun loadKnownMerchants() {
@@ -451,9 +559,7 @@ class TransactionDetailViewModel @Inject constructor(
             current?.copy(merchantName = suggestedName)
         }
         _suggestedMerchantRenames.value = emptyList()
-        if (_updateExistingTransactions.value) {
-            _updateExistingTransactions.value = false
-        }
+        clearPastBulkSelections()
         viewModelScope.launch {
             loadMerchantRenameSuggestion(suggestedName)
             refreshMerchantDependentEditData(suggestedName)
@@ -478,8 +584,12 @@ class TransactionDetailViewModel @Inject constructor(
         _editableTransaction.value = null
         _isEditMode.value = false
         _errorMessage.value = null
-        _updateExistingTransactions.value = false
+        clearAllBulkPropagationSelections()
         _existingTransactionCount.value = 0
+        _bulkCategoryDateScope.value = BulkCategoryDateScope.ALL_TIME
+        _bulkCategorySaveConfirm.value = null
+        _bulkCategoryPreviewRows.value = emptyList()
+        _merchantMappingCategoryHint.value = null
         _pendingReceiptUris.value = emptyList()
         _removedReceiptIds.value = emptySet()
         _pendingTags.value = emptyList()
@@ -514,17 +624,118 @@ class TransactionDetailViewModel @Inject constructor(
         _pendingTags.value = _pendingTags.value - tag
     }
 
-    fun toggleUpdateExistingTransactions() {
-        _updateExistingTransactions.value = !_updateExistingTransactions.value
+    private fun clearPastBulkSelections() {
+        _bulkPastCategory.value = false
+        _bulkPastMerchant.value = false
+        _bulkPastType.value = false
     }
-    
+
+    private fun clearAllBulkPropagationSelections() {
+        clearPastBulkSelections()
+        _bulkIncomingCategory.value = false
+        _bulkIncomingMerchant.value = false
+        _applyToPast.value = false
+        _applyToFuture.value = false
+    }
+
+    fun toggleBulkPastCategory() {
+        _bulkPastCategory.value = !_bulkPastCategory.value
+    }
+
+    fun toggleBulkPastMerchant() {
+        _bulkPastMerchant.value = !_bulkPastMerchant.value
+    }
+
+    fun toggleBulkPastType() {
+        _bulkPastType.value = !_bulkPastType.value
+    }
+
+    fun toggleBulkIncomingCategory() {
+        _bulkIncomingCategory.value = !_bulkIncomingCategory.value
+    }
+
+    fun toggleBulkIncomingMerchant() {
+        _bulkIncomingMerchant.value = !_bulkIncomingMerchant.value
+    }
+
+    fun toggleApplyToPast() {
+        _applyToPast.value = !_applyToPast.value
+    }
+
+    fun toggleApplyToFuture() {
+        _applyToFuture.value = !_applyToFuture.value
+    }
+
+    fun setBulkCategoryDateScope(scope: BulkCategoryDateScope) {
+        _bulkCategoryDateScope.value = scope
+        viewModelScope.launch {
+            val name = _editableTransaction.value?.merchantName?.trim().orEmpty()
+            if (name.isNotEmpty()) refreshMerchantDependentEditData(name)
+        }
+    }
+
+    private fun notBeforeForCurrentBulkScope(): LocalDateTime? = when (_bulkCategoryDateScope.value) {
+        BulkCategoryDateScope.ALL_TIME -> null
+        BulkCategoryDateScope.LAST_90_DAYS -> LocalDateTime.now().minusDays(90)
+        BulkCategoryDateScope.LAST_365_DAYS -> LocalDateTime.now().minusDays(365)
+    }
+
+    fun confirmBulkCategorySave() {
+        _bulkCategorySaveConfirm.value = null
+        _bulkCategoryPreviewRows.value = emptyList()
+        saveChanges(requireBulkCategoryConfirm = false)
+    }
+
+    fun dismissBulkCategorySave() {
+        _bulkCategorySaveConfirm.value = null
+        _bulkCategoryPreviewRows.value = emptyList()
+    }
+
+    /** User tapped "Confirm & Save" in the pre-save bulk sheet. Translates master
+     *  toggles into the individual per-field booleans read by saveChanges(). */
+    fun saveWithBulkOptions() {
+        val state = _preSaveBulkState.value
+        if (state != null) {
+            val applyPast = _applyToPast.value
+            _bulkPastCategory.value = applyPast && state.categoryChanged && !state.isSelfTransfer
+            _bulkPastMerchant.value = applyPast && state.merchantChanged
+            _bulkPastType.value = applyPast && state.typeChanged
+            val applyFuture = _applyToFuture.value
+            _bulkIncomingCategory.value = applyFuture && state.categoryChanged && !state.isSelfTransfer
+            _bulkIncomingMerchant.value = applyFuture && state.merchantChanged
+        }
+        _preSaveBulkState.value = null
+        saveChanges(requireBulkCategoryConfirm = false, skipPreSaveSheet = true)
+    }
+
+    /** User tapped "Skip" in the pre-save bulk sheet — save without bulk operations. */
+    fun saveWithoutBulkOptions() {
+        clearAllBulkPropagationSelections()
+        _preSaveBulkState.value = null
+        saveChanges(requireBulkCategoryConfirm = false, skipPreSaveSheet = true)
+    }
+
+    fun dismissPreSaveBulkSheet() {
+        _preSaveBulkState.value = null
+        _isSaving.value = false
+    }
+
+    fun clearBulkCategoryUndoSnack() {
+        _bulkCategoryUndoSnackCount.value = null
+    }
+
+    suspend fun undoBulkCategoryFromSnackSuspend() {
+        transactionRepository.undoLastBulkCategoryUpdate()
+        val id = _transaction.value?.id ?: return
+        transactionRepository.getTransactionById(id)?.let { _transaction.value = it }
+    }
     fun updateMerchantName(name: String) {
         val previousName = _editableTransaction.value?.merchantName
         _editableTransaction.update { current ->
             current?.copy(merchantName = name)
         }
-        if (previousName != name && _updateExistingTransactions.value) {
-            _updateExistingTransactions.value = false
+        if (previousName != name) {
+            clearAllBulkPropagationSelections()
         }
         validateMerchantName(name)
         merchantEditDebounceJob?.cancel()
@@ -541,6 +752,12 @@ class TransactionDetailViewModel @Inject constructor(
             _editableTransaction.update { current ->
                 current?.copy(amount = amount)
             }
+            if (_showSplitEditor.value && _splits.value.size >= 2) {
+                val currentSplits = _splits.value
+                val sumExceptLast = currentSplits.dropLast(1).fold(BigDecimal.ZERO) { acc, s -> acc + s.amount }
+                val lastAmt = (amount - sumExceptLast).coerceAtLeast(BigDecimal.ZERO)
+                _splits.value = currentSplits.dropLast(1) + currentSplits.last().copy(amount = lastAmt)
+            }
             _errorMessage.value = null
         } else if (amountStr.isNotEmpty()) {
             _errorMessage.value = "Amount must be a positive number"
@@ -556,7 +773,8 @@ class TransactionDetailViewModel @Inject constructor(
                 val newTransferKind = if (type == TransactionType.TRANSFER)
                     current?.transferKind?.takeIf {
                         it == com.pennywiseai.tracker.data.database.entity.TransferKind.SELF_TRANSFER ||
-                        it == com.pennywiseai.tracker.data.database.entity.TransferKind.OTHERS_TRANSFER
+                        it == com.pennywiseai.tracker.data.database.entity.TransferKind.OTHERS_TRANSFER ||
+                        it == com.pennywiseai.tracker.data.database.entity.TransferKind.CC_BILL_PAYMENT
                     } ?: com.pennywiseai.tracker.data.database.entity.TransferKind.SELF_TRANSFER
                 else null
                 current?.copy(transactionType = type, budgetImpactType = null, budgetCategory = null, transferKind = newTransferKind)
@@ -570,13 +788,28 @@ class TransactionDetailViewModel @Inject constructor(
 
     fun updateTransferKind(kind: String) {
         _editableTransaction.update { current ->
-            current?.copy(transferKind = kind)
+            val c = current ?: return@update current
+            val base = c.copy(transferKind = kind)
+            if (kind == com.pennywiseai.tracker.data.database.entity.TransferKind.SELF_TRANSFER) {
+                _bulkPastCategory.value = false
+            }
+            if (kind == com.pennywiseai.tracker.data.database.entity.TransferKind.CC_BILL_PAYMENT) {
+                base.copy(category = "Credit Card Payment")
+            } else {
+                base
+            }
         }
     }
 
     fun updateCategory(category: String) {
         _editableTransaction.update { current ->
             current?.copy(category = category.ifEmpty { "Others" })
+        }
+        val merchant = _editableTransaction.value?.merchantName?.trim().orEmpty()
+        if (merchant.isNotEmpty()) {
+            viewModelScope.launch { updateMerchantMappingCategoryHint(merchant) }
+        } else {
+            _merchantMappingCategoryHint.value = null
         }
     }
     
@@ -746,10 +979,10 @@ class TransactionDetailViewModel @Inject constructor(
         return !_showSplitEditor.value || _splits.value.isEmpty()
     }
 
-    fun saveChanges() {
+    fun saveChanges(requireBulkCategoryConfirm: Boolean = true, skipPreSaveSheet: Boolean = false) {
         val toSave = _editableTransaction.value ?: return
 
-        // Validate before saving
+        // Validate before saving (fast feedback; full save continues in coroutine)
         if (toSave.merchantName.isBlank()) {
             _errorMessage.value = "Merchant name is required"
             return
@@ -776,135 +1009,315 @@ class TransactionDetailViewModel @Inject constructor(
             return
         }
 
-        val originalTxn = _transaction.value
-        val normalizedTransaction = toSave.copy(
-            merchantName = normalizeMerchantName(toSave.merchantName),
-            tags = _pendingTags.value.joinToString(",")
-        )
+        viewModelScope.launch {
+            val current = _editableTransaction.value ?: return@launch
+            if (current.merchantName.isBlank() || current.amount <= BigDecimal.ZERO) return@launch
+            if (_showSplitEditor.value && _splits.value.isNotEmpty() && !validateSplits()) return@launch
 
-        val removedIds = _removedReceiptIds.value.toList()
-        val removedPaths = removedIds.mapNotNull { id ->
-            _existingReceipts.value.find { it.id == id }?.path
-        }
+            _isSaving.value = true
+            try {
+            // Intercept on first save attempt: if category or merchant changed and there are
+            // past/future transactions, show the pre-save bulk options sheet.
+            if (!skipPreSaveSheet) {
+                val originalMerchant = _originalMerchantNameOnEdit.value
+                val originalCategory = _originalCategoryOnEdit.value
+                val originalType = _originalTypeOnEdit.value
+                val categoryChanged = originalCategory != null && current.category != originalCategory
+                val merchantChanged = originalMerchant != null &&
+                    !current.merchantName.equals(originalMerchant, ignoreCase = true)
+                val typeChanged = originalType != null && current.transactionType != originalType
+                if (categoryChanged || merchantChanged || typeChanged) {
+                    val existingCount = _existingTransactionCount.value
+                    val isSelf = current.transactionType == TransactionType.TRANSFER &&
+                        current.transferKind == com.pennywiseai.tracker.data.database.entity.TransferKind.SELF_TRANSFER
+                    _preSaveBulkState.value = PreSaveBulkState(
+                        existingCount = existingCount,
+                        isSelfTransfer = isSelf,
+                        categoryChanged = categoryChanged,
+                        merchantChanged = merchantChanged,
+                        typeChanged = typeChanged,
+                        merchantName = current.merchantName,
+                    )
+                    _applyToPast.value = existingCount > 0
+                    _applyToFuture.value = (categoryChanged && !isSelf) || merchantChanged
+                    _isSaving.value = false
+                    return@launch
+                }
+            }
 
-        val patch = SaveTransactionWorker.TransactionPatch(
-            id = normalizedTransaction.id,
-            amount = normalizedTransaction.amount.toPlainString(),
-            merchantName = normalizedTransaction.merchantName,
-            category = normalizedTransaction.category,
-            transactionType = normalizedTransaction.transactionType.name,
-            dateTime = normalizedTransaction.dateTime.toString(),
-            description = normalizedTransaction.description,
-            accountNumber = normalizedTransaction.accountNumber,
-            fromAccount = normalizedTransaction.fromAccount,
-            toAccount = normalizedTransaction.toAccount,
-            bankName = normalizedTransaction.bankName,
-            currency = normalizedTransaction.currency,
-            tags = normalizedTransaction.tags,
-            isRecurring = normalizedTransaction.isRecurring,
-            isExcludedFromTracking = normalizedTransaction.isExcludedFromTracking,
-            profileId = normalizedTransaction.profileId,
-            transferKind = normalizedTransaction.transferKind,
-            budgetImpactType = normalizedTransaction.budgetImpactType?.name,
-            budgetCategory = normalizedTransaction.budgetCategory,
-        )
+            val wantsPastBulk =
+                _bulkPastCategory.value || _bulkPastMerchant.value || _bulkPastType.value
+            if (requireBulkCategoryConfirm && wantsPastBulk) {
+                val merchantForMatch = current.merchantName.trim()
+                if (merchantForMatch.isNotEmpty()) {
+                    refreshMerchantDependentEditData(merchantForMatch)
+                }
+                if (_existingTransactionCount.value > 0) {
+                    val merchantKeyForPreview =
+                        effectiveBulkCategoryMerchantKey(current.merchantName.trim())
+                    val notBefore = notBeforeForCurrentBulkScope()
+                    _bulkCategoryPreviewRows.value = if (_bulkPastCategory.value) {
+                        transactionRepository.getBulkCategoryPreviewForMerchant(
+                            merchantName = merchantKeyForPreview,
+                            excludeId = current.id,
+                            notBefore = notBefore,
+                        )
+                    } else {
+                        emptyList()
+                    }
+                    _bulkCategorySaveConfirm.value = BulkCategorySaveConfirmParams(
+                        merchantName = merchantKeyForPreview,
+                        category = current.category,
+                        otherCount = _existingTransactionCount.value,
+                        scope = _bulkCategoryDateScope.value,
+                        pastCategory = _bulkPastCategory.value,
+                        pastMerchant = _bulkPastMerchant.value,
+                        pastType = _bulkPastType.value,
+                    )
+                    _isSaving.value = false
+                    return@launch
+                }
+            }
 
-        val splitPatches = _splits.value.map { s ->
-            SaveTransactionWorker.SplitPatch(
-                id = s.id,
-                category = s.category,
-                amount = s.amount.toPlainString(),
-                tags = s.tags.joinToString(",")
+            val latest = _editableTransaction.value ?: run {
+                _isSaving.value = false
+                return@launch
+            }
+            val originalTxn = _transaction.value
+            val normalizedTransaction = latest.copy(
+                merchantName = normalizeMerchantName(latest.merchantName),
+                tags = _pendingTags.value.joinToString(",")
             )
+
+            val hadSplitLinesSnapshot = _showSplitEditor.value && _splits.value.isNotEmpty()
+            val snapshotOriginalMerchant = _originalMerchantNameOnEdit.value
+            val snapshotOriginalCategory = _originalCategoryOnEdit.value
+
+            val removedIds = _removedReceiptIds.value.toList()
+            val removedPaths = removedIds.mapNotNull { id ->
+                _existingReceipts.value.find { it.id == id }?.path
+            }
+
+            val patch = SaveTransactionWorker.TransactionPatch(
+                id = normalizedTransaction.id,
+                amount = normalizedTransaction.amount.toPlainString(),
+                merchantName = normalizedTransaction.merchantName,
+                category = normalizedTransaction.category,
+                transactionType = normalizedTransaction.transactionType.name,
+                dateTime = normalizedTransaction.dateTime.toString(),
+                description = normalizedTransaction.description,
+                accountNumber = normalizedTransaction.accountNumber,
+                fromAccount = normalizedTransaction.fromAccount,
+                toAccount = normalizedTransaction.toAccount,
+                bankName = normalizedTransaction.bankName,
+                currency = normalizedTransaction.currency,
+                tags = normalizedTransaction.tags,
+                isRecurring = normalizedTransaction.isRecurring,
+                isExcludedFromTracking = normalizedTransaction.isExcludedFromTracking,
+                profileId = normalizedTransaction.profileId,
+                transferKind = normalizedTransaction.transferKind,
+                budgetImpactType = normalizedTransaction.budgetImpactType?.name,
+                budgetCategory = normalizedTransaction.budgetCategory,
+            )
+
+            val splitPatches = _splits.value.map { s ->
+                SaveTransactionWorker.SplitPatch(
+                    id = s.id,
+                    category = s.category,
+                    amount = s.amount.toPlainString(),
+                    tags = s.tags.joinToString(",")
+                )
+            }
+
+            val wantsPastBulkForWorker =
+                _bulkPastCategory.value || _bulkPastMerchant.value || _bulkPastType.value
+            val bulkNotBeforeIso = if (wantsPastBulkForWorker) {
+                notBeforeForCurrentBulkScope()?.toString().orEmpty()
+            } else {
+                ""
+            }
+
+            val snapshotIncomingCategory = _bulkIncomingCategory.value
+            val snapshotIncomingMerchant = _bulkIncomingMerchant.value
+
+            val inputData = SaveTransactionWorker.buildInputData(
+                patch = patch,
+                originalBank = originalTxn?.bankName,
+                originalAccount = originalTxn?.accountNumber,
+                pendingReceiptUris = _pendingReceiptUris.value,
+                removedReceiptIds = removedIds,
+                removedReceiptPaths = removedPaths,
+                updateCategoryForMerchant = _bulkPastCategory.value,
+                bulkCategoryNotBeforeIso = bulkNotBeforeIso,
+                bulkCategoryMerchantName = effectiveBulkCategoryMerchantKey(latest.merchantName.trim()),
+                bulkSyncMerchantName = _bulkPastMerchant.value,
+                bulkSyncTransactionType = _bulkPastType.value,
+                showSplitEditor = _showSplitEditor.value,
+                hasOriginalSplits = _originalSplits.value.isNotEmpty(),
+                splits = splitPatches,
+            )
+
+            val request = SaveTransactionWorker.buildRequest(inputData)
+            val workManager = WorkManager.getInstance(context)
+            workManager.enqueue(request)
+
+            // Optimistic: update in-memory state and navigate back immediately
+            _transaction.value = normalizedTransaction
+            _pendingReceiptUris.value = emptyList()
+            _removedReceiptIds.value = emptySet()
+            _pendingTags.value = emptyList()
+            _budgetImpactType.value = normalizedTransaction.budgetImpactType
+            _budgetCategory.value = normalizedTransaction.budgetCategory
+
+            // Clear edit state and signal success to navigate back
+            _isEditMode.value = false
+            _editableTransaction.value = null
+            _errorMessage.value = null
+            clearAllBulkPropagationSelections()
+            _existingTransactionCount.value = 0
+            _bulkCategoryDateScope.value = BulkCategoryDateScope.ALL_TIME
+            _bulkCategorySaveConfirm.value = null
+            _bulkCategoryPreviewRows.value = emptyList()
+            _originalMerchantNameOnEdit.value = null
+            _originalCategoryOnEdit.value = null
+            _suggestedMerchantRenames.value = emptyList()
+
+            // Observe the worker for background errors and post-save UX
+            observeSaveWorker(
+                workId = request.id,
+                saved = normalizedTransaction,
+                snapshotOriginalMerchant = snapshotOriginalMerchant,
+                snapshotOriginalCategory = snapshotOriginalCategory,
+                hadSplitLines = hadSplitLinesSnapshot,
+                appliedIncomingCategory = snapshotIncomingCategory,
+                appliedIncomingMerchant = snapshotIncomingMerchant,
+            )
+
+            // Navigate back immediately via success signal
+            _saveSuccess.value = true
+            } catch (e: Exception) {
+                _isSaving.value = false
+                _errorMessage.value = e.message ?: "Save failed"
+            }
         }
-
-        val inputData = SaveTransactionWorker.buildInputData(
-            patch = patch,
-            originalBank = originalTxn?.bankName,
-            originalAccount = originalTxn?.accountNumber,
-            pendingReceiptUris = _pendingReceiptUris.value,
-            removedReceiptIds = removedIds,
-            removedReceiptPaths = removedPaths,
-            updateCategoryForMerchant = _updateExistingTransactions.value,
-            showSplitEditor = _showSplitEditor.value,
-            hasOriginalSplits = _originalSplits.value.isNotEmpty(),
-            splits = splitPatches,
-        )
-
-        val request = SaveTransactionWorker.buildRequest(inputData)
-        val workManager = WorkManager.getInstance(context)
-        workManager.enqueue(request)
-
-        // Optimistic: update in-memory state and navigate back immediately
-        _transaction.value = normalizedTransaction
-        _pendingReceiptUris.value = emptyList()
-        _removedReceiptIds.value = emptySet()
-        _pendingTags.value = emptyList()
-        _budgetImpactType.value = normalizedTransaction.budgetImpactType
-        _budgetCategory.value = normalizedTransaction.budgetCategory
-
-        // Clear edit state and signal success to navigate back
-        _isEditMode.value = false
-        _editableTransaction.value = null
-        _errorMessage.value = null
-        _updateExistingTransactions.value = false
-        _existingTransactionCount.value = 0
-        _originalMerchantNameOnEdit.value = null
-        _originalCategoryOnEdit.value = null
-        _suggestedMerchantRenames.value = emptyList()
-
-        // Observe the worker for background errors and post-save UX
-        observeSaveWorker(request.id, normalizedTransaction, originalTxn)
-
-        // Navigate back immediately via success signal
-        _saveSuccess.value = true
     }
 
     private fun observeSaveWorker(
         workId: java.util.UUID,
         saved: TransactionEntity,
-        originalTxn: TransactionEntity?,
+        snapshotOriginalMerchant: String?,
+        snapshotOriginalCategory: String?,
+        hadSplitLines: Boolean,
+        appliedIncomingCategory: Boolean,
+        appliedIncomingMerchant: Boolean,
     ) {
         val workManager = WorkManager.getInstance(context)
         viewModelScope.launch {
+            var workTerminalEventHandled = false
             workManager.getWorkInfoByIdFlow(workId).collect { info ->
                 when (info?.state) {
                     WorkInfo.State.RUNNING -> _isSaving.value = true
                     WorkInfo.State.SUCCEEDED -> {
-                        _isSaving.value = false
-                        // Trigger post-save UX that requires the transaction to be saved first
-                        val originalMerchant = _originalMerchantNameOnEdit.value
-                        val futureParsingPrompt = buildFutureParsingPrompt(
-                            originalTxn = originalTxn,
-                            saved = saved,
-                            originalMerchant = originalMerchant,
+                        if (workTerminalEventHandled) return@collect
+                        workTerminalEventHandled = true
+                        val bulkUndoCount = info.outputData.getInt(
+                            SaveTransactionWorker.OUTPUT_BULK_CATEGORY_UNDO_COUNT,
+                            0,
                         )
-                        pendingFutureParsingPrompt = futureParsingPrompt
-
-                        if (originalMerchant != null &&
-                            !saved.merchantName.equals(originalMerchant, ignoreCase = true)
-                        ) {
-                            val similarTransactions = transactionRepository.findSimilarTransactionsForRename(
-                                originalMerchant = originalMerchant,
-                                newMerchantName = saved.merchantName,
-                                excludeTransactionId = saved.id,
-                            )
-                            if (similarTransactions.isNotEmpty()) {
-                                _merchantRenameReview.value = MerchantRenameReviewState(
-                                    newMerchantName = saved.merchantName,
-                                    transactions = similarTransactions,
-                                )
-                                return@collect
-                            }
+                        if (bulkUndoCount > 0) {
+                            _bulkCategoryUndoSnackCount.value = bulkUndoCount
                         }
-                        finishSaveFlow()
+                        try {
+                            if (appliedIncomingCategory) {
+                                merchantMappingRepository.setMapping(
+                                    saved.merchantName.trim(),
+                                    saved.category,
+                                )
+                            }
+                            if (appliedIncomingMerchant &&
+                                snapshotOriginalMerchant != null &&
+                                !saved.merchantName.equals(snapshotOriginalMerchant, ignoreCase = true)
+                            ) {
+                                merchantAliasRepository.setAlias(
+                                    snapshotOriginalMerchant.trim(),
+                                    saved.merchantName.trim(),
+                                )
+                                val bodyExtras = SmsMerchantAliasHints.deriveExtraAliasSources(
+                                    smsBody = saved.smsBody,
+                                    rawMerchant = snapshotOriginalMerchant.trim(),
+                                    displayMerchant = saved.merchantName.trim(),
+                                )
+                                for (src in bodyExtras.take(2)) {
+                                    val audit = MerchantAliasAuditor.audit(
+                                        MerchantAliasEntity(
+                                            sourceMerchant = src,
+                                            displayName = saved.merchantName.trim(),
+                                        ),
+                                    )
+                                    if (audit.risk == MerchantAliasAuditor.RiskLevel.OK) {
+                                        merchantAliasRepository.setAlias(src, saved.merchantName.trim())
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            _errorMessage.value = "Saved transaction, but failed to update future SMS rules: ${e.message}"
+                        }
+                        pendingFutureParsingPrompt = buildFutureParsingPrompt(
+                            saved = saved,
+                            originalMerchant = snapshotOriginalMerchant,
+                            originalCategoryOnEdit = snapshotOriginalCategory,
+                            hadSplitLines = hadSplitLines,
+                            appliedIncomingCategory = appliedIncomingCategory,
+                            appliedIncomingMerchant = appliedIncomingMerchant,
+                        )
+
+                        val needSimilarMerchantScan = snapshotOriginalMerchant != null &&
+                            !saved.merchantName.equals(snapshotOriginalMerchant, ignoreCase = true)
+                        if (needSimilarMerchantScan) {
+                            val origMerchantForScan = snapshotOriginalMerchant!!
+                            launch {
+                                try {
+                                    val similar = withContext(Dispatchers.IO) {
+                                        transactionRepository.findSimilarTransactionsForRename(
+                                            originalMerchant = origMerchantForScan,
+                                            newMerchantName = saved.merchantName,
+                                            excludeTransactionId = saved.id,
+                                        )
+                                    }
+                                    if (similar.isNotEmpty()) {
+                                        _merchantRenameReview.value = MerchantRenameReviewState(
+                                            newMerchantName = saved.merchantName,
+                                            transactions = similar,
+                                        )
+                                    } else {
+                                        finishSaveFlow()
+                                    }
+                                } catch (e: Exception) {
+                                    _errorMessage.value =
+                                        "Could not load similar transactions: ${e.message}"
+                                    finishSaveFlow()
+                                } finally {
+                                    _isSaving.value = false
+                                }
+                            }
+                        } else {
+                            _isSaving.value = false
+                            finishSaveFlow()
+                        }
                     }
                     WorkInfo.State.FAILED -> {
+                        if (workTerminalEventHandled) return@collect
+                        workTerminalEventHandled = true
                         _isSaving.value = false
                         val error = info.outputData.getString(SaveTransactionWorker.OUTPUT_ERROR)
                         _errorMessage.value = "Save failed: ${error ?: "Unknown error"}. Please try again."
                     }
-                    else -> { /* ENQUEUED, BLOCKED, CANCELLED — no action */ }
+                    WorkInfo.State.CANCELLED -> {
+                        if (workTerminalEventHandled) return@collect
+                        workTerminalEventHandled = true
+                        _isSaving.value = false
+                    }
+                    else -> { /* ENQUEUED, BLOCKED — no action */ }
                 }
             }
         }
@@ -982,8 +1395,10 @@ class TransactionDetailViewModel @Inject constructor(
         }
     }
 
-    fun confirmFutureParsing() {
+    fun confirmFutureParsing(extraBodyAliasSources: Collection<String> = emptyList()) {
         val prompt = _futureParsingPrompt.value ?: return
+        val allowedExtras = prompt.optionalBodyAliasSources.toSet()
+        val extrasToSave = extraBodyAliasSources.map { it.trim() }.filter { it in allowedExtras }.distinct()
         viewModelScope.launch {
             try {
                 if (prompt.merchantChanged) {
@@ -991,6 +1406,9 @@ class TransactionDetailViewModel @Inject constructor(
                         prompt.rawMerchantName,
                         prompt.displayMerchantName,
                     )
+                    for (src in extrasToSave) {
+                        merchantAliasRepository.setAlias(src, prompt.displayMerchantName)
+                    }
                 }
                 merchantMappingRepository.setMapping(
                     prompt.displayMerchantName,
@@ -1011,24 +1429,42 @@ class TransactionDetailViewModel @Inject constructor(
     }
 
     private fun buildFutureParsingPrompt(
-        originalTxn: TransactionEntity?,
         saved: TransactionEntity,
         originalMerchant: String?,
+        originalCategoryOnEdit: String?,
+        hadSplitLines: Boolean,
+        appliedIncomingCategory: Boolean,
+        appliedIncomingMerchant: Boolean,
     ): FutureParsingPromptState? {
-        if (_showSplitEditor.value && _splits.value.isNotEmpty()) return null
+        if (hadSplitLines) return null
 
         val merchantChanged = originalMerchant != null &&
             !saved.merchantName.equals(originalMerchant, ignoreCase = true)
-        val originalCategory = _originalCategoryOnEdit.value
-        val categoryChanged = originalCategory != null && saved.category != originalCategory
-        if (!merchantChanged && !categoryChanged) return null
+        val categoryChanged = originalCategoryOnEdit != null && saved.category != originalCategoryOnEdit
+        val promptMerchant = merchantChanged && !appliedIncomingMerchant
+        val promptCategory = categoryChanged && !appliedIncomingCategory
+        if (!promptMerchant && !promptCategory) return null
+
+        val rawForHints = originalMerchant?.trim().orEmpty().ifEmpty { saved.merchantName }
+        val snippet = SmsMerchantAliasHints.snippetForUi(saved.smsBody)
+        val bodyExtras = if (promptMerchant && rawForHints.isNotEmpty()) {
+            SmsMerchantAliasHints.deriveExtraAliasSources(
+                smsBody = saved.smsBody,
+                rawMerchant = rawForHints,
+                displayMerchant = saved.merchantName,
+            )
+        } else {
+            emptyList()
+        }
 
         return FutureParsingPromptState(
             rawMerchantName = originalMerchant ?: saved.merchantName,
             displayMerchantName = saved.merchantName,
             category = saved.category,
-            merchantChanged = merchantChanged,
-            categoryChanged = categoryChanged,
+            merchantChanged = promptMerchant,
+            categoryChanged = promptCategory,
+            smsSnippet = snippet,
+            optionalBodyAliasSources = bodyExtras,
         )
     }
 
@@ -1050,6 +1486,16 @@ class TransactionDetailViewModel @Inject constructor(
         }
     }
     
+    /**
+     * Merchant key used to find sibling transactions for bulk updates.
+     * Uses the name from when edit mode started when available so renames on the
+     * current row still match historical rows.
+     */
+    private fun effectiveBulkCategoryMerchantKey(fieldMerchantTrimmed: String): String {
+        val raw = _originalMerchantNameOnEdit.value?.trim()?.takeIf { it.isNotBlank() } ?: fieldMerchantTrimmed
+        return normalizeMerchantName(raw)
+    }
+
     /**
      * Normalizes merchant name to consistent format.
      * Converts all-caps to proper case, preserves already mixed case.

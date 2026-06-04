@@ -7,6 +7,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 
+/**
+ * Default **Pattern B** shell: standard [TopAppBar] and [Scaffold] with optional transparency.
+ * For collapsing large titles or blur, use [CustomTitleTopAppBar] or [PennyWiseStandardScaffold] per [docs/scaffold-patterns.md](../../../../../docs/scaffold-patterns.md).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PennyWiseScaffold(

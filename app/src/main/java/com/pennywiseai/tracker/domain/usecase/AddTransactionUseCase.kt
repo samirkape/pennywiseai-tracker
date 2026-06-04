@@ -41,6 +41,7 @@ class AddTransactionUseCase @Inject constructor(
         budgetImpactType: BudgetImpactType? = null,
         smsBody: String? = null,
         smsSender: String? = null,
+        transferKind: String? = null,
     ): Long {
         val transactionHash = if (!smsBody.isNullOrBlank() && !smsSender.isNullOrBlank()) {
             generateSmsBackedTransactionHash(smsSender, smsBody)
@@ -79,6 +80,7 @@ class AddTransactionUseCase @Inject constructor(
             receiptPath = null,
             budgetCategory = budgetCategory,
             budgetImpactType = budgetImpactType,
+            transferKind = transferKind,
         )
 
         // Insert the transaction

@@ -48,7 +48,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -92,7 +92,7 @@ fun QuickKeywordRulesScreen(
     }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
+    val resources = LocalResources.current
 
     val scrollBehaviorSmall = androidx.compose.material3.TopAppBarDefaults.pinnedScrollBehavior()
     val scrollBehaviorLarge = androidx.compose.material3.TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -110,12 +110,12 @@ fun QuickKeywordRulesScreen(
             if (session != null && result.totalUpdated > 0) {
                 scope.launch {
                     snackbarHostState.showSnackbar(
-                        message = context.getString(
+                        message = resources.getString(
                             R.string.quick_keyword_undo_snackbar,
                             result.totalUpdated,
                             session.remainingMinutes(),
                         ),
-                        actionLabel = context.getString(R.string.quick_keyword_undo_action),
+                        actionLabel = resources.getString(R.string.quick_keyword_undo_action),
                         duration = androidx.compose.material3.SnackbarDuration.Long,
                     ).let { action ->
                         if (action == androidx.compose.material3.SnackbarResult.ActionPerformed) {
@@ -126,7 +126,7 @@ fun QuickKeywordRulesScreen(
                                             R.string.quick_keyword_undo_success
                                         } else {
                                             R.string.quick_keyword_undo_expired
-                                        }.let { context.getString(it) },
+                                        }.let { resources.getString(it) },
                                     )
                                 }
                             }
@@ -335,7 +335,7 @@ fun QuickKeywordRulesScreen(
                     viewModel.undoLastBatchApply { undone ->
                         scope.launch {
                             snackbarHostState.showSnackbar(
-                                context.getString(
+                                resources.getString(
                                     if (undone) R.string.quick_keyword_undo_success
                                     else R.string.quick_keyword_undo_expired,
                                 ),

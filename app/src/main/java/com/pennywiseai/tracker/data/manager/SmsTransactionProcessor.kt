@@ -19,6 +19,7 @@ import com.pennywiseai.tracker.data.repository.TransactionRepository
 import com.pennywiseai.tracker.domain.repository.RuleRepository
 import com.pennywiseai.tracker.domain.service.RuleEngine
 import com.pennywiseai.tracker.domain.service.QuickKeywordRuleMatcher
+import com.pennywiseai.tracker.domain.service.SelfTransferDetector
 import com.pennywiseai.tracker.domain.usecase.CreditCardPaymentLinker
 import java.math.BigDecimal
 import java.time.Instant
@@ -43,7 +44,8 @@ class SmsTransactionProcessor @Inject constructor(
     private val subscriptionRepository: SubscriptionRepository,
     private val ruleRepository: RuleRepository,
     private val ruleEngine: RuleEngine,
-    private val creditCardPaymentLinker: CreditCardPaymentLinker
+    private val creditCardPaymentLinker: CreditCardPaymentLinker,
+    private val selfTransferDetector: SelfTransferDetector
 ) {
     companion object {
         private const val TAG = "SmsTransactionProcessor"
@@ -199,6 +201,18 @@ class SmsTransactionProcessor @Inject constructor(
 
                 // Process balance updates
                 processBalanceUpdate(parsedTransaction, finalEntity, rowId)
+
+                // Classify TRANSFER transactions as self-transfer, others-transfer, or pending review
+                if (finalEntity.transactionType == com.pennywiseai.tracker.data.database.entity.TransactionType.TRANSFER) {
+                    runCatching {
+                        val classification = selfTransferDetector.classify(finalEntity.copy(id = rowId))
+                        if (classification != null) {
+                            transactionRepository.updateTransferKind(rowId, classification)
+                        }
+                    }.onFailure { e ->
+                        Log.w(TAG, "Self-transfer classification failed: ${e.message}")
+                    }
+                }
 
                 // Try to link credit card bill payment legs together. This both
                 // de-duplicates spending (TRANSFER is excluded from totals) and

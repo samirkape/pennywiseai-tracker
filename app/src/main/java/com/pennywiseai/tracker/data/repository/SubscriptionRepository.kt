@@ -1,8 +1,11 @@
 package com.pennywiseai.tracker.data.repository
 
 import com.pennywiseai.tracker.data.database.dao.SubscriptionDao
+import com.pennywiseai.tracker.data.database.dao.TransactionDao
 import com.pennywiseai.tracker.data.database.entity.SubscriptionEntity
 import com.pennywiseai.tracker.data.database.entity.SubscriptionState
+import com.pennywiseai.tracker.data.database.entity.TransactionEntity
+import com.pennywiseai.tracker.data.database.entity.TransactionType
 import com.pennywiseai.parser.core.bank.HDFCBankParser
 import com.pennywiseai.parser.core.bank.IndianBankParser
 import com.pennywiseai.parser.core.bank.SBIBankParser
@@ -12,6 +15,7 @@ import com.pennywiseai.tracker.ui.icons.CategoryMapping
 import kotlinx.coroutines.flow.Flow
 import java.math.BigDecimal
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,11 +23,14 @@ import android.util.Log
 
 @Singleton
 class SubscriptionRepository @Inject constructor(
-    private val subscriptionDao: SubscriptionDao
+    private val subscriptionDao: SubscriptionDao,
+    private val transactionDao: TransactionDao,
 ) {
     
     companion object {
         private const val TAG = "SubscriptionRepository"
+        /** Matches [com.pennywiseai.tracker.domain.usecase.AddTransactionUseCase] manual subscription rows */
+        const val MANUAL_SUBSCRIPTION_BANK = "Manual Entry"
     }
     
     fun getAllSubscriptions(): Flow<List<SubscriptionEntity>> = 
@@ -57,8 +64,20 @@ class SubscriptionRepository @Inject constructor(
     suspend fun unhideSubscription(id: Long) = 
         updateSubscriptionState(id, SubscriptionState.ACTIVE)
     
-    suspend fun deleteSubscription(id: Long) = 
+    suspend fun deleteSubscription(id: Long) {
+        val existing = subscriptionDao.getSubscriptionById(id)
         subscriptionDao.deleteSubscriptionById(id)
+        if (existing != null && existing.bankName == MANUAL_SUBSCRIPTION_BANK) {
+            val now = LocalDateTime.now()
+            transactionDao.clearRecurringForMerchantAmountMatching(
+                merchantName = existing.merchantName,
+                amount = existing.amount,
+                currency = existing.currency,
+                transferType = TransactionType.TRANSFER,
+                updatedAt = now,
+            )
+        }
+    }
     
     /**
      * Creates or updates a subscription from HDFC E-Mandate info
@@ -220,6 +239,82 @@ class SubscriptionRepository @Inject constructor(
         }
 
         return subscriptionDao.insertSubscription(subscription)
+    }
+
+    /**
+     * Keeps [SubscriptionEntity] rows in sync when a transaction's recurring flag or
+     * merchant/amount changes on save. Only creates/updates/deletes **Manual Entry** rows so
+     * mandate-backed subscriptions are not removed.
+     */
+    suspend fun syncRecurringWithSubscriptions(
+        before: TransactionEntity,
+        after: TransactionEntity,
+    ) {
+        if (after.transactionType == TransactionType.TRANSFER) return
+
+        if (after.isRecurring) {
+            if (before.isRecurring &&
+                (before.merchantName != after.merchantName || !areAmountsEqual(before.amount, after.amount))
+            ) {
+                removeManualSubscriptionLinkedToTransaction(before)
+            }
+            upsertManualSubscriptionForRecurringTransaction(after)
+            return
+        }
+
+        if (before.isRecurring && !after.isRecurring) {
+            removeManualSubscriptionLinkedToTransaction(before)
+        }
+    }
+
+    private suspend fun removeManualSubscriptionLinkedToTransaction(tx: TransactionEntity) {
+        val candidates = subscriptionDao.getActiveSubscriptionsForMerchant(tx.merchantName)
+        val match = candidates.firstOrNull {
+            it.bankName == MANUAL_SUBSCRIPTION_BANK && areAmountsEqual(it.amount, tx.amount)
+        } ?: return
+        subscriptionDao.deleteSubscriptionById(match.id)
+    }
+
+    private suspend fun upsertManualSubscriptionForRecurringTransaction(tx: TransactionEntity) {
+        val nextPayment = tx.dateTime.toLocalDate().plusMonths(1)
+        val vendorSubs = subscriptionDao.getActiveSubscriptionsForMerchant(tx.merchantName)
+        val manualMatch = vendorSubs.firstOrNull {
+            it.bankName == MANUAL_SUBSCRIPTION_BANK && areAmountsEqual(it.amount, tx.amount)
+        }
+        if (manualMatch != null) {
+            subscriptionDao.updateSubscription(
+                manualMatch.copy(
+                    merchantName = tx.merchantName,
+                    amount = tx.amount,
+                    category = tx.category,
+                    currency = tx.currency,
+                    nextPaymentDate = nextPayment,
+                    updatedAt = LocalDateTime.now(),
+                )
+            )
+            return
+        }
+
+        val primary = subscriptionDao.getActiveSubscriptionByMerchant(tx.merchantName)
+        if (primary != null && primary.bankName != MANUAL_SUBSCRIPTION_BANK &&
+            areAmountsEqual(primary.amount, tx.amount)
+        ) {
+            return
+        }
+
+        subscriptionDao.insertSubscription(
+            SubscriptionEntity(
+                merchantName = tx.merchantName,
+                amount = tx.amount,
+                nextPaymentDate = nextPayment,
+                state = SubscriptionState.ACTIVE,
+                bankName = MANUAL_SUBSCRIPTION_BANK,
+                category = tx.category,
+                currency = tx.currency,
+                createdAt = LocalDateTime.now(),
+                updatedAt = LocalDateTime.now(),
+            )
+        )
     }
 
     private fun determineCategory(merchantName: String): String {

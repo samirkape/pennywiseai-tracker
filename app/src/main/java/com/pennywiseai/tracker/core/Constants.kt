@@ -5,6 +5,14 @@ package com.pennywiseai.tracker.core
  * Application-wide constants to avoid hardcoded values
  */
 object Constants {
+
+    /**
+     * Product feature switches (ship-time toggles).
+     * When false, the chat route is not registered and UI must not navigate to it.
+     */
+    object Features {
+        const val AI_CHAT_ENABLED = false
+    }
     
     /**
      * SMS Processing Configuration
@@ -60,6 +68,7 @@ object Constants {
      */
     object Routes {
         const val HOME = "home"
+        const val BUDGETS = "budgets"
         const val TRANSACTIONS = "transactions"
         const val ANALYTICS = "analytics"
         const val CHAT = "chat"

@@ -108,6 +108,42 @@ interface TransactionDao {
     @Query("SELECT DISTINCT merchant_name FROM transactions WHERE is_deleted = 0 ORDER BY merchant_name ASC")
     suspend fun getDistinctMerchantNames(): List<String>
 
+    /**
+     * Prunes the merchant universe for rename review: only names appearing on at least one
+     * non-deleted, tracked row other than [excludeId], and matching any of up to six LIKE tokens.
+     * Tokens should be short substrings derived from the old/new labels (see repository).
+     */
+    @Query(
+        """
+        SELECT DISTINCT merchant_name FROM transactions
+        WHERE is_deleted = 0
+        AND is_excluded_from_tracking = 0
+        AND id != :excludeId
+        AND TRIM(merchant_name) != ''
+        AND LOWER(TRIM(merchant_name)) != LOWER(TRIM(:newName))
+        AND (
+            (LENGTH(:t0) > 0 AND LOWER(merchant_name) LIKE '%' || LOWER(:t0) || '%') OR
+            (LENGTH(:t1) > 0 AND LOWER(merchant_name) LIKE '%' || LOWER(:t1) || '%') OR
+            (LENGTH(:t2) > 0 AND LOWER(merchant_name) LIKE '%' || LOWER(:t2) || '%') OR
+            (LENGTH(:t3) > 0 AND LOWER(merchant_name) LIKE '%' || LOWER(:t3) || '%') OR
+            (LENGTH(:t4) > 0 AND LOWER(merchant_name) LIKE '%' || LOWER(:t4) || '%') OR
+            (LENGTH(:t5) > 0 AND LOWER(merchant_name) LIKE '%' || LOWER(:t5) || '%')
+        )
+        LIMIT :resultLimit
+        """,
+    )
+    suspend fun getDistinctMerchantNamesForRenameCandidates(
+        excludeId: Long,
+        newName: String,
+        t0: String,
+        t1: String,
+        t2: String,
+        t3: String,
+        t4: String,
+        t5: String,
+        resultLimit: Int,
+    ): List<String>
+
     @Query("SELECT tags FROM transactions WHERE is_deleted = 0 AND tags != '' ORDER BY updated_at DESC")
     suspend fun getDistinctTagStrings(): List<String>
 
@@ -148,20 +184,74 @@ interface TransactionDao {
     @Query("UPDATE transactions SET linked_transaction_id = NULL")
     suspend fun clearAllLinkedTransactionIds()
     
-    @Query("UPDATE transactions SET category = :newCategory WHERE merchant_name = :merchantName")
-    suspend fun updateCategoryForMerchant(merchantName: String, newCategory: String)
+    @Query(
+        """
+        UPDATE transactions SET category = :newCategory, updated_at = :updatedAt
+        WHERE is_deleted = 0
+        AND LOWER(merchant_name) = LOWER(:merchantName)
+        AND ((:applySince = 0) OR (date_time >= :sinceCutoff))
+        """
+    )
+    suspend fun updateCategoryForMerchant(
+        merchantName: String,
+        newCategory: String,
+        updatedAt: LocalDateTime,
+        applySince: Int,
+        sinceCutoff: LocalDateTime,
+    )
 
-    @Query("UPDATE transactions SET merchant_name = :newMerchantName WHERE merchant_name = :oldMerchantName")
-    suspend fun updateMerchantNameForMerchant(oldMerchantName: String, newMerchantName: String)
+    @Query(
+        """
+        UPDATE transactions SET
+            transaction_type = :transactionType,
+            transfer_kind = :transferKind,
+            updated_at = :updatedAt
+        WHERE is_deleted = 0
+        AND LOWER(merchant_name) = LOWER(:merchantName)
+        AND id != :excludeId
+        AND ((:applySince = 0) OR (date_time >= :sinceCutoff))
+        """
+    )
+    suspend fun bulkUpdateTypeAndTransferKindForMerchant(
+        merchantName: String,
+        transactionType: TransactionType,
+        transferKind: String?,
+        excludeId: Long,
+        updatedAt: LocalDateTime,
+        applySince: Int,
+        sinceCutoff: LocalDateTime,
+    ): Int
+
+    @Query(
+        """
+        UPDATE transactions SET merchant_name = :newMerchantName, updated_at = :updatedAt
+        WHERE is_deleted = 0 AND LOWER(merchant_name) = LOWER(:oldMerchantName)
+        """
+    )
+    suspend fun updateMerchantNameForMerchant(
+        oldMerchantName: String,
+        newMerchantName: String,
+        updatedAt: LocalDateTime,
+    )
 
     @Query("SELECT COUNT(*) FROM transactions WHERE merchant_name = :merchantName AND id != :excludeId")
     suspend fun getTransactionCountForMerchant(merchantName: String, excludeId: Long): Int
 
-    @Query("""
+    @Query(
+        """
         SELECT COUNT(*) FROM transactions
-        WHERE is_deleted = 0 AND LOWER(merchant_name) = LOWER(:merchantName) AND id != :excludeId
-    """)
-    suspend fun getActiveTransactionCountForMerchant(merchantName: String, excludeId: Long): Int
+        WHERE is_deleted = 0
+        AND LOWER(merchant_name) = LOWER(:merchantName)
+        AND id != :excludeId
+        AND ((:applySince = 0) OR (date_time >= :sinceCutoff))
+        """
+    )
+    suspend fun getActiveTransactionCountForMerchant(
+        merchantName: String,
+        excludeId: Long,
+        applySince: Int,
+        sinceCutoff: LocalDateTime,
+    ): Int
 
     @Query("""
         SELECT * FROM transactions
@@ -368,4 +458,112 @@ interface TransactionDao {
         ORDER BY date_time ASC
     """)
     suspend fun getUnlinkedCcBillPayments(): List<TransactionEntity>
+
+    /**
+     * Clears recurring on transactions that matched a deleted manual subscription
+     * (same merchant, amount, currency; excludes transfers).
+     */
+    @Query(
+        """
+        UPDATE transactions
+        SET is_recurring = 0, updated_at = :updatedAt
+        WHERE is_deleted = 0
+          AND is_recurring = 1
+          AND merchant_name = :merchantName
+          AND amount = :amount
+          AND currency = :currency
+          AND transaction_type != :transferType
+        """
+    )
+    suspend fun clearRecurringForMerchantAmountMatching(
+        merchantName: String,
+        amount: BigDecimal,
+        currency: String,
+        transferType: TransactionType,
+        updatedAt: LocalDateTime,
+    ): Int
+
+    @Query(
+        """
+        SELECT id, category FROM transactions
+        WHERE is_deleted = 0
+        AND LOWER(merchant_name) = LOWER(:merchantName)
+        AND id != :excludeId
+        AND ((:applySince = 0) OR (date_time >= :sinceCutoff))
+        """
+    )
+    suspend fun getIdCategoryPairsForBulkCategoryUpdate(
+        merchantName: String,
+        excludeId: Long,
+        applySince: Int,
+        sinceCutoff: LocalDateTime,
+    ): List<TransactionIdCategoryRow>
+
+    @Query(
+        """
+        SELECT id, merchant_name, category, amount, currency, date_time FROM transactions
+        WHERE is_deleted = 0
+        AND LOWER(merchant_name) = LOWER(:merchantName)
+        AND id != :excludeId
+        AND ((:applySince = 0) OR (date_time >= :sinceCutoff))
+        ORDER BY date_time DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun getBulkCategoryPreviewRows(
+        merchantName: String,
+        excludeId: Long,
+        applySince: Int,
+        sinceCutoff: LocalDateTime,
+        limit: Int,
+    ): List<BulkCategoryPreviewDaoRow>
+
+    @Query(
+        """
+        UPDATE transactions SET category = :category, updated_at = :updatedAt
+        WHERE id = :id AND is_deleted = 0
+        """
+    )
+    suspend fun updateTransactionCategoryById(
+        id: Long,
+        category: String,
+        updatedAt: LocalDateTime,
+    ): Int
+
+    @Query("""
+        SELECT * FROM transactions
+        WHERE is_deleted = 0
+        AND transaction_type = 'TRANSFER'
+        AND transfer_kind = 'SELF_TRANSFER_PENDING'
+        ORDER BY date_time DESC
+    """)
+    fun getPendingSelfTransfers(): Flow<List<TransactionEntity>>
+
+    @Query("""
+        SELECT COUNT(*) FROM transactions
+        WHERE is_deleted = 0
+        AND transaction_type = 'TRANSFER'
+        AND transfer_kind = 'SELF_TRANSFER_PENDING'
+    """)
+    fun getPendingSelfTransferCount(): Flow<Int>
+
+    @Query("""
+        UPDATE transactions SET transfer_kind = :transferKind, updated_at = :updatedAt
+        WHERE id = :id
+    """)
+    suspend fun updateTransferKind(id: Long, transferKind: String, updatedAt: LocalDateTime): Int
 }
+
+data class TransactionIdCategoryRow(
+    @ColumnInfo(name = "id") val id: Long,
+    @ColumnInfo(name = "category") val category: String,
+)
+
+data class BulkCategoryPreviewDaoRow(
+    @ColumnInfo(name = "id") val id: Long,
+    @ColumnInfo(name = "merchant_name") val merchantName: String,
+    @ColumnInfo(name = "category") val category: String,
+    @ColumnInfo(name = "amount") val amount: BigDecimal,
+    @ColumnInfo(name = "currency") val currency: String,
+    @ColumnInfo(name = "date_time") val dateTime: LocalDateTime,
+)

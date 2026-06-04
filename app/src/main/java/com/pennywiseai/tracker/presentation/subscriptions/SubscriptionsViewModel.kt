@@ -100,6 +100,20 @@ class SubscriptionsViewModel @Inject constructor(
             }
         }
     }
+
+    fun deleteSubscriptionPermanently(subscriptionId: Long) {
+        viewModelScope.launch {
+            subscriptionRepository.deleteSubscription(subscriptionId)
+        }
+    }
+
+    fun saveSubscriptionEdits(subscription: SubscriptionEntity) {
+        viewModelScope.launch {
+            subscriptionRepository.updateSubscription(
+                subscription.copy(updatedAt = java.time.LocalDateTime.now())
+            )
+        }
+    }
 }
 
 data class SubscriptionsUiState(

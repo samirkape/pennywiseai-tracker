@@ -67,7 +67,7 @@ import com.pennywiseai.tracker.data.database.entity.UnrecognizedSmsEntity
  */
 @Database(
     entities = [TransactionEntity::class, SubscriptionEntity::class, ChatMessage::class, MerchantMappingEntity::class, MerchantAliasEntity::class, CategoryEntity::class, AccountBalanceEntity::class, UnrecognizedSmsEntity::class, CardEntity::class, RuleEntity::class, RuleApplicationEntity::class, ExchangeRateEntity::class, BudgetEntity::class, BudgetCategoryEntity::class, BudgetMonthSnapshotEntity::class, BudgetCategoryMonthSnapshotEntity::class, TransactionSplitEntity::class, BankNotificationEntity::class, LoanEntity::class, TransactionGroupEntity::class, ProfileEntity::class, SalaryMonthOverrideEntity::class, TransactionReceiptEntity::class],
-    version = 55,
+    version = 56,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -119,6 +119,7 @@ import com.pennywiseai.tracker.data.database.entity.UnrecognizedSmsEntity
         // 52→53 is a manual migration registered in DatabaseModule (add tags to transactions, drop transaction_categories)
         // 53→54 is a manual migration registered in DatabaseModule (add linked_transaction_id + transfer_kind to transactions)
         // 54→55 is a manual migration registered in DatabaseModule (backfill HDFC→CRED Club bill payments)
+        // 55→56 is a manual migration registered in DatabaseModule (ensure Credit Card Payment category exists)
     ]
 )
 @TypeConverters(Converters::class)
@@ -181,7 +182,8 @@ abstract class PennyWiseDatabase : RoomDatabase() {
                         MIGRATION_51_52,
                         MIGRATION_52_53,
                         MIGRATION_53_54,
-                        MIGRATION_54_55
+                        MIGRATION_54_55,
+                        MIGRATION_55_56
                     )
                     .build()
                 INSTANCE = instance
@@ -632,6 +634,20 @@ abstract class PennyWiseDatabase : RoomDatabase() {
                           OR LOWER(IFNULL(`sms_body`, '')) LIKE '%to cred club%'
                           OR LOWER(IFNULL(`sms_body`, '')) LIKE '% to cred %'
                       )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        /**
+         * Ensures the "Credit Card Payment" expense category exists so pickers and chips can show it.
+         */
+        val MIGRATION_55_56 = object : Migration(55, 56) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    INSERT OR IGNORE INTO categories (name, color, is_system, is_income, display_order, created_at, updated_at)
+                    VALUES ('Credit Card Payment', '#004C8F', 1, 0, 998, datetime('now'), datetime('now'))
                     """.trimIndent()
                 )
             }

@@ -20,6 +20,7 @@ import com.pennywiseai.tracker.presentation.common.TransactionTypeFilter
 import com.pennywiseai.tracker.presentation.common.defaultTimePeriod
 import com.pennywiseai.tracker.presentation.common.getDateRangeForPeriod
 import com.pennywiseai.tracker.presentation.common.getDateRangeForYearMonth
+import com.pennywiseai.tracker.presentation.common.isCcBillPayment
 import com.pennywiseai.tracker.presentation.common.parseYearMonthNavPeriod
 import com.pennywiseai.tracker.presentation.common.CurrencyGroupedTotals
 import com.pennywiseai.tracker.presentation.common.CurrencyTotals
@@ -428,10 +429,11 @@ class TransactionsViewModel @Inject constructor(
                                 allCats.filter { name ->
                                     categoryEntityMap[name]?.isIncome != false
                                 }
-                            TransactionTypeFilter.EXPENSE, TransactionTypeFilter.CREDIT ->
+                            TransactionTypeFilter.EXPENSE, TransactionTypeFilter.CREDIT, TransactionTypeFilter.CC_BILL_PAYMENT ->
                                 allCats.filter { name ->
                                     categoryEntityMap[name]?.isIncome != true
                                 }
+                            TransactionTypeFilter.EXCLUDED -> allCats
                             else -> allCats
                         }
                         emit(visibleCats)
@@ -606,6 +608,7 @@ class TransactionsViewModel @Inject constructor(
     }
     
     fun setCategoryFilter(category: String) {
+        _categoriesFilter.value = null
         _categoryFilter.value = category
     }
     
@@ -1047,7 +1050,8 @@ class TransactionsViewModel @Inject constructor(
         }
 
         // By default, hide transactions excluded from tracking; show them only when opted in.
-        val excludedBaseFlow = if (includeExcluded) {
+        // "Excluded" type filter needs the full list so excluded-only rows are visible.
+        val excludedBaseFlow = if (includeExcluded || typeFilter == TransactionTypeFilter.EXCLUDED) {
             baseFlow
         } else {
             baseFlow.map { txs -> txs.filter { !it.isExcludedFromTracking } }
@@ -1141,7 +1145,9 @@ class TransactionsViewModel @Inject constructor(
                 TransactionTypeFilter.EXPENSE -> transactions.filter { it.matchesAnalyticsSpendingFilter() }
                 TransactionTypeFilter.CREDIT -> transactions.filter { it.transactionType == TransactionType.CREDIT && it.loanId == null }
                 TransactionTypeFilter.TRANSFER -> transactions.filter { it.transactionType == TransactionType.TRANSFER }
+                TransactionTypeFilter.CC_BILL_PAYMENT -> transactions.filter { it.isCcBillPayment() }
                 TransactionTypeFilter.INVESTMENT -> transactions.filter { it.transactionType == TransactionType.INVESTMENT }
+                TransactionTypeFilter.EXCLUDED -> transactions.filter { it.isExcludedFromTracking }
             }
         }
 
@@ -1393,7 +1399,56 @@ class TransactionsViewModel @Inject constructor(
         // Create the report URL using hash fragment for privacy
         return "${Constants.Links.WEB_PARSER_URL}/#message=$encodedMessage&sender=$encodedSender&device=$encodedDeviceData&autoparse=true"
     }
-    
+
+    // ── Self-transfer review ──────────────────────────────────────────────────
+
+    val pendingSelfTransferCount: StateFlow<Int> =
+        transactionRepository.getPendingSelfTransferCount()
+            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, 0)
+
+    private val _selfTransferReview = MutableStateFlow<SelfTransferReviewState?>(null)
+    val selfTransferReview: StateFlow<SelfTransferReviewState?> = _selfTransferReview.asStateFlow()
+
+    fun startSelfTransferReview() {
+        viewModelScope.launch {
+            val pending = transactionRepository.getPendingSelfTransfers().first()
+            if (pending.isNotEmpty()) {
+                _selfTransferReview.value = SelfTransferReviewState(pending)
+            }
+        }
+    }
+
+    fun confirmSelfTransfer() {
+        advanceSelfTransferReview(confirm = true)
+    }
+
+    fun denySelfTransfer() {
+        advanceSelfTransferReview(confirm = false)
+    }
+
+    fun dismissSelfTransferReview() {
+        _selfTransferReview.value = null
+    }
+
+    private fun advanceSelfTransferReview(confirm: Boolean) {
+        val state = _selfTransferReview.value ?: return
+        val current = state.currentTransaction ?: return
+        viewModelScope.launch {
+            val newKind = if (confirm) {
+                com.pennywiseai.tracker.data.database.entity.TransferKind.SELF_TRANSFER
+            } else {
+                com.pennywiseai.tracker.data.database.entity.TransferKind.OTHERS_TRANSFER
+            }
+            transactionRepository.updateTransferKind(current.id, newKind)
+
+            val nextIndex = state.currentIndex + 1
+            if (nextIndex >= state.totalCount) {
+                _selfTransferReview.value = null
+            } else {
+                _selfTransferReview.value = state.copy(currentIndex = nextIndex)
+            }
+        }
+    }
 }
 
 data class TransactionsUiState(

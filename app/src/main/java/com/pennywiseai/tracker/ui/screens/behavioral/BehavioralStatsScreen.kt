@@ -10,7 +10,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.*
@@ -30,6 +29,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pennywiseai.tracker.presentation.common.TimePeriod
 import com.pennywiseai.tracker.ui.components.PennyWiseEmptyState
+import com.pennywiseai.tracker.ui.components.PennyWiseStandardScaffold
 import com.pennywiseai.tracker.ui.components.cards.ListItemCardV2
 import com.pennywiseai.tracker.ui.components.cards.PennyWiseCardV2
 import com.pennywiseai.tracker.ui.components.cards.SectionHeaderV2
@@ -39,7 +39,6 @@ import com.pennywiseai.tracker.ui.effects.rememberOverscrollFlingBehavior
 import com.pennywiseai.tracker.ui.theme.*
 import com.pennywiseai.tracker.utils.CurrencyFormatter
 import java.math.BigDecimal
-import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,33 +73,11 @@ fun BehavioralStatsScreen(
 
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
-    Scaffold(
-        modifier = Modifier,
-        containerColor = Color.Transparent,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Behavioral Stats",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.background
-                ),
-                scrollBehavior = scrollBehavior
-            )
-        }
+    PennyWiseStandardScaffold(
+        title = "Behavioral Stats",
+        onNavigateBack = onNavigateBack,
+        scrollBehavior = scrollBehavior,
+        containerColor = MaterialTheme.colorScheme.background,
     ) { paddingValues ->
         LazyColumn(
             state = listState,
@@ -248,201 +225,259 @@ private fun SpendingForecastCard(
     currency: String,
     isDark: Boolean
 ) {
-    val isOverPace = forecast.pace > java.math.BigDecimal.ZERO
+    val isOverPace = forecast.pace > BigDecimal.ZERO
     val paceColor = if (isOverPace) {
         if (isDark) expense_dark else expense_light
     } else {
         if (isDark) success_dark else success_light
     }
-
-    // Progress: how far through the period we are (by days)
     val progressFraction = (forecast.daysElapsed.toFloat() / forecast.totalDays.toFloat())
         .coerceIn(0f, 1f)
-
-    // Trend forecast vs base forecast delta
-    val trendDelta = forecast.trendForecast - forecast.baseForecast
-    val trendHigher = trendDelta > java.math.BigDecimal.ZERO
-
-    val confidenceLabel = when (forecast.confidence) {
-        ForecastConfidence.HIGH   -> "High confidence"
-        ForecastConfidence.MEDIUM -> "Medium confidence"
-        ForecastConfidence.LOW    -> "Low confidence (${forecast.daysElapsed}d of data)"
+    val projectedRemaining = (forecast.trendForecast - forecast.spentSoFar)
+        .coerceAtLeast(BigDecimal.ZERO)
+    val headlineLabel = if (forecast.periodIsCurrent) "PROJECTED SPEND" else "PERIOD SPEND"
+    val headlineAmount = if (forecast.periodIsCurrent) {
+        forecast.trendForecast
+    } else {
+        forecast.spentSoFar
     }
+    val insight = buildForecastInsight(forecast)
 
-    PennyWiseCardV2(modifier = Modifier.fillMaxWidth()) {
-        // ── Projected total headline ────────────────────────────────────────────
+    PennyWiseCardV2(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = Dimensions.Padding.content,
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
+            verticalAlignment = Alignment.Top,
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Projected total",
+                    text = headlineLabel,
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = CurrencyFormatter.formatCurrency(forecast.trendForecast, currency),
-                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = 1.sp,
                 )
-                // Confidence badge
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "● $confidenceLabel",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = CurrencyFormatter.formatCurrency(headlineAmount, currency),
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
 
-            // Pace indicator
-            Column(horizontalAlignment = Alignment.End) {
-                val pacePrefix = if (isOverPace) "+" else ""
-                val paceLabel = if (isOverPace) "over pace" else "under pace"
-                Text(
-                    text = "$pacePrefix${CurrencyFormatter.formatCurrency(forecast.pace.abs(), currency)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = paceColor
-                )
-                Text(
-                    text = paceLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = paceColor
+            if (forecast.periodIsCurrent && forecast.daysElapsed > 1) {
+                ForecastPacePill(
+                    paceAmount = forecast.pace.abs(),
+                    currency = currency,
+                    isOverPace = isOverPace,
+                    paceColor = paceColor,
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(Spacing.md))
-
-        // ── Period progress bar ─────────────────────────────────────────────────
-        Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Day ${forecast.daysElapsed} of ${forecast.totalDays}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (forecast.periodIsCurrent && forecast.daysRemaining > 0) {
-                    Text(
-                        text = "${forecast.daysRemaining}d remaining",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            LinearProgressIndicator(
-                progress = { progressFraction },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-            )
-        }
-
-        Spacer(modifier = Modifier.height(Spacing.md))
-
-        // ── Two-row stats grid ──────────────────────────────────────────────────
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-        ) {
-            ForecastStatCell(
-                label = "Spent so far",
-                value = CurrencyFormatter.formatCurrency(forecast.spentSoFar, currency),
-                modifier = Modifier.weight(1f)
-            )
-            ForecastStatCell(
-                label = "Daily avg (overall)",
-                value = CurrencyFormatter.formatCurrency(forecast.overallDailyAvg, currency),
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(Spacing.sm))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-        ) {
-            ForecastStatCell(
-                label = "Daily avg (last 7d)",
-                value = CurrencyFormatter.formatCurrency(forecast.recentDailyAvg, currency),
-                valueColor = if (trendHigher) {
-                    if (isDark) expense_dark else expense_light
-                } else {
-                    if (isDark) success_dark else success_light
-                },
-                modifier = Modifier.weight(1f)
-            )
-            ForecastStatCell(
-                label = "Flat-line forecast",
-                value = CurrencyFormatter.formatCurrency(forecast.baseForecast, currency),
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        // ── Trend narrative ─────────────────────────────────────────────────────
         if (forecast.periodIsCurrent) {
+            Spacer(modifier = Modifier.height(Spacing.md))
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "Day ${forecast.daysElapsed} of ${forecast.totalDays}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (forecast.daysRemaining > 0) {
+                        Text(
+                            text = "${forecast.daysRemaining} days left",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                LinearProgressIndicator(
+                    progress = { progressFraction },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(Spacing.md))
+        HorizontalDivider(
+            thickness = 1.5.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+        )
+        Spacer(modifier = Modifier.height(Spacing.md))
+
+        ForecastSummaryStrip(
+            forecast = forecast,
+            currency = currency,
+            projectedRemaining = projectedRemaining,
+        )
+
+        insight?.let { text ->
             Spacer(modifier = Modifier.height(Spacing.sm))
-            val narrative = buildForecastNarrative(forecast, currency)
             Text(
-                text = narrative,
+                text = text,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth()
             )
         }
     }
 }
 
 @Composable
-private fun ForecastStatCell(
+private fun ForecastPacePill(
+    paceAmount: BigDecimal,
+    currency: String,
+    isOverPace: Boolean,
+    paceColor: Color,
+) {
+    val prefix = if (isOverPace) "+" else "−"
+    val label = if (isOverPace) "Over pace" else "Under pace"
+    Column(
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = paceColor.copy(alpha = 0.12f),
+        ) {
+            Text(
+                text = "$prefix${CurrencyFormatter.formatCurrency(paceAmount, currency)}",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = paceColor,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = paceColor,
+        )
+    }
+}
+
+@Composable
+private fun ForecastSummaryStrip(
+    forecast: SpendingForecast,
+    currency: String,
+    projectedRemaining: BigDecimal,
+) {
+    val recentPaceSub = if (forecast.daysElapsed < 7) "per day" else "per day · 7d"
+    val showRemaining = forecast.periodIsCurrent && forecast.daysRemaining > 0
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Dimensions.CornerRadius.medium),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ForecastStripColumn(
+                label = "Spent",
+                value = CurrencyFormatter.formatCurrency(forecast.spentSoFar, currency),
+                subLabel = "so far",
+                modifier = Modifier.weight(1f),
+            )
+            VerticalDivider(
+                modifier = Modifier.height(52.dp),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+            )
+            ForecastStripColumn(
+                label = "Recent pace",
+                value = CurrencyFormatter.formatCurrency(forecast.recentDailyAvg, currency),
+                subLabel = recentPaceSub,
+                modifier = Modifier.weight(1f),
+            )
+            VerticalDivider(
+                modifier = Modifier.height(52.dp),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+            )
+            if (showRemaining) {
+                ForecastStripColumn(
+                    label = "Left to spend",
+                    value = CurrencyFormatter.formatCurrency(projectedRemaining, currency),
+                    subLabel = "at recent pace",
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                ForecastStripColumn(
+                    label = "Period avg",
+                    value = CurrencyFormatter.formatCurrency(forecast.overallDailyAvg, currency),
+                    subLabel = "per day",
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ForecastStripColumn(
     label: String,
     value: String,
+    subLabel: String,
     modifier: Modifier = Modifier,
-    valueColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
     Column(
-        modifier = modifier
-            .clip(MaterialTheme.shapes.small)
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-            .padding(Spacing.sm)
+        modifier = modifier.padding(horizontal = Spacing.sm, vertical = Spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = valueColor,
-            maxLines = 1
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = subLabel,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
 
-private fun buildForecastNarrative(forecast: SpendingForecast, currency: String): String {
-    val recentVsOverall = forecast.recentDailyAvg.compareTo(forecast.overallDailyAvg)
-    val acceleration = when {
-        recentVsOverall > 0 -> "accelerating — you're spending more than usual lately"
-        recentVsOverall < 0 -> "decelerating — you're spending less than usual lately"
-        else                 -> "steady — your recent spending matches your overall pace"
+private fun buildForecastInsight(forecast: SpendingForecast): String? {
+    if (!forecast.periodIsCurrent) return null
+
+    if (forecast.confidence == ForecastConfidence.LOW) {
+        return "Early in the period — projection will sharpen as more transactions come in."
     }
-    val remaining = if (forecast.daysRemaining > 0)
-        "With ${forecast.daysRemaining} days left, "
-    else
-        ""
-    return "${remaining}your spending is $acceleration. The trend forecast reflects this recent pace."
+
+    val recentVsOverall = forecast.recentDailyAvg.compareTo(forecast.overallDailyAvg)
+    return when {
+        recentVsOverall > 0 ->
+            "Recent spending is faster than your period average."
+        recentVsOverall < 0 ->
+            "Recent spending is slower than your period average."
+        else -> null
+    }
 }
 
 // ─── Time of Day Row ────────────────────────────────────────────────────────────

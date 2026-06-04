@@ -5,9 +5,12 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.toRoute
+import com.pennywiseai.tracker.navigation.AddTransaction
 import com.pennywiseai.tracker.data.database.entity.AccountBalanceEntity
 import com.pennywiseai.tracker.data.database.entity.BudgetImpactType
 import com.pennywiseai.tracker.data.database.entity.TransactionType
+import com.pennywiseai.tracker.data.database.entity.TransferKind
 import com.pennywiseai.tracker.data.database.entity.SubscriptionState
 import com.pennywiseai.tracker.data.preferences.UserPreferencesRepository
 import com.pennywiseai.tracker.data.receipt.ReceiptManager
@@ -51,7 +54,7 @@ class AddViewModel @Inject constructor(
     private val unrecognizedSmsRepository: UnrecognizedSmsRepository,
 ) : ViewModel() {
 
-    private val unrecognizedSmsId: Long = savedStateHandle.get<Long>("unrecognizedSmsId") ?: -1L
+    private val unrecognizedSmsId: Long = savedStateHandle.toRoute<AddTransaction>().unrecognizedSmsId
     
     // General UI State
     private val _uiState = MutableStateFlow(AddUiState())
@@ -144,17 +147,38 @@ class AddViewModel @Inject constructor(
         val validAmount = if (decimalCount <= 1) filtered else _transactionUiState.value.amount
         
         _transactionUiState.update { currentState ->
+            val newAmount = validAmount
+            val total = newAmount.toBigDecimalOrNull()
+            val rebalancedSplits =
+                if (currentState.isSplitEnabled && currentState.splits.size >= 2 && total != null && total > BigDecimal.ZERO) {
+                    val sumExceptLast = currentState.splits.dropLast(1).fold(BigDecimal.ZERO) { acc, s -> acc + s.amount }
+                    val lastAmt = (total - sumExceptLast).coerceAtLeast(BigDecimal.ZERO)
+                    currentState.splits.dropLast(1) + currentState.splits.last().copy(amount = lastAmt)
+                } else {
+                    currentState.splits
+                }
             currentState.copy(
-                amount = validAmount,
-                amountError = validateAmount(validAmount)
+                amount = newAmount,
+                amountError = validateAmount(newAmount),
+                splits = rebalancedSplits,
             )
         }
     }
     
     fun updateTransactionType(type: TransactionType) {
         _transactionUiState.update { currentState ->
+            val newTransferKind = if (type == TransactionType.TRANSFER) {
+                currentState.transferKind?.takeIf {
+                    it == TransferKind.SELF_TRANSFER ||
+                        it == TransferKind.OTHERS_TRANSFER ||
+                        it == TransferKind.CC_BILL_PAYMENT
+                } ?: TransferKind.SELF_TRANSFER
+            } else {
+                null
+            }
             currentState.copy(
                 transactionType = type,
+                transferKind = newTransferKind,
                 paymentChannel = if (type != TransactionType.EXPENSE && type != TransactionType.CREDIT) {
                     PaymentChannel.ACCOUNT
                 } else currentState.paymentChannel,
@@ -162,13 +186,26 @@ class AddViewModel @Inject constructor(
                     TransactionType.INCOME -> "Income"
                     TransactionType.EXPENSE, TransactionType.CREDIT -> "Others"
                     TransactionType.INVESTMENT -> "Investment"
-                    else -> currentState.category
+                    TransactionType.TRANSFER -> when (newTransferKind) {
+                        TransferKind.CC_BILL_PAYMENT -> "Credit Card Payment"
+                        else -> currentState.category.ifBlank { "Others" }
+                    }
                 },
                 budgetImpactType = if (type != TransactionType.INCOME) null else currentState.budgetImpactType,
                 budgetCategory = if (type != TransactionType.INCOME) null else currentState.budgetCategory,
                 isSplitEnabled = if (type == TransactionType.TRANSFER) false else currentState.isSplitEnabled,
                 splits = if (type == TransactionType.TRANSFER) emptyList() else currentState.splits
             )
+        }
+    }
+
+    fun updateTransferKind(kind: String) {
+        _transactionUiState.update { current ->
+            if (kind == TransferKind.CC_BILL_PAYMENT) {
+                current.copy(transferKind = kind, category = "Credit Card Payment")
+            } else {
+                current.copy(transferKind = kind)
+            }
         }
     }
 
@@ -345,6 +382,7 @@ class AddViewModel @Inject constructor(
                     budgetImpactType = state.budgetImpactType,
                     smsBody = state.sourceSmsBody,
                     smsSender = state.sourceSmsSender,
+                    transferKind = state.transferKind,
                 )
 
                 if (transactionId != -1L && state.sourceUnrecognizedSmsId != null) {
@@ -553,6 +591,8 @@ data class TransactionUiState(
     val amount: String = "",
     val amountError: String? = null,
     val transactionType: TransactionType = TransactionType.EXPENSE,
+    /** When [transactionType] is [TransactionType.TRANSFER], e.g. [TransferKind.CC_BILL_PAYMENT]. */
+    val transferKind: String? = null,
     val paymentChannel: PaymentChannel = PaymentChannel.ACCOUNT,
     val merchant: String = "",
     val merchantError: String? = null,
