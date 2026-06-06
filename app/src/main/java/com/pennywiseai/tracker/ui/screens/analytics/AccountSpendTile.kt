@@ -46,19 +46,22 @@ import com.pennywiseai.tracker.ui.theme.Dimensions
 import com.pennywiseai.tracker.ui.theme.Spacing
 import com.pennywiseai.tracker.utils.CurrencyFormatter
 
-private const val INITIAL_VISIBLE_COUNT = 3
+private const val INITIAL_VISIBLE_COUNT = 2
+private const val REGULAR_VISIBLE_COUNT = 3
 
 @Composable
 fun AccountSpendTile(
     accounts: List<AccountSpendData>,
     currency: String,
     onAccountClick: (bankName: String, accountLast4: String, isCreditCard: Boolean) -> Unit,
+    compactMode: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     if (accounts.isEmpty()) return
 
     var showAll by rememberSaveable { mutableStateOf(false) }
-    val visibleAccounts = if (showAll) accounts else accounts.take(INITIAL_VISIBLE_COUNT)
+    val initialVisibleCount = if (compactMode) INITIAL_VISIBLE_COUNT else REGULAR_VISIBLE_COUNT
+    val visibleAccounts = if (showAll) accounts else accounts.take(initialVisibleCount)
 
     PennyWiseCard(modifier = modifier, onClick = null) {
         Column(
@@ -107,15 +110,10 @@ fun AccountSpendTile(
                 }
             }
 
-            Spacer(modifier = Modifier.height(Spacing.sm))
-            HorizontalDivider(
-                thickness = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-            )
-            Spacer(modifier = Modifier.height(Spacing.sm))
+            Spacer(modifier = Modifier.height(Spacing.xs))
 
             // Account rows
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 visibleAccounts.forEachIndexed { index, account ->
                     AccountRow(
                         account = account,
@@ -126,7 +124,7 @@ fun AccountSpendTile(
                         HorizontalDivider(
                             modifier = Modifier.padding(start = 52.dp),
                             thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f),
                         )
                     }
                 }
@@ -134,19 +132,20 @@ fun AccountSpendTile(
 
             // Show more / less toggle
             AnimatedVisibility(
-                visible = accounts.size > INITIAL_VISIBLE_COUNT,
+                visible = accounts.size > initialVisibleCount,
                 enter = expandVertically(),
                 exit = shrinkVertically(),
             ) {
                 Column {
-                    Spacer(modifier = Modifier.height(Spacing.xs))
+                    Spacer(modifier = Modifier.height(2.dp))
                     HorizontalDivider(
-                        thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
                     )
                     TextButton(
                         onClick = { showAll = !showAll },
                         modifier = Modifier.fillMaxWidth(),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 2.dp),
                     ) {
                         Icon(
                             imageVector = if (showAll) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
@@ -155,7 +154,7 @@ fun AccountSpendTile(
                         )
                         Spacer(modifier = Modifier.width(Spacing.xs))
                         Text(
-                            text = if (showAll) "Show less" else "Show ${accounts.size - INITIAL_VISIBLE_COUNT} more",
+                            text = if (showAll) "Show less" else "Show ${accounts.size - initialVisibleCount} more",
                             style = MaterialTheme.typography.labelMedium,
                         )
                     }
@@ -176,9 +175,9 @@ private fun AccountRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(Spacing.sm))
             .clickable(onClick = onClick)
-            .padding(vertical = Spacing.xs),
+            .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         // Icon badge
         Surface(
@@ -188,7 +187,7 @@ private fun AccountRow(
             } else {
                 MaterialTheme.colorScheme.primaryContainer
             },
-            modifier = Modifier.size(36.dp),
+            modifier = Modifier.size(32.dp),
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
@@ -198,7 +197,7 @@ private fun AccountRow(
                         Icons.Default.AccountBalance
                     },
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(16.dp),
                     tint = if (account.isCreditCard) {
                         MaterialTheme.colorScheme.onTertiaryContainer
                     } else {
@@ -212,7 +211,7 @@ private fun AccountRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = account.bankName,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
@@ -220,7 +219,7 @@ private fun AccountRow(
             )
             Text(
                 text = "••${account.accountLast4}  ·  ${account.transactionCount} txn${if (account.transactionCount != 1) "s" else ""}",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -229,7 +228,7 @@ private fun AccountRow(
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 text = CurrencyFormatter.formatCurrency(account.total, currency),
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
@@ -237,7 +236,7 @@ private fun AccountRow(
             )
             Text(
                 text = "${account.percentOfTotal.toInt()}%",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

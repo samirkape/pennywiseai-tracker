@@ -88,6 +88,7 @@ class SettingsViewModel @Inject constructor(
     // Unified Currency Mode
     val unifiedCurrencyMode = userPreferencesRepository.unifiedCurrencyMode
     val displayCurrency = userPreferencesRepository.displayCurrency
+    val compactAnalyticsCardsEnabled = userPreferencesRepository.compactAnalyticsCardsEnabled
 
     val availableCurrencies: StateFlow<List<String>> = transactionRepository.getAllCurrencies()
         .map { transactionCurrencies ->
@@ -500,6 +501,12 @@ class SettingsViewModel @Inject constructor(
             userPreferencesRepository.setDisplayCurrency(currency)
             com.pennywiseai.tracker.widget.RecentTransactionsWidgetUpdateWorker.enqueueOneShot(context)
             com.pennywiseai.tracker.widget.RecentTransactionsWidgetDataStore.clear(context)
+        }
+    }
+
+    fun setCompactAnalyticsCardsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setCompactAnalyticsCardsEnabled(enabled)
         }
     }
 

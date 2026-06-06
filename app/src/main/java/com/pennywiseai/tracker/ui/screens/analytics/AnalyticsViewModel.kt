@@ -62,6 +62,9 @@ class AnalyticsViewModel @Inject constructor(
     val useFinancialMonth: StateFlow<Boolean> = userPreferencesRepository.useFinancialMonth
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    val compactAnalyticsCards: StateFlow<Boolean> = userPreferencesRepository.compactAnalyticsCardsEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     private val _selectedChartType = MutableStateFlow(ChartType.LINE)
     val selectedChartType: StateFlow<ChartType> = _selectedChartType.asStateFlow()
 
@@ -362,75 +365,6 @@ class AnalyticsViewModel @Inject constructor(
                 // Get top category info
                 val topCategory = categoryBreakdown.firstOrNull()
 
-                // Tags on transactions (for filter/insights only — not budget accounting).
-                val categoriesByTx: Map<Long, List<String>> = categoryFilteredWithSplits
-                    .filter { it.transaction.tags.isNotBlank() }
-                    .associate { twSplits ->
-                        twSplits.transaction.id to twSplits.transaction.tags
-                            .split(",").filter { it.isNotBlank() }
-                    }
-
-                // Insight 1: Category co-occurrence pairs
-                val pairCounts = mutableMapOf<Pair<String, String>, Int>()
-                for ((_, cats) in categoriesByTx) {
-                    if (cats.size < 2) continue
-                    val sorted = cats.sorted()
-                    for (i in sorted.indices) {
-                        for (j in i + 1 until sorted.size) {
-                            val pair = sorted[i] to sorted[j]
-                            pairCounts[pair] = (pairCounts[pair] ?: 0) + 1
-                        }
-                    }
-                }
-                val categoryOverlaps = pairCounts
-                    .map { (pair, count) -> CategoryOverlapData(pair.first, pair.second, count) }
-                    .sortedByDescending { it.coOccurrenceCount }
-                    .take(10)
-
-                // Insight 2: Transactions with 2+ junction-table categories
-                val multiCategoryTransactions = categoriesByTx
-                    .filter { (_, cats) -> cats.size >= 2 }
-                    .mapNotNull { (txId, cats) ->
-                        categoryFilteredWithSplits.find { it.transaction.id == txId }?.let { twSplits ->
-                            MultiCategoryTransactionData(
-                                transactionId = txId,
-                                merchantName = twSplits.transaction.merchantName,
-                                amount = twSplits.transaction.amount,
-                                dateTime = twSplits.transaction.dateTime,
-                                categories = cats,
-                                currency = twSplits.transaction.currency
-                            )
-                        }
-                    }
-                    .sortedByDescending { it.dateTime }
-                    .take(20)
-
-                // Insight 3: Top tags by transaction count and total amount
-                val tagCountMap = mutableMapOf<String, Int>()
-                val tagAmountMap = mutableMapOf<String, BigDecimal>()
-                for ((txId, tags) in categoriesByTx) {
-                    val tx = categoryFilteredWithSplits.find { it.transaction.id == txId }?.transaction
-                    val txAmount = tx?.amount ?: BigDecimal.ZERO
-                    val txCurrency = tx?.currency ?: displayCurrency
-                    val converted = if (isUnified) {
-                        currencyConversionService.convertAmount(txAmount, txCurrency, displayCurrency)
-                    } else txAmount
-                    for (tag in tags) {
-                        tagCountMap[tag] = (tagCountMap[tag] ?: 0) + 1
-                        tagAmountMap[tag] = (tagAmountMap[tag] ?: BigDecimal.ZERO) + converted
-                    }
-                }
-                val topTags = tagCountMap.entries
-                    .sortedByDescending { it.value }
-                    .take(10)
-                    .map { (tag, count) ->
-                        TagData(
-                            name = tag,
-                            transactionCount = count,
-                            totalAmount = tagAmountMap[tag] ?: BigDecimal.ZERO
-                        )
-                    }
-
                 val previousRange = previousDateRange(dateRange.first, dateRange.second)
                 val previousPeriodTxs = if (filterState.isUnifiedMode) {
                     transactionRepository.getTransactionsWithSplitsFiltered(
@@ -541,9 +475,6 @@ class AnalyticsViewModel @Inject constructor(
                     isLoading = false,
                     spendingTrend = calculateSpendingTrend(filteredTransactions, dateRange.first, dateRange.second),
                     availableCategories = allCategoryNames,
-                    categoryOverlaps = categoryOverlaps,
-                    multiCategoryTransactions = multiCategoryTransactions,
-                    topTags = topTags,
                     periodStart = dateRange.first,
                     periodEnd = dateRange.second,
                     periodOutflow = periodOutflow,
@@ -1048,9 +979,6 @@ data class AnalyticsUiState(
     val isLoading: Boolean = true,
     val spendingTrend: List<BalancePoint> = emptyList(),
     val availableCategories: List<String> = emptyList(),
-    val categoryOverlaps: List<CategoryOverlapData> = emptyList(),
-    val multiCategoryTransactions: List<MultiCategoryTransactionData> = emptyList(),
-    val topTags: List<TagData> = emptyList(),
     val periodStart: LocalDate? = null,
     val periodEnd: LocalDate? = null,
     val periodOutflow: PeriodOutflowSummary? = null,
@@ -1120,27 +1048,6 @@ data class MerchantData(
     val amount: BigDecimal,
     val transactionCount: Int,
     val isSubscription: Boolean
-)
-
-data class CategoryOverlapData(
-    val categoryA: String,
-    val categoryB: String,
-    val coOccurrenceCount: Int
-)
-
-data class MultiCategoryTransactionData(
-    val transactionId: Long,
-    val merchantName: String,
-    val amount: BigDecimal,
-    val dateTime: java.time.LocalDateTime,
-    val categories: List<String>,
-    val currency: String
-)
-
-data class TagData(
-    val name: String,
-    val transactionCount: Int,
-    val totalAmount: BigDecimal
 )
 
 data class AccountSpendData(

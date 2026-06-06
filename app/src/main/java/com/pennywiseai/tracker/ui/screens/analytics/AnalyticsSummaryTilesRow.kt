@@ -1,31 +1,29 @@
 package com.pennywiseai.tracker.ui.screens.analytics
 
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
@@ -36,6 +34,7 @@ import com.pennywiseai.tracker.utils.CurrencyFormatter
 import java.math.BigDecimal
 import java.math.RoundingMode
 import kotlin.math.absoluteValue
+import kotlinx.coroutines.launch
 
 private sealed interface AnalyticsSummaryTileEntry {
     val key: String
@@ -76,6 +75,7 @@ fun AnalyticsSummaryTilesRow(
     onCardAndBankClick: () -> Unit,
     onCashClick: () -> Unit,
     onTileChanged: (String) -> Unit = {},
+    compactMode: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val showOutflowTile = periodOutflow != null
@@ -174,6 +174,7 @@ fun AnalyticsSummaryTilesRow(
     if (tiles.isEmpty()) return
 
     val pagerState = rememberPagerState(pageCount = { tiles.size })
+    val scope = rememberCoroutineScope()
     val tileKeys = tiles.map { it.key }
 
     LaunchedEffect(tileKeys) {
@@ -187,6 +188,36 @@ fun AnalyticsSummaryTilesRow(
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
+        if (tiles.size > 1) {
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = Spacing.xs),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+            ) {
+                itemsIndexed(tiles, key = { _, item -> item.key }) { index, item ->
+                    FilterChip(
+                        selected = pagerState.currentPage == index,
+                        onClick = {
+                            if (pagerState.currentPage != index) {
+                                scope.launch { pagerState.animateScrollToPage(index) }
+                            }
+                        },
+                        label = {
+                            Text(
+                                text = item.tabLabel(),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ),
+                    )
+                }
+            }
+        }
+
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxWidth(),
@@ -214,6 +245,7 @@ fun AnalyticsSummaryTilesRow(
                     outflow = tile.summary,
                     currency = tile.summary.currency,
                     onClick = tile.onClick,
+                    compactMode = compactMode,
                     modifier = tileModifier,
                 )
                 is AnalyticsSummaryTileEntry.Metric -> AnalyticsMetricTile(
@@ -229,39 +261,17 @@ fun AnalyticsSummaryTilesRow(
                 )
             }
         }
+    }
+}
 
-        if (tiles.size > 1) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = Spacing.sm),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                tiles.indices.forEach { index ->
-                    val isActive = pagerState.currentPage == index
-                    val width by animateDpAsState(
-                        targetValue = if (isActive) 16.dp else 6.dp,
-                        animationSpec = tween(220),
-                        label = "analytics_summary_tile_dot_$index",
-                    )
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 3.dp)
-                            .width(width)
-                            .height(6.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (isActive) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
-                                },
-                            ),
-                    )
-                }
-            }
-        }
+private fun AnalyticsSummaryTileEntry.tabLabel(): String = when (this) {
+    is AnalyticsSummaryTileEntry.Outflow -> "Outflow"
+    is AnalyticsSummaryTileEntry.CardAndBank -> "Card+Bank"
+    is AnalyticsSummaryTileEntry.Metric -> when (key) {
+        "spending" -> "Spending"
+        "payment_cash" -> "Cash"
+        "investments" -> "Invested"
+        else -> "Metric"
     }
 }
 

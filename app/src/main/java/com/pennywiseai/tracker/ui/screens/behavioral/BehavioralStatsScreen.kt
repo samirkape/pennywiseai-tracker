@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pennywiseai.tracker.presentation.common.TimePeriod
+import com.pennywiseai.tracker.ui.components.PeriodRangeNavigator
 import com.pennywiseai.tracker.ui.components.PennyWiseEmptyState
 import com.pennywiseai.tracker.ui.components.PennyWiseStandardScaffold
 import com.pennywiseai.tracker.ui.components.cards.ListItemCardV2
@@ -38,17 +39,28 @@ import com.pennywiseai.tracker.ui.effects.overScrollVertical
 import com.pennywiseai.tracker.ui.effects.rememberOverscrollFlingBehavior
 import com.pennywiseai.tracker.ui.theme.*
 import com.pennywiseai.tracker.utils.CurrencyFormatter
+import com.pennywiseai.tracker.utils.DateRangeUtils
 import java.math.BigDecimal
+import java.time.YearMonth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BehavioralStatsScreen(
     viewModel: BehavioralStatsViewModel = hiltViewModel(),
-    onNavigateBack: () -> Unit = {}
+    onNavigateBack: () -> Unit = {},
+    onNavigateToTransaction: (Long) -> Unit = {},
+    onNavigateToTransactionsMultiCategory: (
+        categories: String,
+        period: String?,
+        currency: String?,
+        startDateEpochDay: Long?,
+        endDateEpochDay: Long?,
+    ) -> Unit = { _, _, _, _, _ -> },
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val selectedPeriod by viewModel.selectedPeriod.collectAsStateWithLifecycle()
     val useFinancialMonth by viewModel.useFinancialMonth.collectAsStateWithLifecycle()
+    val periodAnchorMonth by viewModel.periodAnchorMonth.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val isDark = isSystemInDarkTheme()
 
@@ -69,6 +81,22 @@ fun BehavioralStatsScreen(
                 TimePeriod.ALL
             )
         }
+    }
+
+    val activePeriodRange = remember(uiState.periodStart, uiState.periodEnd) {
+        if (uiState.periodStart != null && uiState.periodEnd != null) {
+            uiState.periodStart!! to uiState.periodEnd!!
+        } else {
+            null
+        }
+    }
+    val periodRangeLabel = remember(activePeriodRange) {
+        activePeriodRange?.let { (start, end) -> DateRangeUtils.formatDateRange(start, end) }
+    }
+    val showPeriodNavigator = remember(selectedPeriod, periodAnchorMonth) {
+        periodAnchorMonth != null &&
+            selectedPeriod != TimePeriod.ALL &&
+            selectedPeriod != TimePeriod.CURRENT_FY
     }
 
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -116,6 +144,19 @@ fun BehavioralStatsScreen(
                                 selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                                 selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                             )
+                        )
+                    }
+                }
+            }
+
+            periodAnchorMonth?.let { anchorMonth ->
+                if (showPeriodNavigator && periodRangeLabel != null) {
+                    item {
+                        PeriodRangeNavigator(
+                            rangeLabel = periodRangeLabel,
+                            onPrevious = { viewModel.navigateToMonth(anchorMonth.minusMonths(1)) },
+                            onNext = { viewModel.navigateToMonth(anchorMonth.plusMonths(1)) },
+                            canGoNext = anchorMonth < YearMonth.now(),
                         )
                     }
                 }
@@ -199,7 +240,35 @@ fun BehavioralStatsScreen(
                         }
                     }
 
-                    // ── Section 2: Merchant Loyalty ──────────────────────────────
+                    // ── Section 2: Tag Insights ──────────────────────────────────
+                    if (
+                        uiState.topTags.isNotEmpty() ||
+                        uiState.categoryOverlaps.isNotEmpty() ||
+                        uiState.multiCategoryTransactions.isNotEmpty()
+                    ) {
+                        item {
+                            TagInsightsCard(
+                                topTags = uiState.topTags,
+                                overlaps = uiState.categoryOverlaps,
+                                multiTaggedTransactions = uiState.multiCategoryTransactions,
+                                currency = uiState.currency,
+                                onOverlapClick = { overlap ->
+                                    val encoded = listOf(overlap.categoryA, overlap.categoryB)
+                                        .joinToString(",") { java.net.URLEncoder.encode(it, "UTF-8") }
+                                    onNavigateToTransactionsMultiCategory(
+                                        encoded,
+                                        TimePeriod.CUSTOM.name,
+                                        uiState.currency,
+                                        uiState.periodStart?.toEpochDay(),
+                                        uiState.periodEnd?.toEpochDay(),
+                                    )
+                                },
+                                onTransactionClick = onNavigateToTransaction,
+                            )
+                        }
+                    }
+
+                    // ── Section 3: Merchant Loyalty ──────────────────────────────
                     if (uiState.topMerchants.isNotEmpty()) {
                         item {
                             SectionHeaderV2(title = "Merchant Loyalty")

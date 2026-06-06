@@ -57,6 +57,8 @@ fun TransactionItem(
     onClick: () -> Unit = {},
     onExcludeToggle: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
+    /** When no brand logo exists, use this category's icon instead of merchant-name inference. */
+    categoryForIconFallback: String? = null,
     modifier: Modifier = Modifier,
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -160,7 +162,8 @@ fun TransactionItem(
                 merchantName = transaction.merchantName,
                 modifier = iconModifier,
                 size = Dimensions.Icon.list + 2.dp,
-                showBackground = true
+                showBackground = true,
+                categoryOverride = categoryForIconFallback,
             )
         },
         trailingContent = {

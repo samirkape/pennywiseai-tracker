@@ -2,13 +2,11 @@ package com.pennywiseai.tracker.ui.screens.analytics
 
 import com.pennywiseai.tracker.presentation.common.TransactionTypeFilter
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,6 +28,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -58,6 +57,7 @@ fun PeriodOutflowMetricTile(
     outflow: PeriodOutflowSummary,
     currency: String,
     onClick: ((selectedTypes: Set<TransactionTypeFilter>) -> Unit)?,
+    compactMode: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     var isMenuExpanded by rememberSaveable { mutableStateOf(false) }
@@ -75,6 +75,8 @@ fun PeriodOutflowMetricTile(
     }
 
     val selectedRows = metricRows.filter { selectedMetrics.contains(it.option) }
+    val previewLimit = if (compactMode) 2 else Int.MAX_VALUE
+    val previewRows = if (isBreakdownExpanded || !compactMode) selectedRows else selectedRows.take(previewLimit)
     val total = selectedRows.fold(BigDecimal.ZERO) { acc, item -> acc + item.amount }
     val totalTransactionCount = selectedRows.sumOf { it.transactionCount }
     val totalLabel = if (selectedRows.size == 1) selectedRows.first().option.label.uppercase() else "TOTAL OUTFLOW"
@@ -151,48 +153,47 @@ fun PeriodOutflowMetricTile(
 
             Spacer(modifier = Modifier.height(Spacing.sm))
 
+            Column {
+                previewRows.forEachIndexed { index, row ->
+                    OutflowBreakdownRow(row = row, currency = currency)
+                    if (index != previewRows.lastIndex) {
+                        Spacer(modifier = Modifier.height(Spacing.xs))
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.xs))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(
-                    onClick = { isBreakdownExpanded = !isBreakdownExpanded },
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ChecklistRtl,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.size(6.dp))
-                    Text(
-                        text = "Breakdown",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Spacer(modifier = Modifier.size(4.dp))
-                    Icon(
-                        imageVector = if (isBreakdownExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
+                if (compactMode && selectedRows.size > previewLimit) {
+                    TextButton(
+                        onClick = { isBreakdownExpanded = !isBreakdownExpanded },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = if (isBreakdownExpanded) "Show less" else "Show all",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        Spacer(modifier = Modifier.size(2.dp))
+                        Icon(
+                            imageVector = if (isBreakdownExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                } else {
+                    Spacer(modifier = Modifier)
                 }
 
                 Box {
-                    TextButton(
-                        onClick = { isMenuExpanded = !isMenuExpanded },
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                        colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    ) {
-                        Text(
-                            text = "Filter",
-                            style = MaterialTheme.typography.labelMedium,
+                    IconButton(onClick = { isMenuExpanded = !isMenuExpanded }) {
+                        Icon(
+                            imageVector = Icons.Default.ChecklistRtl,
+                            contentDescription = "Filter metrics",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     DropdownMenu(
@@ -225,22 +226,6 @@ fun PeriodOutflowMetricTile(
                     }
                 }
             }
-
-            AnimatedVisibility(
-                visible = isBreakdownExpanded,
-                enter = expandVertically(),
-                exit = shrinkVertically(),
-            ) {
-                Column {
-                    Spacer(modifier = Modifier.height(Spacing.xs))
-                    selectedRows.forEachIndexed { index, row ->
-                        OutflowBreakdownRow(row = row, currency = currency)
-                        if (index != selectedRows.lastIndex) {
-                            Spacer(modifier = Modifier.height(Spacing.xs))
-                        }
-                    }
-                }
-            }
         }
     }
 }
@@ -257,7 +242,7 @@ private fun OutflowBreakdownRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {

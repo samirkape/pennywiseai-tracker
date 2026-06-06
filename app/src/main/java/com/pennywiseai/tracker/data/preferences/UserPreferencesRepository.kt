@@ -107,6 +107,9 @@ class UserPreferencesRepository @Inject constructor(
         // Analytics Chart Type
         val ANALYTICS_CHART_TYPE = stringPreferencesKey("analytics_chart_type")
 
+        // Analytics card density
+        val COMPACT_ANALYTICS_CARDS = booleanPreferencesKey("compact_analytics_cards")
+
         // Cover Style
         val COVER_STYLE = stringPreferencesKey("cover_style")
 
@@ -610,6 +613,17 @@ class UserPreferencesRepository @Inject constructor(
 
     fun getAnalyticsChartType(): Flow<String?> = context.dataStore.data
         .map { preferences -> preferences[PreferencesKeys.ANALYTICS_CHART_TYPE] }
+
+    val compactAnalyticsCardsEnabled: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.COMPACT_ANALYTICS_CARDS] ?: true
+        }
+
+    suspend fun setCompactAnalyticsCardsEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.COMPACT_ANALYTICS_CARDS] = enabled
+        }
+    }
 
     // Cover Style
     suspend fun updateCoverStyle(style: CoverStyle) {

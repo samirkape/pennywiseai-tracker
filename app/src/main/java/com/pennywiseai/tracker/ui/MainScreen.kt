@@ -377,24 +377,6 @@ fun MainScreen(
                             launchSingleTop = true
                         }
                     },
-                    onNavigateToTransaction = { transactionId ->
-                        rootNavController?.navigate(
-                            com.pennywiseai.tracker.navigation.TransactionDetail(transactionId)
-                        ) { launchSingleTop = true }
-                    },
-                    onNavigateToTransactionsMultiCategory = { categories, period, currency, startDateEpoch, endDateEpoch ->
-                        val route = buildString {
-                            append("transactions")
-                            val params = mutableListOf("categories=$categories")
-                            period?.let { params.add("period=$it") }
-                            currency?.let { params.add("currency=$it") }
-                            startDateEpoch?.let { params.add("startDateEpoch=$it") }
-                            endDateEpoch?.let { params.add("endDateEpoch=$it") }
-                            append("?")
-                            append(params.joinToString("&"))
-                        }
-                        navController.navigate(route) { launchSingleTop = true }
-                    },
                     onNavigateToTransactions = { category, merchant, period, currency, transactionType, startDateEpoch, endDateEpoch, paymentMode, bankName, accountLast4 ->
                         val route = buildString {
                             append("transactions")
@@ -518,7 +500,25 @@ fun MainScreen(
                 com.pennywiseai.tracker.ui.screens.behavioral.BehavioralStatsScreen(
                     onNavigateBack = {
                         navController.safePopBackStack()
-                    }
+                    },
+                    onNavigateToTransaction = { transactionId ->
+                        rootNavController?.navigate(
+                            com.pennywiseai.tracker.navigation.TransactionDetail(transactionId)
+                        ) { launchSingleTop = true }
+                    },
+                    onNavigateToTransactionsMultiCategory = { categories, period, currency, startDateEpoch, endDateEpoch ->
+                        val route = buildString {
+                            append("transactions")
+                            val params = mutableListOf("categories=$categories")
+                            period?.let { params.add("period=$it") }
+                            currency?.let { params.add("currency=$it") }
+                            startDateEpoch?.let { params.add("startDateEpoch=$it") }
+                            endDateEpoch?.let { params.add("endDateEpoch=$it") }
+                            append("?")
+                            append(params.joinToString("&"))
+                        }
+                        navController.navigate(route) { launchSingleTop = true }
+                    },
                 )
             }
 

@@ -1,14 +1,17 @@
 package com.pennywiseai.tracker.ui.screens.behavioral
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionType
 import com.pennywiseai.tracker.data.preferences.UserPreferencesRepository
+import com.pennywiseai.tracker.data.repository.SalaryMonthOverrideRepository
 import com.pennywiseai.tracker.data.repository.TransactionRepository
 import com.pennywiseai.tracker.presentation.common.TimePeriod
 import com.pennywiseai.tracker.presentation.common.defaultTimePeriod
 import com.pennywiseai.tracker.presentation.common.getDateRangeForPeriod
+import com.pennywiseai.tracker.presentation.common.getDateRangeForYearMonthNavigation
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -25,6 +29,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 
@@ -89,10 +94,15 @@ data class BehavioralStatsUiState(
     val isLoading: Boolean = true,
     val isEmpty: Boolean = false,
     val currency: String = "INR",
+    val periodStart: LocalDate? = null,
+    val periodEnd: LocalDate? = null,
     val spendingForecast: SpendingForecast? = null,
     val timeOfDayBuckets: List<TimeOfDayBucket> = emptyList(),
     val dayOfWeekBuckets: List<DayOfWeekBucket> = emptyList(),
-    val topMerchants: List<MerchantLoyalty> = emptyList()
+    val topMerchants: List<MerchantLoyalty> = emptyList(),
+    val topTags: List<TagData> = emptyList(),
+    val categoryOverlaps: List<CategoryOverlapData> = emptyList(),
+    val multiCategoryTransactions: List<MultiCategoryTransactionData> = emptyList(),
 )
 
 // ─── ViewModel ─────────────────────────────────────────────────────────────────
@@ -101,7 +111,9 @@ data class BehavioralStatsUiState(
 @HiltViewModel
 class BehavioralStatsViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
-    private val userPreferencesRepository: UserPreferencesRepository
+    private val userPreferencesRepository: UserPreferencesRepository,
+    private val salaryMonthOverrideRepository: SalaryMonthOverrideRepository,
+    private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     private val _selectedPeriod = MutableStateFlow(TimePeriod.THIS_MONTH)
@@ -110,51 +122,95 @@ class BehavioralStatsViewModel @Inject constructor(
     val useFinancialMonth: StateFlow<Boolean> = userPreferencesRepository.useFinancialMonth
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    private val _periodAnchorMonthKey = savedStateHandle.getStateFlow<String?>("periodAnchorMonth", null)
+    private val periodNavUsesCalendarKey = "periodNavUsesCalendar"
+
+    val periodAnchorMonth: StateFlow<YearMonth?> = _periodAnchorMonthKey
+        .map { key -> key?.let { YearMonth.parse(it) } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     init {
         viewModelScope.launch {
-            _selectedPeriod.value = defaultTimePeriod(
-                userPreferencesRepository.useFinancialMonth.first()
-            )
+            val default = defaultTimePeriod(userPreferencesRepository.useFinancialMonth.first())
+            _selectedPeriod.value = default
+            updatePeriodAnchorForChip(default)
         }
     }
 
     val uiState: StateFlow<BehavioralStatsUiState> = combine(
-        _selectedPeriod,
-        userPreferencesRepository.monthStartDay,
-        userPreferencesRepository.useFinancialMonth,
-        userPreferencesRepository.useFixedBudgetPeriodEnd,
-        userPreferencesRepository.budgetPeriodEndDay
-    ) { period, monthStartDay, useFinancialMonth, useFixedEnd, endDom ->
-        listOf(period, monthStartDay, useFinancialMonth, useFixedEnd, endDom)
+        combine(
+            _selectedPeriod,
+            _periodAnchorMonthKey,
+        ) { period, anchorKey -> period to anchorKey },
+        combine(
+            userPreferencesRepository.monthStartDay,
+            userPreferencesRepository.useFinancialMonth,
+            userPreferencesRepository.useFixedBudgetPeriodEnd,
+            userPreferencesRepository.budgetPeriodEndDay,
+            salaryMonthOverrideRepository.overridesMap,
+        ) { monthStartDay, useFinancialMonth, useFixedEnd, endDom, overrides ->
+            listOf(monthStartDay, useFinancialMonth, useFixedEnd, endDom, overrides)
+        },
+    ) { periodPack, prefsPack ->
+        val period = periodPack.first
+        @Suppress("UNCHECKED_CAST")
+        val prefs = prefsPack as List<Any?>
+        listOf(
+            period,
+            periodPack.second,
+            prefs[0],
+            prefs[1],
+            prefs[2],
+            prefs[3],
+            prefs[4],
+        )
     }
         .flatMapLatest { args ->
             val period = args[0] as TimePeriod
-            val monthStartDay = args[1] as Int
-            val useFinancialMonth = args[2] as Boolean
-            val useFixedEnd = args[3] as Boolean
-            val endDom = args[4] as Int
-            val dateRange = getDateRangeForPeriod(
-                period,
-                monthStartDay,
-                useFinancialMonth,
-                emptyMap(),
-                useFixedEnd,
-                endDom
+            val monthStartDay = args[2] as Int
+            val useFinancialMonth = args[3] as Boolean
+            val useFixedEnd = args[4] as Boolean
+            val endDom = args[5] as Int
+            @Suppress("UNCHECKED_CAST")
+            val overrides = args[6] as Map<String, Int>
+            val dateRange = resolveDateRange(
+                period = period,
+                monthStartDay = monthStartDay,
+                useFinancialMonth = useFinancialMonth,
+                monthStartOverrides = overrides,
+                useFixedEnd = useFixedEnd,
+                endDom = endDom,
             )
                 ?: getDateRangeForPeriod(
                     defaultTimePeriod(useFinancialMonth),
                     monthStartDay,
                     useFinancialMonth,
-                    emptyMap(),
+                    overrides,
                     useFixedEnd,
-                    endDom
+                    endDom,
                 )!!
+
+            val forecastPeriodEnd = resolveForecastPeriodEnd(
+                period = period,
+                startDate = dateRange.first,
+                queryEndDate = dateRange.second,
+                monthStartDay = monthStartDay,
+                useFinancialMonth = useFinancialMonth,
+                monthStartOverrides = overrides,
+                useFixedEnd = useFixedEnd,
+                endDom = endDom,
+            )
 
             transactionRepository.getTransactionsBetweenDates(
                 startDate = dateRange.first,
                 endDate = dateRange.second
             ).mapLatest { transactions ->
-                computeStats(transactions, dateRange.first, dateRange.second)
+                computeStats(
+                    allTransactions = transactions,
+                    startDate = dateRange.first,
+                    queryEndDate = dateRange.second,
+                    forecastPeriodEnd = forecastPeriodEnd,
+                )
             }
         }
         .stateIn(
@@ -164,7 +220,140 @@ class BehavioralStatsViewModel @Inject constructor(
         )
 
     fun selectPeriod(period: TimePeriod) {
+        updatePeriodAnchorForChip(period)
         _selectedPeriod.value = period
+    }
+
+    fun navigateToMonth(yearMonth: YearMonth) {
+        viewModelScope.launch {
+            val monthStartDay = userPreferencesRepository.monthStartDay.first()
+            val payPeriodEnabled = userPreferencesRepository.useFinancialMonth.first()
+            val useFixedEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
+            val endDom = userPreferencesRepository.budgetPeriodEndDay.first()
+            val usesCalendar = resolveUsesCalendarMonthNavigation()
+            when {
+                yearMonth == YearMonth.now() && usesCalendar ->
+                    selectPeriod(TimePeriod.CALENDAR_MONTH)
+                yearMonth == YearMonth.now() && !usesCalendar && payPeriodEnabled ->
+                    selectPeriod(TimePeriod.THIS_MONTH)
+                yearMonth == YearMonth.now() && !usesCalendar && !payPeriodEnabled ->
+                    selectPeriod(TimePeriod.CALENDAR_MONTH)
+                else -> {
+                    savedStateHandle["periodAnchorMonth"] = yearMonth.toString()
+                }
+            }
+        }
+    }
+
+    private fun updatePeriodAnchorForChip(period: TimePeriod) {
+        val anchor = when (period) {
+            TimePeriod.THIS_MONTH, TimePeriod.CALENDAR_MONTH -> YearMonth.now()
+            TimePeriod.LAST_MONTH -> YearMonth.now().minusMonths(1)
+            TimePeriod.ALL, TimePeriod.CURRENT_FY -> null
+            TimePeriod.CUSTOM -> return
+        }
+        savedStateHandle["periodAnchorMonth"] = anchor?.toString()
+        when (period) {
+            TimePeriod.CALENDAR_MONTH -> savedStateHandle[periodNavUsesCalendarKey] = true
+            TimePeriod.THIS_MONTH, TimePeriod.LAST_MONTH -> savedStateHandle[periodNavUsesCalendarKey] = false
+            TimePeriod.ALL, TimePeriod.CURRENT_FY -> savedStateHandle.remove<Boolean>(periodNavUsesCalendarKey)
+            TimePeriod.CUSTOM -> Unit
+        }
+    }
+
+    private fun resolveUsesCalendarMonthNavigation(): Boolean {
+        savedStateHandle.get<Boolean>(periodNavUsesCalendarKey)?.let { return it }
+        return _selectedPeriod.value == TimePeriod.CALENDAR_MONTH
+    }
+
+    private fun naturalAnchorForPeriod(period: TimePeriod): YearMonth? = when (period) {
+        TimePeriod.THIS_MONTH, TimePeriod.CALENDAR_MONTH -> YearMonth.now()
+        TimePeriod.LAST_MONTH -> YearMonth.now().minusMonths(1)
+        else -> null
+    }
+
+    private fun resolveDateRange(
+        period: TimePeriod,
+        monthStartDay: Int,
+        useFinancialMonth: Boolean,
+        monthStartOverrides: Map<String, Int>,
+        useFixedEnd: Boolean,
+        endDom: Int,
+    ): Pair<LocalDate, LocalDate>? {
+        val anchorMonth = _periodAnchorMonthKey.value?.let { YearMonth.parse(it) }
+        val usesCalendar = resolveUsesCalendarMonthNavigation()
+        val navigablePeriod = period == TimePeriod.THIS_MONTH ||
+            period == TimePeriod.CALENDAR_MONTH ||
+            period == TimePeriod.LAST_MONTH
+
+        if (anchorMonth != null && navigablePeriod && anchorMonth != naturalAnchorForPeriod(period)) {
+            return getDateRangeForYearMonthNavigation(
+                yearMonth = anchorMonth,
+                useCalendarMonth = usesCalendar,
+                monthStartDay = monthStartDay,
+                monthStartOverrides = monthStartOverrides,
+                useFixedBudgetPeriodEnd = useFixedEnd,
+                budgetPeriodEndDay = endDom,
+            )
+        }
+
+        return getDateRangeForPeriod(
+            period,
+            monthStartDay,
+            useFinancialMonth,
+            monthStartOverrides,
+            useFixedEnd,
+            endDom,
+        )
+    }
+
+    /**
+     * Full period boundary for forecast math. Query ranges for calendar month cap at today,
+     * but projections need the real period end (e.g. month-end).
+     */
+    private fun resolveForecastPeriodEnd(
+        period: TimePeriod,
+        startDate: LocalDate,
+        queryEndDate: LocalDate,
+        monthStartDay: Int,
+        useFinancialMonth: Boolean,
+        monthStartOverrides: Map<String, Int>,
+        useFixedEnd: Boolean,
+        endDom: Int,
+    ): LocalDate {
+        val anchorMonth = _periodAnchorMonthKey.value?.let { YearMonth.parse(it) }
+        return when (period) {
+            TimePeriod.CALENDAR_MONTH -> {
+                val ym = anchorMonth ?: YearMonth.from(startDate)
+                ym.atEndOfMonth()
+            }
+            TimePeriod.THIS_MONTH -> {
+                if (useFinancialMonth) {
+                    if (anchorMonth != null && anchorMonth != YearMonth.now()) {
+                        getDateRangeForYearMonthNavigation(
+                            yearMonth = anchorMonth,
+                            useCalendarMonth = false,
+                            monthStartDay = monthStartDay,
+                            monthStartOverrides = monthStartOverrides,
+                            useFixedBudgetPeriodEnd = useFixedEnd,
+                            budgetPeriodEndDay = endDom,
+                        ).second
+                    } else {
+                        getDateRangeForPeriod(
+                            period,
+                            monthStartDay,
+                            useFinancialMonth,
+                            monthStartOverrides,
+                            useFixedEnd,
+                            endDom,
+                        )!!.second
+                    }
+                } else {
+                    (anchorMonth ?: YearMonth.from(startDate)).atEndOfMonth()
+                }
+            }
+            else -> queryEndDate
+        }
     }
 
     // ── Core computation ────────────────────────────────────────────────────────
@@ -172,7 +361,8 @@ class BehavioralStatsViewModel @Inject constructor(
     private fun computeStats(
         allTransactions: List<TransactionEntity>,
         startDate: LocalDate,
-        endDate: LocalDate
+        queryEndDate: LocalDate,
+        forecastPeriodEnd: LocalDate,
     ): BehavioralStatsUiState {
         // Only count spending transactions (EXPENSE + CREDIT)
         val spendingTxns = allTransactions.filter {
@@ -185,15 +375,21 @@ class BehavioralStatsViewModel @Inject constructor(
         }
 
         val currency = spendingTxns.firstOrNull()?.currency ?: "INR"
+        val tagInsights = computeTagInsights(spendingTxns)
 
         return BehavioralStatsUiState(
             isLoading = false,
             isEmpty = false,
             currency = currency,
-            spendingForecast = computeSpendingForecast(spendingTxns, startDate, endDate),
+            periodStart = startDate,
+            periodEnd = queryEndDate,
+            spendingForecast = computeSpendingForecast(spendingTxns, startDate, forecastPeriodEnd),
             timeOfDayBuckets = computeTimeOfDayBuckets(spendingTxns),
             dayOfWeekBuckets = computeDayOfWeekBuckets(spendingTxns),
-            topMerchants = computeMerchantLoyalty(spendingTxns)
+            topMerchants = computeMerchantLoyalty(spendingTxns),
+            topTags = tagInsights.topTags,
+            categoryOverlaps = tagInsights.categoryOverlaps,
+            multiCategoryTransactions = tagInsights.multiCategoryTransactions,
         )
     }
 
@@ -349,6 +545,81 @@ class BehavioralStatsViewModel @Inject constructor(
                 else 0f
             )
         }
+    }
+
+    // ── Tag insights ────────────────────────────────────────────────────────────
+
+    private data class TagInsightsResult(
+        val topTags: List<TagData>,
+        val categoryOverlaps: List<CategoryOverlapData>,
+        val multiCategoryTransactions: List<MultiCategoryTransactionData>,
+    )
+
+    private fun computeTagInsights(txns: List<TransactionEntity>): TagInsightsResult {
+        val tagsByTx = txns
+            .filter { it.tags.isNotBlank() }
+            .associate { tx ->
+                tx.id to tx.tags.split(",").map { it.trim() }.filter { it.isNotBlank() }
+            }
+
+        val pairCounts = mutableMapOf<Pair<String, String>, Int>()
+        for ((_, tags) in tagsByTx) {
+            if (tags.size < 2) continue
+            val sorted = tags.sorted()
+            for (i in sorted.indices) {
+                for (j in i + 1 until sorted.size) {
+                    val pair = sorted[i] to sorted[j]
+                    pairCounts[pair] = (pairCounts[pair] ?: 0) + 1
+                }
+            }
+        }
+        val categoryOverlaps = pairCounts
+            .map { (pair, count) -> CategoryOverlapData(pair.first, pair.second, count) }
+            .sortedByDescending { it.coOccurrenceCount }
+            .take(10)
+
+        val multiCategoryTransactions = tagsByTx
+            .filter { (_, tags) -> tags.size >= 2 }
+            .mapNotNull { (txId, tags) ->
+                txns.find { it.id == txId }?.let { tx ->
+                    MultiCategoryTransactionData(
+                        transactionId = txId,
+                        merchantName = tx.merchantName,
+                        amount = tx.amount,
+                        dateTime = tx.dateTime,
+                        categories = tags,
+                        currency = tx.currency,
+                    )
+                }
+            }
+            .sortedByDescending { it.dateTime }
+            .take(20)
+
+        val tagCountMap = mutableMapOf<String, Int>()
+        val tagAmountMap = mutableMapOf<String, BigDecimal>()
+        for ((txId, tags) in tagsByTx) {
+            val txAmount = txns.find { it.id == txId }?.amount ?: BigDecimal.ZERO
+            for (tag in tags) {
+                tagCountMap[tag] = (tagCountMap[tag] ?: 0) + 1
+                tagAmountMap[tag] = (tagAmountMap[tag] ?: BigDecimal.ZERO) + txAmount
+            }
+        }
+        val topTags = tagCountMap.entries
+            .sortedByDescending { it.value }
+            .take(10)
+            .map { (tag, count) ->
+                TagData(
+                    name = tag,
+                    transactionCount = count,
+                    totalAmount = tagAmountMap[tag] ?: BigDecimal.ZERO,
+                )
+            }
+
+        return TagInsightsResult(
+            topTags = topTags,
+            categoryOverlaps = categoryOverlaps,
+            multiCategoryTransactions = multiCategoryTransactions,
+        )
     }
 
     // ── Merchant loyalty ────────────────────────────────────────────────────────

@@ -63,6 +63,7 @@ fun GroupMerchantAvatarStack(
     modifier: Modifier = Modifier,
     iconSize: Dp = 32.dp,
     overlapStep: Dp = 20.dp,
+    merchantCategories: Map<String, String>? = null,
 ) {
     val maxIcons = 3
     val visible = merchantNames.take(maxIcons)
@@ -90,6 +91,7 @@ fun GroupMerchantAvatarStack(
         visible.forEachIndexed { index, name ->
             BrandIcon(
                 merchantName = name,
+                categoryOverride = merchantCategories?.get(name),
                 size = iconSize,
                 modifier = Modifier
                     .offset(x = overlapStep * index)
@@ -142,6 +144,7 @@ fun GroupCard(
     convertedAmounts: Map<Long, BigDecimal> = emptyMap(),
     displayCurrency: String? = null,
     flat: Boolean = false,
+    useCategoryIconFallback: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -193,6 +196,14 @@ fun GroupCard(
         transactions.map { it.merchantName }.distinct()
     }
 
+    val merchantCategories = if (useCategoryIconFallback) {
+        remember(transactions) {
+            transactions.associate { it.merchantName to it.category }
+        }
+    } else {
+        null
+    }
+
     val dateRangeText = remember(transactions) {
         if (transactions.isEmpty()) return@remember ""
         val minD = transactions.minOf { it.dateTime.toLocalDate() }
@@ -233,7 +244,10 @@ fun GroupCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
-            GroupMerchantAvatarStack(merchantNames = merchantOrder)
+            GroupMerchantAvatarStack(
+                merchantNames = merchantOrder,
+                merchantCategories = merchantCategories,
+            )
 
             Column(modifier = Modifier.weight(1f)) {
                 Row(

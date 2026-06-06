@@ -32,9 +32,13 @@ fun BrandIcon(
     merchantName: String,
     modifier: Modifier = Modifier,
     size: Dp = 40.dp,
-    showBackground: Boolean = true
+    showBackground: Boolean = true,
+    categoryOverride: String? = null,
 ) {
-    val iconResource = IconProvider.getIconForMerchant(merchantName)
+    val iconResource = IconProvider.getIconForMerchant(
+        merchantName = merchantName,
+        categoryOverride = categoryOverride,
+    )
     val brandColor = BrandIcons.getBrandColor(merchantName)
     
     Box(

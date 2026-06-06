@@ -557,6 +557,7 @@ fun HomeScreen(
                                         },
                                         profileAccountKeys = profileAccountKeys,
                                         flat = true,
+                                        categoryForIconFallback = item.transaction.category,
                                         onClick = { onTransactionClick(item.transaction.id) },
                                         onExcludeToggle = {
                                             viewModel.toggleExcludedFromTracking(item.transaction)
@@ -573,6 +574,7 @@ fun HomeScreen(
                                             null
                                         },
                                         flat = true,
+                                        useCategoryIconFallback = true,
                                         onClick = { onGroupClick(item.group.id) },
                                     )
                                 }

@@ -99,6 +99,7 @@ fun SettingsScreen(
     val importExportMessage by settingsViewModel.importExportMessage.collectAsStateWithLifecycle()
     val exportedBackupFile by settingsViewModel.exportedBackupFile.collectAsStateWithLifecycle()
     val unifiedCurrencyMode by settingsViewModel.unifiedCurrencyMode.collectAsStateWithLifecycle(initialValue = false)
+    val compactAnalyticsCardsEnabled by settingsViewModel.compactAnalyticsCardsEnabled.collectAsStateWithLifecycle(initialValue = true)
     val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifecycle(initialValue = "")
     val availableCurrencies by settingsViewModel.availableCurrencies.collectAsStateWithLifecycle()
     var showSmsScanDialog by remember { mutableStateOf(false) }
@@ -182,7 +183,17 @@ fun SettingsScreen(
                     title = "Appearance",
                     subtitle = stringResource(R.string.settings_appearance_subtitle),
                     onClick = onNavigateToAppearance,
-                    position = ItemPosition.SINGLE
+                    position = ItemPosition.TOP
+                )
+                SettingsSwitchRow(
+                    icon = Icons.Default.Insights,
+                    iconBgColor = indigo_light,
+                    iconTint = indigo_dark,
+                    title = "Compact Analytics Cards",
+                    subtitle = "Show denser summary cards in Analytics",
+                    checked = compactAnalyticsCardsEnabled,
+                    onCheckedChange = { settingsViewModel.setCompactAnalyticsCardsEnabled(it) },
+                    position = ItemPosition.BOTTOM,
                 )
             }
 

@@ -205,12 +205,15 @@ object IconProvider {
      * 2. If not found, use category icon
      * 3. If category not found, use default icon
      */
-    fun getIconForMerchant(merchantName: String): IconResource {
+    fun getIconForMerchant(
+        merchantName: String,
+        categoryOverride: String? = null,
+    ): IconResource {
         BrandIcons.getIconResource(merchantName)?.let { iconRes ->
             return IconResource.DrawableResource(iconRes)
         }
 
-        val category = CategoryMapping.getCategory(merchantName)
+        val category = categoryOverride ?: CategoryMapping.getCategory(merchantName)
         val categoryInfo = CategoryMapping.categories[category]
             ?: CategoryMapping.categories["Others"]!!
 
