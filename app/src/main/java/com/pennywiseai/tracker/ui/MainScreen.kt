@@ -33,6 +33,7 @@ import com.pennywiseai.tracker.ui.components.PennyWiseBottomNavigation
 import com.pennywiseai.tracker.ui.components.SpotlightTutorial
 import com.pennywiseai.tracker.ui.components.WhatsNewDialog
 import com.pennywiseai.tracker.ui.screens.settings.AppearanceScreen
+import com.pennywiseai.tracker.ui.screens.chat.ChatScreen
 import com.pennywiseai.tracker.ui.screens.settings.SettingsScreen
 import com.pennywiseai.tracker.ui.viewmodel.MainViewModel
 import com.pennywiseai.tracker.ui.viewmodel.ThemeViewModel
@@ -74,7 +75,7 @@ fun MainScreen(
     val isHomeScreen = baseRoute == Constants.Routes.HOME
 
     // Back from a bottom tab other than Home switches to Home (avoids stack overlap).
-    // Pushed routes (transactions, optional chat, etc.) use normal pop via system back.
+    // Pushed routes (transactions, chat, etc.) use normal pop via system back.
     BackHandler(enabled = !isHomeScreen && isBottomNavTabRoute) {
         navController.navigate(Constants.Routes.HOME) {
             popUpTo(navController.graph.startDestinationId) {
@@ -143,6 +144,11 @@ fun MainScreen(
                     onNavigateToPayPeriodSettings = {
                         rootNavController?.navigate(
                             com.pennywiseai.tracker.navigation.PayPeriodSettings
+                        ) { launchSingleTop = true }
+                    },
+                    onNavigateToPayPeriodExplorer = { startEpoch, endEpoch ->
+                        navController.navigate(
+                            "${Constants.Routes.PAY_PERIOD_EXPLORER}/$startEpoch/$endEpoch",
                         ) { launchSingleTop = true }
                     },
                     onNavigateToSettings = {
@@ -230,7 +236,7 @@ fun MainScreen(
             }
 
             composable(
-                route = "transactions?category={category}&merchant={merchant}&period={period}&currency={currency}&focusSearch={focusSearch}&type={type}&categories={categories}&startDateEpoch={startDateEpoch}&endDateEpoch={endDateEpoch}&paymentMode={paymentMode}",
+                route = "transactions?category={category}&merchant={merchant}&period={period}&currency={currency}&focusSearch={focusSearch}&type={type}&categories={categories}&startDateEpoch={startDateEpoch}&endDateEpoch={endDateEpoch}&paymentMode={paymentMode}&bankName={bankName}&accountLast4={accountLast4}",
                 arguments = listOf(
                     navArgument("category") {
                         type = NavType.StringType
@@ -280,6 +286,16 @@ fun MainScreen(
                         type = NavType.StringType
                         nullable = true
                         defaultValue = null
+                    },
+                    navArgument("bankName") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("accountLast4") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
                     }
                 )
             ) { backStackEntry ->
@@ -293,6 +309,8 @@ fun MainScreen(
                 val periodStartEpoch = backStackEntry.arguments?.getString("startDateEpoch")?.toLongOrNull()
                 val periodEndEpoch = backStackEntry.arguments?.getString("endDateEpoch")?.toLongOrNull()
                 val paymentMode = backStackEntry.arguments?.getString("paymentMode")
+                val bankName = backStackEntry.arguments?.getString("bankName")
+                val accountLast4 = backStackEntry.arguments?.getString("accountLast4")
 
                 TransactionsScreen(
                     modifier = Modifier.imePadding(),
@@ -306,6 +324,8 @@ fun MainScreen(
                     initialCategories = categories,
                     initialPeriodStartEpoch = periodStartEpoch,
                     initialPeriodEndEpoch = periodEndEpoch,
+                    initialBankName = bankName,
+                    initialAccountLast4 = accountLast4,
                     onNavigateBack = {
                         navController.safePopBackStack()
                     },
@@ -352,6 +372,11 @@ fun MainScreen(
 
             composable(Constants.Routes.ANALYTICS) {
                 com.pennywiseai.tracker.ui.screens.analytics.AnalyticsScreen(
+                    onNavigateToChat = {
+                        navController.navigate(Constants.Routes.CHAT) {
+                            launchSingleTop = true
+                        }
+                    },
                     onNavigateToTransaction = { transactionId ->
                         rootNavController?.navigate(
                             com.pennywiseai.tracker.navigation.TransactionDetail(transactionId)
@@ -370,7 +395,7 @@ fun MainScreen(
                         }
                         navController.navigate(route) { launchSingleTop = true }
                     },
-                    onNavigateToTransactions = { category, merchant, period, currency, transactionType, startDateEpoch, endDateEpoch, paymentMode ->
+                    onNavigateToTransactions = { category, merchant, period, currency, transactionType, startDateEpoch, endDateEpoch, paymentMode, bankName, accountLast4 ->
                         val route = buildString {
                             append("transactions")
                             val params = mutableListOf<String>()
@@ -400,6 +425,14 @@ fun MainScreen(
                             paymentMode?.let {
                                 params.add("paymentMode=$it")
                             }
+                            bankName?.let {
+                                val encoded = java.net.URLEncoder.encode(it, "UTF-8")
+                                params.add("bankName=$encoded")
+                            }
+                            accountLast4?.let {
+                                val encoded = java.net.URLEncoder.encode(it, "UTF-8")
+                                params.add("accountLast4=$encoded")
+                            }
                             if (params.isNotEmpty()) {
                                 append("?")
                                 append(params.joinToString("&"))
@@ -426,17 +459,31 @@ fun MainScreen(
                 )
             }
 
-            if (Constants.Features.AI_CHAT_ENABLED) {
-                composable(Constants.Routes.CHAT) {
-                    com.pennywiseai.tracker.ui.screens.chat.ChatScreen(
-                        onNavigateBack = { navController.safePopBackStack() },
-                        onNavigateToSettings = {
-                            navController.navigate(Constants.Routes.SETTINGS) {
-                                launchSingleTop = true
-                            }
-                        },
-                    )
-                }
+            composable(
+                route = "${Constants.Routes.PAY_PERIOD_EXPLORER}/{startEpoch}/{endEpoch}",
+                arguments = listOf(
+                    navArgument("startEpoch") { type = NavType.LongType },
+                    navArgument("endEpoch") { type = NavType.LongType },
+                ),
+            ) { backStackEntry ->
+                val start = backStackEntry.arguments?.getLong("startEpoch") ?: 0L
+                val end = backStackEntry.arguments?.getLong("endEpoch") ?: 0L
+                com.pennywiseai.tracker.ui.screens.payperiod.PayPeriodExplorerScreen(
+                    periodStartEpochDay = start,
+                    periodEndEpochDay = end,
+                    onNavigateBack = { navController.safePopBackStack() },
+                )
+            }
+
+            composable(Constants.Routes.CHAT) {
+                ChatScreen(
+                    onNavigateBack = { navController.safePopBackStack() },
+                    onNavigateToSettings = {
+                        navController.navigate(Constants.Routes.SETTINGS) {
+                            launchSingleTop = true
+                        }
+                    },
+                )
             }
 
             composable(Constants.Routes.BUDGETS) {

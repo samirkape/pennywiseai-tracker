@@ -81,6 +81,9 @@ class TransactionsViewModel @Inject constructor(
     private val _paymentModeFilter = MutableStateFlow<PaymentMode?>(null)
     private val _paymentModeGroupFilter = MutableStateFlow<PaymentModeGroup?>(null)
 
+    private val _bankNameFilter = MutableStateFlow<String?>(null)
+    private val _accountLast4Filter = MutableStateFlow<String?>(null)
+
     private val _includeExcluded = MutableStateFlow(false)
     val includeExcluded: StateFlow<Boolean> = _includeExcluded.asStateFlow()
 
@@ -470,6 +473,8 @@ class TransactionsViewModel @Inject constructor(
             _includeExcluded.map { "includeExcluded" },
             _paymentModeFilter.map { "paymentMode" },
             _paymentModeGroupFilter.map { "paymentModeGroup" },
+            _bankNameFilter.map { "bankName" },
+            _accountLast4Filter.map { "accountLast4" },
         )
             .transformLatest { trigger ->
                 // Get current values from all StateFlows
@@ -480,6 +485,8 @@ class TransactionsViewModel @Inject constructor(
                 val typeFilter = transactionTypeFilter.value
                 val paymentModeFilter = _paymentModeFilter.value
                 val paymentModeGroupFilter = _paymentModeGroupFilter.value
+                val bankNameFilter = _bankNameFilter.value
+                val accountLast4Filter = _accountLast4Filter.value
                 val sort = sortOption.value
                 val isUnified = _isUnifiedMode.value
                 val monthStartDay = userPreferencesRepository.monthStartDay.first()
@@ -506,6 +513,8 @@ class TransactionsViewModel @Inject constructor(
                     includeExcluded,
                     paymentModeFilter,
                     paymentModeGroupFilter,
+                    bankNameFilter,
+                    accountLast4Filter,
                 )
                     .collect { allTransactions ->
                         // Apply profile filter
@@ -818,6 +827,8 @@ class TransactionsViewModel @Inject constructor(
         periodStartEpochDay: Long? = null,
         periodEndEpochDay: Long? = null,
         paymentMode: String? = null,
+        bankName: String? = null,
+        accountLast4: String? = null,
     ) {
         // Create current params to compare
         val currentParams = NavigationParams(
@@ -829,6 +840,8 @@ class TransactionsViewModel @Inject constructor(
             periodStartEpochDay,
             periodEndEpochDay,
             paymentMode,
+            bankName,
+            accountLast4,
         )
 
         // Only apply navigation filters if:
@@ -851,6 +864,8 @@ class TransactionsViewModel @Inject constructor(
             setTransactionTypeFilter(TransactionTypeFilter.ALL)
             _paymentModeFilter.value = null
             _paymentModeGroupFilter.value = null
+            _bankNameFilter.value = null
+            _accountLast4Filter.value = null
             setSortOption(SortOption.DATE_NEWEST)
 
             category?.let {
@@ -885,6 +900,19 @@ class TransactionsViewModel @Inject constructor(
                             _paymentModeFilter.value = it
                         }
                 }
+            }
+
+            bankName?.let {
+                val decoded = if (it.contains("+") || it.contains("%")) {
+                    java.net.URLDecoder.decode(it, "UTF-8")
+                } else it
+                _bankNameFilter.value = decoded
+            }
+            accountLast4?.let {
+                val decoded = if (it.contains("+") || it.contains("%")) {
+                    java.net.URLDecoder.decode(it, "UTF-8")
+                } else it
+                _accountLast4Filter.value = decoded
             }
         }
     }
@@ -1028,6 +1056,8 @@ class TransactionsViewModel @Inject constructor(
         includeExcluded: Boolean = false,
         paymentModeFilter: PaymentMode? = null,
         paymentModeGroupFilter: PaymentModeGroup? = null,
+        bankNameFilter: String? = null,
+        accountLast4Filter: String? = null,
     ): Flow<List<TransactionEntity>> {
         // Category filter matches budget accounting: primary category or split lines only (not tags).
         val baseFlow = if (category != null) {
@@ -1161,11 +1191,27 @@ class TransactionsViewModel @Inject constructor(
             else -> typeFilteredFlow
         }
 
+        val bankAccountFilteredFlow = when {
+            !bankNameFilter.isNullOrBlank() && !accountLast4Filter.isNullOrBlank() -> paymentModeFilteredFlow.map { transactions ->
+                transactions.filter {
+                    it.bankName.equals(bankNameFilter, ignoreCase = true) &&
+                        it.accountNumber?.endsWith(accountLast4Filter) == true
+                }
+            }
+            !bankNameFilter.isNullOrBlank() -> paymentModeFilteredFlow.map { transactions ->
+                transactions.filter { it.bankName.equals(bankNameFilter, ignoreCase = true) }
+            }
+            !accountLast4Filter.isNullOrBlank() -> paymentModeFilteredFlow.map { transactions ->
+                transactions.filter { it.accountNumber?.endsWith(accountLast4Filter) == true }
+            }
+            else -> paymentModeFilteredFlow
+        }
+
         // Apply search filter
         return if (searchQuery.isBlank()) {
-            paymentModeFilteredFlow
+            bankAccountFilteredFlow
         } else {
-            paymentModeFilteredFlow.map { transactions ->
+            bankAccountFilteredFlow.map { transactions ->
                 transactions.filter { TransactionSearchMatcher.matches(it, searchQuery) }
             }
         }
@@ -1504,6 +1550,8 @@ private data class NavigationParams(
     val periodStartEpochDay: Long? = null,
     val periodEndEpochDay: Long? = null,
     val paymentMode: String? = null,
+    val bankName: String? = null,
+    val accountLast4: String? = null,
 )
 
 /**

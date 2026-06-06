@@ -43,12 +43,8 @@ class CategoriesViewModel @Inject constructor(
     }
     
     fun showEditDialog(category: CategoryEntity) {
-        if (!category.isSystem) {
-            _editingCategory.value = category
-            _showAddEditDialog.value = true
-        } else {
-            _snackbarMessage.value = "System categories cannot be edited"
-        }
+        _editingCategory.value = category
+        _showAddEditDialog.value = true
     }
     
     fun hideDialog() {
@@ -59,7 +55,7 @@ class CategoriesViewModel @Inject constructor(
     fun saveCategory(
         name: String,
         color: String,
-        isIncome: Boolean
+        isIncome: Boolean,
     ) {
         viewModelScope.launch {
             try {
@@ -69,9 +65,10 @@ class CategoriesViewModel @Inject constructor(
                     // Update existing category
                     categoryRepository.updateCategory(
                         editingCat.copy(
-                            name = name,
-                            color = color,
-                            isIncome = isIncome
+                            // Keep core system category attributes stable; only icon is user-editable.
+                            name = if (editingCat.isSystem) editingCat.name else name,
+                            color = if (editingCat.isSystem) editingCat.color else color,
+                            isIncome = if (editingCat.isSystem) editingCat.isIncome else isIncome,
                         )
                     )
                     _snackbarMessage.value = "Category updated successfully"
@@ -86,7 +83,7 @@ class CategoriesViewModel @Inject constructor(
                     categoryRepository.createCategory(
                         name = name,
                         color = color,
-                        isIncome = isIncome
+                        isIncome = isIncome,
                     )
                     _snackbarMessage.value = "Category created successfully"
                 }

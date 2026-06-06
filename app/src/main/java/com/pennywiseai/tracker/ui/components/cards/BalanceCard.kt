@@ -286,16 +286,7 @@ fun HeroSpendCard(
                 }
                 Column(
                     horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(Spacing.xs),
                 ) {
-                    HeroSparkline(
-                        history = spendingHistory,
-                        lastHistory = lastMonthSpendingHistory,
-                        spendingIncreased = spendingIncreased,
-                        modifier = Modifier
-                            .width(110.dp)
-                            .height(32.dp),
-                    )
                     Text(
                         text = deltaText,
                         style = MaterialTheme.typography.labelSmall,
@@ -305,59 +296,6 @@ fun HeroSpendCard(
                 }
             }
 
-            if (currentMonthInvestment > BigDecimal.ZERO) {
-                Spacer(modifier = Modifier.height(Spacing.xs))
-                val investmentColor = if (isDark) income_dark else income_light
-                val investedFormatted = CurrencyFormatter.formatCurrency(currentMonthInvestment, currency)
-                Surface(
-                    onClick = {
-                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                        onNavigateToInvestmentTransactions?.invoke()
-                    },
-                    shape = RoundedCornerShape(Dimensions.CornerRadius.small),
-                    color = investmentColor.copy(alpha = 0.1f),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            androidx.compose.foundation.Canvas(modifier = Modifier.size(6.dp)) {
-                                drawCircle(color = investmentColor)
-                            }
-                            Text(
-                                text = stringResource(R.string.home_also_invested),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = investmentColor,
-                            )
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text(
-                                text = investedFormatted,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = investmentColor,
-                            )
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp),
-                                tint = investmentColor,
-                            )
-                        }
-                    }
-                }
-            }
 
             Spacer(modifier = Modifier.height(Spacing.sm))
 

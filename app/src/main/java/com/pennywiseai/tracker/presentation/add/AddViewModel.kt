@@ -74,6 +74,7 @@ class AddViewModel @Inject constructor(
             val baseCurrency = userPreferencesRepository.baseCurrency.first()
             _transactionUiState.update { it.copy(currency = baseCurrency) }
             _subscriptionUiState.update { it.copy(currency = baseCurrency) }
+            _allUsedTags.value = transactionRepository.getAllUsedTags()
             if (unrecognizedSmsId > 0) {
                 loadUnrecognizedSmsPrefill(unrecognizedSmsId)
             }
@@ -106,6 +107,19 @@ class AddViewModel @Inject constructor(
             )
         }
     }
+
+    // Tag state
+    private val _allUsedTags = MutableStateFlow<List<String>>(emptyList())
+    private val _tagQuery = MutableStateFlow("")
+
+    val tagSuggestions: StateFlow<List<String>> = combine(
+        _allUsedTags,
+        _tagQuery,
+        transactionUiState,
+    ) { all, query, uiState ->
+        val filtered = if (query.isBlank()) all else all.filter { it.contains(query.trim(), ignoreCase = true) }
+        filtered.filter { it !in uiState.tags }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Categories for dropdowns
     val categories = getCategoriesUseCase.execute()
@@ -280,6 +294,21 @@ class AddViewModel @Inject constructor(
         }
     }
     
+    fun updateTagQuery(query: String) {
+        _tagQuery.value = query
+    }
+
+    fun addTag(tag: String) {
+        val trimmed = tag.trim()
+        if (trimmed.isNotBlank() && trimmed !in _transactionUiState.value.tags) {
+            _transactionUiState.update { it.copy(tags = it.tags + trimmed) }
+        }
+    }
+
+    fun removeTag(tag: String) {
+        _transactionUiState.update { it.copy(tags = it.tags - tag) }
+    }
+
     fun updateTransactionRecurring(isRecurring: Boolean) {
         _transactionUiState.update { currentState ->
             currentState.copy(isRecurring = isRecurring)
@@ -383,6 +412,7 @@ class AddViewModel @Inject constructor(
                     smsBody = state.sourceSmsBody,
                     smsSender = state.sourceSmsSender,
                     transferKind = state.transferKind,
+                    tags = state.tags.joinToString(","),
                 )
 
                 if (transactionId != -1L && state.sourceUnrecognizedSmsId != null) {
@@ -610,6 +640,7 @@ data class TransactionUiState(
     val budgetCategory: String? = null,
     val isSplitEnabled: Boolean = false,
     val splits: List<SplitItem> = emptyList(),
+    val tags: List<String> = emptyList(),
     val fromUnrecognizedSms: Boolean = false,
     val sourceSmsBody: String? = null,
     val sourceSmsSender: String? = null,

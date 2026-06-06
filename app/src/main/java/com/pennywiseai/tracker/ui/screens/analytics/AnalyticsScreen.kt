@@ -73,7 +73,9 @@ fun AnalyticsScreen(
         startDateEpochDay: Long?,
         endDateEpochDay: Long?,
         paymentMode: String?,
-    ) -> Unit = { _, _, _, _, _, _, _, _ -> },
+        bankName: String?,
+        accountLast4: String?,
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _ -> },
     onNavigateToTransactionsMultiCategory: (categories: String, period: String?, currency: String?, startDateEpochDay: Long?, endDateEpochDay: Long?) -> Unit = { _, _, _, _, _ -> },
     onNavigateToTransaction: (Long) -> Unit = {},
     onNavigateToHome: () -> Unit = {},
@@ -95,6 +97,7 @@ fun AnalyticsScreen(
     var showDateRangePicker by rememberSaveable { mutableStateOf(false) }
     var categoryViewType by rememberSaveable { mutableStateOf(CategoryViewType.LIST) }
     var showChartTypeSelector by remember { mutableStateOf(false) }
+    var activeTileKey by remember { mutableStateOf("outflow") }
 
     // Remember scroll position across navigation
     val listState = rememberSaveable(saver = LazyListState.Saver) {
@@ -157,6 +160,8 @@ fun AnalyticsScreen(
         merchant: String? = null,
         transactionType: String? = transactionTypeFilter.name,
         paymentMode: String? = null,
+        bankName: String? = null,
+        accountLast4: String? = null,
     ) {
         onNavigateToTransactions(
             category,
@@ -167,6 +172,8 @@ fun AnalyticsScreen(
             drillDownPeriodEpochs.first,
             drillDownPeriodEpochs.second,
             paymentMode,
+            bankName,
+            accountLast4,
         )
     }
 
@@ -455,7 +462,32 @@ fun AnalyticsScreen(
                             paymentMode = PaymentMode.CASH.name,
                         )
                     },
+                    onTileChanged = { activeTileKey = it },
                 )
+            }
+
+            val spendByAccountList = uiState.accountBreakdowns[activeTileKey]
+            if (!spendByAccountList.isNullOrEmpty()) {
+                item {
+                    val accountTransactionType = when (activeTileKey) {
+                        "investments" -> TransactionTypeFilter.INVESTMENT.name
+                        "spending" -> TransactionTypeFilter.EXPENSE.name
+                        // outflow and card_and_bank tiles span multiple types — use ALL
+                        else -> TransactionTypeFilter.ALL.name
+                    }
+                    AccountSpendTile(
+                        accounts = spendByAccountList,
+                        currency = uiState.currency,
+                        onAccountClick = { bankName, accountLast4, _ ->
+                            drillDownToTransactions(
+                                transactionType = accountTransactionType,
+                                bankName = bankName,
+                                accountLast4 = accountLast4,
+                            )
+                        },
+                        modifier = Modifier.padding(top = Spacing.xs),
+                    )
+                }
             }
         }
 

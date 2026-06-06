@@ -181,10 +181,9 @@ abstract class PennyWiseDatabase : RoomDatabase() {
                         MIGRATION_50_51,
                         MIGRATION_51_52,
                         MIGRATION_52_53,
-                        MIGRATION_53_54,
-                        MIGRATION_54_55,
-                        MIGRATION_55_56
+                        MIGRATION_53_54
                     )
+                    .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
                 INSTANCE = instance
                 instance

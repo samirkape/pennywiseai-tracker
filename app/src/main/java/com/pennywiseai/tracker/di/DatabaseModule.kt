@@ -81,6 +81,7 @@ object DatabaseModule {
                 PennyWiseDatabase.MIGRATION_54_55,
                 PennyWiseDatabase.MIGRATION_55_56
             )
+            .fallbackToDestructiveMigrationOnDowngrade()
 
             // Enable auto-migrations
             // Room will automatically detect schema changes between versions

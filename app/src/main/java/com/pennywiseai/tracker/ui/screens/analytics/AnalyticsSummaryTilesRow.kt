@@ -1,7 +1,5 @@
 package com.pennywiseai.tracker.ui.screens.analytics
 
-import com.pennywiseai.tracker.presentation.common.TransactionTypeFilter
-
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -32,6 +30,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import com.pennywiseai.tracker.presentation.common.PaymentMode
+import com.pennywiseai.tracker.presentation.common.TransactionTypeFilter
 import com.pennywiseai.tracker.ui.theme.Spacing
 import com.pennywiseai.tracker.utils.CurrencyFormatter
 import java.math.BigDecimal
@@ -76,6 +75,7 @@ fun AnalyticsSummaryTilesRow(
     onInvestmentClick: () -> Unit,
     onCardAndBankClick: () -> Unit,
     onCashClick: () -> Unit,
+    onTileChanged: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val showOutflowTile = periodOutflow != null
@@ -178,6 +178,12 @@ fun AnalyticsSummaryTilesRow(
 
     LaunchedEffect(tileKeys) {
         pagerState.scrollToPage(0)
+    }
+
+    LaunchedEffect(pagerState.currentPage, tiles.size) {
+        if (tiles.isNotEmpty()) {
+            onTileChanged(tiles[pagerState.currentPage].key)
+        }
     }
 
     Column(modifier = modifier.fillMaxWidth()) {

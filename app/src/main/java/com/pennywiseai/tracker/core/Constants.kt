@@ -71,6 +71,7 @@ object Constants {
         const val BUDGETS = "budgets"
         const val TRANSACTIONS = "transactions"
         const val ANALYTICS = "analytics"
+        const val PAY_PERIOD_EXPLORER = "pay_period_explorer"
         const val CHAT = "chat"
         const val SETTINGS = "settings"
     }

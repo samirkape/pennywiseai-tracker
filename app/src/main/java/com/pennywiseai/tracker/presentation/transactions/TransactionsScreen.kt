@@ -78,6 +78,8 @@ fun TransactionsScreen(
     // Epoch days for a CUSTOM period from analytics (separate from budget date range)
     initialPeriodStartEpoch: Long? = null,
     initialPeriodEndEpoch: Long? = null,
+    initialBankName: String? = null,
+    initialAccountLast4: String? = null,
     viewModel: TransactionsViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit = {},
     onTransactionClick: (Long) -> Unit = {},
@@ -210,6 +212,8 @@ fun TransactionsScreen(
         initialPaymentMode,
         initialPeriodStartEpoch,
         initialPeriodEndEpoch,
+        initialBankName,
+        initialAccountLast4,
     ) {
         val hasNavParams = initialCategory != null ||
             initialMerchant != null ||
@@ -217,6 +221,8 @@ fun TransactionsScreen(
             initialCurrency != null ||
             initialTransactionType != null ||
             initialPaymentMode != null ||
+            initialBankName != null ||
+            initialAccountLast4 != null ||
             hasExplicitNavRange
         if (!processedNavParams && hasNavParams) {
             viewModel.applyNavigationFilters(
@@ -228,6 +234,8 @@ fun TransactionsScreen(
                 initialPeriodStartEpoch,
                 initialPeriodEndEpoch,
                 initialPaymentMode,
+                initialBankName,
+                initialAccountLast4,
             )
             processedNavParams = true
         }

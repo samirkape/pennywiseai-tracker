@@ -10,6 +10,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,14 +24,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Help
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Savings
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -54,6 +54,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.delay
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -118,6 +119,7 @@ fun HomeScreen(
     onTransactionTypeClick: (String?) -> Unit = {},
     onFabPositioned: (Rect) -> Unit = {},
     onNavigateToPayPeriodSettings: () -> Unit = {},
+    onNavigateToPayPeriodExplorer: (Long, Long) -> Unit = { _, _ -> },
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val transactionsPeriod = defaultTimePeriodNavParam(uiState.useFinancialMonth)
@@ -258,9 +260,8 @@ fun HomeScreen(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(end = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        // Business/Personal filter dropdown
                         Box {
                             Box(
                                 modifier = Modifier
@@ -268,20 +269,20 @@ fun HomeScreen(
                                     .clip(CircleShape)
                                     .background(
                                         color = if (blurEffects) containerColor.copy(0.5f) else containerColor,
-                                        shape = CircleShape
+                                        shape = CircleShape,
                                     )
                                     .clickable(
                                         onClick = { showProfileFilterMenu = true },
                                         interactionSource = remember { MutableInteractionSource() },
                                         indication = null,
                                     ),
-                                contentAlignment = Alignment.Center
+                                contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
                                     imageVector = profileFilterIcon(uiState.profiles, uiState.selectedProfileId),
                                     contentDescription = "Profile filter",
                                     tint = MaterialTheme.colorScheme.inverseSurface,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(20.dp),
                                 )
                             }
                             ProfileFilterDropdown(
@@ -289,36 +290,9 @@ fun HomeScreen(
                                 profiles = uiState.profiles,
                                 selectedProfileId = uiState.selectedProfileId,
                                 onProfileSelected = { viewModel.updateSelectedProfile(it) },
-                                onDismiss = { showProfileFilterMenu = false }
+                                onDismiss = { showProfileFilterMenu = false },
                             )
                         }
-                        // Tips (categories and tags)
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    color = if (blurEffects) containerColor.copy(0.5f) else containerColor,
-                                    shape = CircleShape,
-                                )
-                                .clickable(
-                                    onClick = {
-                                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                                        showHomeHelpDialog = true
-                                    },
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Help,
-                                contentDescription = stringResource(R.string.home_help),
-                                tint = MaterialTheme.colorScheme.inverseSurface,
-                                modifier = Modifier.size(Dimensions.Icon.medium),
-                            )
-                        }
-                        // Search
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
@@ -340,29 +314,6 @@ fun HomeScreen(
                             Icon(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = stringResource(R.string.home_search),
-                                tint = MaterialTheme.colorScheme.inverseSurface,
-                                modifier = Modifier.size(Dimensions.Icon.medium),
-                            )
-                        }
-                        // Settings
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    color = if (blurEffects) containerColor.copy(0.5f) else containerColor,
-                                    shape = CircleShape,
-                                )
-                                .clickable(
-                                    onClick = onNavigateToSettings,
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "Settings",
                                 tint = MaterialTheme.colorScheme.inverseSurface,
                                 modifier = Modifier.size(Dimensions.Icon.medium),
                             )
@@ -641,29 +592,40 @@ fun HomeScreen(
 
         }
         
-        Box(
+        Surface(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(
                     end = Dimensions.Padding.content,
                     bottom = 96.dp,
-                ),
+                )
+                .combinedClickable(
+                    role = Role.Button,
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {
+                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        onNavigateToAddScreen()
+                    },
+                    onLongClick = {
+                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        showActionsSheet = true
+                    },
+                )
+                .spotlightTarget(onFabPositioned),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            tonalElevation = 4.dp,
+            shadowElevation = 6.dp,
         ) {
-            FloatingActionButton(
-                onClick = {
-                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                    showActionsSheet = true
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .spotlightTarget(onFabPositioned),
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
+            Box(
+                modifier = Modifier.size(56.dp),
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = Icons.Default.Menu,
-                    contentDescription = stringResource(R.string.home_actions_fab),
+                    imageVector = Icons.Default.Add,
+                    contentDescription = stringResource(R.string.home_action_add),
                 )
             }
         }

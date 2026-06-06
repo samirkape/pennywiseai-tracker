@@ -172,8 +172,8 @@ fun SettingsScreen(
                 .padding(bottom = Dimensions.Component.bottomBarHeight + Spacing.md),
             verticalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
-            // ── Personalization ──
-            SectionHeaderV2(title = "Personalization")
+            // ── Appearance ──
+            SectionHeaderV2(title = "Appearance")
             SettingsGroup {
                 SettingsNavItem(
                     icon = Icons.Default.Palette,
@@ -186,8 +186,8 @@ fun SettingsScreen(
                 )
             }
 
-            // ── Currency ──
-            SectionHeaderV2(title = "Currency")
+            // ── Currency & Pay Period ──
+            SectionHeaderV2(title = "Currency & Pay Period")
             SettingsGroup {
                 SettingsSwitchRow(
                     icon = Icons.Default.CurrencyExchange,
@@ -303,18 +303,9 @@ fun SettingsScreen(
                 }
             }
 
-            // ── Data Management ──
-            SectionHeaderV2(title = "Data Management")
+            // ── Finance ──
+            SectionHeaderV2(title = "Finance")
             SettingsGroup {
-                SettingsNavItem(
-                    icon = Icons.Default.AccountBalance,
-                    iconBgColor = red_light,
-                    iconTint = red_dark,
-                    title = "Manage Accounts",
-                    subtitle = "View and manage your bank accounts",
-                    onClick = onNavigateToManageAccounts,
-                    position = ItemPosition.TOP
-                )
                 SettingsNavItem(
                     icon = Icons.Default.Category,
                     iconBgColor = purple_light,
@@ -322,16 +313,7 @@ fun SettingsScreen(
                     title = "Categories",
                     subtitle = "Manage expense and income categories",
                     onClick = onNavigateToCategories,
-                    position = ItemPosition.MIDDLE
-                )
-                SettingsNavItem(
-                    icon = Icons.Default.AutoAwesome,
-                    iconBgColor = orange_light,
-                    iconTint = orange_dark,
-                    title = "Smart Rules",
-                    subtitle = "Automatic transaction categorization",
-                    onClick = onNavigateToRules,
-                    position = ItemPosition.MIDDLE
+                    position = ItemPosition.TOP
                 )
                 SettingsNavItem(
                     icon = Icons.Default.AccountBalanceWallet,
@@ -367,8 +349,27 @@ fun SettingsScreen(
                     title = "Transaction Groups",
                     subtitle = "Organise transactions under a topic",
                     onClick = onNavigateToTransactionGroups,
-                    position = ItemPosition.MIDDLE
+                    position = ItemPosition.BOTTOM
                 )
+            }
+
+            // ── Automation ──
+            SectionHeaderV2(title = "Automation")
+            SettingsGroup {
+                SettingsNavItem(
+                    icon = Icons.Default.AutoAwesome,
+                    iconBgColor = orange_light,
+                    iconTint = orange_dark,
+                    title = "Smart Rules",
+                    subtitle = "Automatic transaction categorization",
+                    onClick = onNavigateToRules,
+                    position = ItemPosition.SINGLE
+                )
+            }
+
+            // ── Backup & Restore ──
+            SectionHeaderV2(title = "Backup & Restore")
+            SettingsGroup {
                 SettingsNavItem(
                     icon = Icons.Default.Upload,
                     iconBgColor = blue_light,
@@ -376,7 +377,7 @@ fun SettingsScreen(
                     title = "Export Data",
                     subtitle = "Backup all data to a file",
                     onClick = { settingsViewModel.exportBackup() },
-                    position = ItemPosition.MIDDLE
+                    position = ItemPosition.TOP
                 )
                 SettingsNavItem(
                     icon = Icons.Default.Download,
@@ -394,7 +395,44 @@ fun SettingsScreen(
                     title = "Import Statement",
                     subtitle = "Import from GPay, PhonePe",
                     onClick = onNavigateToImportStatement,
-                    position = ItemPosition.MIDDLE
+                    position = ItemPosition.BOTTOM
+                )
+            }
+
+            // ── Accounts & Banks ──
+            SectionHeaderV2(title = "Accounts & Banks")
+            SettingsGroup {
+                SettingsNavItem(
+                    icon = Icons.Default.AccountBalance,
+                    iconBgColor = red_light,
+                    iconTint = red_dark,
+                    title = "Manage Accounts",
+                    subtitle = "View and manage your bank accounts",
+                    onClick = onNavigateToManageAccounts,
+                    position = ItemPosition.TOP
+                )
+                SettingsNavItem(
+                    icon = Icons.Default.Notifications,
+                    iconBgColor = indigo_light,
+                    iconTint = indigo_dark,
+                    title = "Bank Notification Access",
+                    subtitle = if (hasNotificationAccess) "Enabled" else "Tap to enable bank app notifications",
+                    onClick = {
+                        val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                        notificationAccessLauncher.launch(intent)
+                    },
+                    position = ItemPosition.MIDDLE,
+                    trailingText = if (hasNotificationAccess) "On" else "Off"
+                )
+                SettingsNavItem(
+                    icon = Icons.Default.CalendarMonth,
+                    iconBgColor = teal_light,
+                    iconTint = teal_dark,
+                    title = "SMS Scan Period",
+                    subtitle = if (smsScanAllTime) "Scan all SMS messages" else "Scan last $smsScanMonths months",
+                    onClick = { showSmsScanDialog = true },
+                    position = ItemPosition.MIDDLE,
+                    trailingText = if (smsScanAllTime) "All Time" else "$smsScanMonths mo"
                 )
                 SettingsNavItem(
                     icon = Icons.Default.Sms,
@@ -409,38 +447,10 @@ fun SettingsScreen(
                     icon = Icons.Default.Store,
                     iconBgColor = pink_light,
                     iconTint = pink_dark,
-                    title = "Merchant name mappings",
-                    subtitle = "Review SMS label → display name pairs; fix risky ones",
+                    title = "Merchant Aliases",
+                    subtitle = "Customize how merchant names appear",
                     onClick = onNavigateToMerchantAliases,
-                    position = ItemPosition.MIDDLE
-                )
-                SettingsNavItem(
-                    icon = Icons.Default.CalendarMonth,
-                    iconBgColor = teal_light,
-                    iconTint = teal_dark,
-                    title = "SMS Scan Period",
-                    subtitle = if (smsScanAllTime) "Scan all SMS messages" else "Scan last $smsScanMonths months",
-                    onClick = { showSmsScanDialog = true },
-                    position = ItemPosition.BOTTOM,
-                    trailingText = if (smsScanAllTime) "All Time" else "$smsScanMonths mo"
-                )
-            }
-
-            // ── Notifications ──
-            SectionHeaderV2(title = "Notifications")
-            SettingsGroup {
-                SettingsNavItem(
-                    icon = Icons.Default.Notifications,
-                    iconBgColor = indigo_light,
-                    iconTint = indigo_dark,
-                    title = "Bank Notification Access",
-                    subtitle = if (hasNotificationAccess) "Enabled" else "Tap to enable bank app notifications",
-                    onClick = {
-                        val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                        notificationAccessLauncher.launch(intent)
-                    },
-                    position = ItemPosition.SINGLE,
-                    trailingText = if (hasNotificationAccess) "On" else "Off"
+                    position = ItemPosition.BOTTOM
                 )
             }
 

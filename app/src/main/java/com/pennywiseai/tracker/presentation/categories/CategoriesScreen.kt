@@ -165,16 +165,39 @@ private fun SwipeableCategoryItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
     CategoryItem(
         category = category,
-        onClick = if (!category.isSystem) onEdit else null
+        onClick = onEdit,
+        onDelete = if (!category.isSystem) { { showDeleteConfirm = true } } else null
     )
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Category") },
+            text = { Text("Delete '${category.name}'? Existing transactions will remain unchanged.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        onDelete()
+                    }
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
+            }
+        )
+    }
 }
 
 @Composable
 private fun CategoryItem(
     category: CategoryEntity,
-    onClick: (() -> Unit)?
+    onClick: (() -> Unit)?,
+    onDelete: (() -> Unit)?
 ) {
     PennyWiseCardV2(
         modifier = Modifier.fillMaxWidth(),
@@ -187,14 +210,12 @@ private fun CategoryItem(
                 .padding(Dimensions.Padding.content),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Category with colored dot
             CategoryChip(
                 category = category,
                 showText = true,
                 modifier = Modifier.weight(1f)
             )
-            
-            // System badge
+
             if (category.isSystem) {
                 Surface(
                     shape = MaterialTheme.shapes.small,
@@ -211,16 +232,25 @@ private fun CategoryItem(
                         )
                     )
                 }
-            } else {
-                // Edit icon for non-system categories
-                Icon(
-                    Icons.Default.Edit,
-                    contentDescription = "Edit",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .size(Dimensions.Icon.medium)
-                        .padding(start = Spacing.sm)
-                )
+            }
+
+            Icon(
+                imageVector = Icons.Default.Edit,
+                contentDescription = "Edit",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .size(Dimensions.Icon.medium)
+                    .padding(start = Spacing.sm)
+            )
+
+            if (onDelete != null) {
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
             }
         }
     }

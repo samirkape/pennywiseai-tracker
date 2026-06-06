@@ -20,12 +20,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.ChecklistRtl
-import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Receipt
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -67,12 +66,13 @@ fun PeriodOutflowMetricTile(
         mutableStateOf(linkedSetOf(OutflowMetricOption.SPENDING, OutflowMetricOption.INVESTED))
     }
 
-    val metricRows = listOf(
-        OutflowMetricRow(OutflowMetricOption.SPENDING, outflow.spending, outflow.spendingTransactionCount),
-        OutflowMetricRow(OutflowMetricOption.INVESTED, outflow.invested, outflow.investmentTransactionCount),
-        OutflowMetricRow(OutflowMetricOption.CC_BILL_PAYMENT, outflow.ccBillPayments, outflow.ccBillPaymentTransactionCount),
-        OutflowMetricRow(OutflowMetricOption.EXCLUDED, outflow.excluded, outflow.excludedTransactionCount),
-    )
+    val metricRows = buildList {
+        add(OutflowMetricRow(OutflowMetricOption.SPENDING, outflow.spending, outflow.spendingTransactionCount))
+        add(OutflowMetricRow(OutflowMetricOption.INVESTED, outflow.invested, outflow.investmentTransactionCount))
+        if (outflow.ccBillPayment > BigDecimal.ZERO) {
+            add(OutflowMetricRow(OutflowMetricOption.CC_PAYMENT, outflow.ccBillPayment, outflow.ccBillPaymentTransactionCount))
+        }
+    }
 
     val selectedRows = metricRows.filter { selectedMetrics.contains(it.option) }
     val total = selectedRows.fold(BigDecimal.ZERO) { acc, item -> acc + item.amount }
@@ -88,8 +88,7 @@ fun PeriodOutflowMetricTile(
                 when (it) {
                     OutflowMetricOption.SPENDING -> TransactionTypeFilter.EXPENSE
                     OutflowMetricOption.INVESTED -> TransactionTypeFilter.INVESTMENT
-                    OutflowMetricOption.CC_BILL_PAYMENT -> TransactionTypeFilter.CC_BILL_PAYMENT
-                    OutflowMetricOption.EXCLUDED -> TransactionTypeFilter.EXCLUDED
+                    OutflowMetricOption.CC_PAYMENT -> TransactionTypeFilter.CC_BILL_PAYMENT
                 }
             }.toSet()
             onClick?.invoke(selectedTypes)
@@ -300,8 +299,7 @@ private enum class OutflowMetricOption(
 ) {
     SPENDING("Spending", Icons.Default.Receipt),
     INVESTED("Invested", Icons.AutoMirrored.Filled.ShowChart),
-    CC_BILL_PAYMENT("Card bill payments", Icons.Default.Payments),
-    EXCLUDED("Excluded", Icons.Default.VisibilityOff),
+    CC_PAYMENT("CC Payment", Icons.Default.CreditCard),
 }
 
 private data class OutflowMetricRow(

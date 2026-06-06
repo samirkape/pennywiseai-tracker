@@ -14,12 +14,12 @@ import com.pennywiseai.tracker.presentation.common.TimePeriod
 import com.pennywiseai.tracker.presentation.common.TransactionTypeFilter
 import com.pennywiseai.tracker.presentation.common.defaultTimePeriod
 import com.pennywiseai.tracker.presentation.common.PaymentMode
-import com.pennywiseai.tracker.presentation.common.countsOnceTowardCcBillPaymentTotal
 import com.pennywiseai.tracker.presentation.common.matchesAnalyticsSpendingFilter
 import com.pennywiseai.tracker.presentation.common.paymentMode
 import com.pennywiseai.tracker.presentation.common.getDateRangeForPeriod
 import com.pennywiseai.tracker.presentation.common.getDateRangeForYearMonthNavigation
 import com.pennywiseai.tracker.presentation.common.isCcBillPayment
+import com.pennywiseai.tracker.presentation.common.countsOnceTowardCcBillPaymentTotal
 import com.pennywiseai.tracker.presentation.common.resolveDateRangeForSelection
 import com.pennywiseai.tracker.utils.CurrencyUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -268,10 +268,7 @@ class AnalyticsViewModel @Inject constructor(
                     TransactionTypeFilter.EXCLUDED -> allTransactionsWithSplits.filter {
                         it.transaction.isExcludedFromTracking
                     }
-                }).let { base ->
-                    if (transactionTypeFilter == TransactionTypeFilter.EXCLUDED) base
-                    else base.filter { it.transaction.loanId == null }
-                }
+                }).filter { it.transaction.loanId == null }
 
                 // Compute available categories BEFORE applying category filter
                 val allCategoryNames = filteredTransactionsWithSplits
@@ -448,21 +445,8 @@ class AnalyticsViewModel @Inject constructor(
                     ).first()
                 }
 
-                val outflowTransactionsWithSplits = if (filterState.isUnifiedMode) {
-                    transactionRepository.getTransactionsWithSplitsAllCurrenciesIncludingExcluded(
-                        startDate = dateRange.first,
-                        endDate = dateRange.second,
-                    ).first()
-                } else {
-                    transactionRepository.getTransactionsWithSplitsFilteredIncludingExcluded(
-                        startDate = dateRange.first,
-                        endDate = dateRange.second,
-                        currency = filterState.currency,
-                    ).first()
-                }
-
                 val periodOutflow = computePeriodOutflow(
-                    allTransactionsWithSplits = outflowTransactionsWithSplits,
+                    allTransactionsWithSplits = allTransactionsWithSplits,
                     isUnified = isUnified,
                     displayCurrency = displayCurrency,
                 )
@@ -485,6 +469,66 @@ class AnalyticsViewModel @Inject constructor(
                     null
                 }
 
+                val accountBreakdowns = mutableMapOf<String, List<AccountSpendData>>()
+                if (periodOutflow != null) {
+                    val outflowTxs = allTransactionsWithSplits.map { it.transaction }
+                        .filter { tx ->
+                            !tx.isExcludedFromTracking && (
+                                tx.matchesAnalyticsSpendingFilter() ||
+                                    tx.transactionType == TransactionType.INVESTMENT ||
+                                    tx.countsOnceTowardCcBillPaymentTotal()
+                                )
+                        }
+                    var outflowTotalForBreakdown = BigDecimal.ZERO
+                    if (isUnified) {
+                        for (tx in outflowTxs) {
+                            outflowTotalForBreakdown += currencyConversionService.convertAmount(tx.amount, tx.currency, displayCurrency)
+                        }
+                    } else {
+                        outflowTotalForBreakdown = outflowTxs.sumOf { it.amount.toDouble() }.toBigDecimal()
+                    }
+                    accountBreakdowns["outflow"] = computeAccountBreakdownForList(
+                        transactions = outflowTxs,
+                        totalAmount = outflowTotalForBreakdown,
+                        isUnified = isUnified,
+                        displayCurrency = displayCurrency,
+                        currencyConversionService = currencyConversionService,
+                    )
+                }
+
+                val spendingTxs = if (transactionTypeFilter == TransactionTypeFilter.ALL) {
+                    filteredTransactions.filter { it.matchesAnalyticsSpendingFilter() && !it.isExcludedFromTracking }
+                } else {
+                    filteredTransactions.filter { !it.isExcludedFromTracking }
+                }
+                var spendingTotalForBreakdown = BigDecimal.ZERO
+                if (isUnified) {
+                    for (tx in spendingTxs) {
+                        spendingTotalForBreakdown += currencyConversionService.convertAmount(tx.amount, tx.currency, displayCurrency)
+                    }
+                } else {
+                    spendingTotalForBreakdown = spendingTxs.sumOf { it.amount.toDouble() }.toBigDecimal()
+                }
+                accountBreakdowns["spending"] = computeAccountBreakdownForList(
+                    transactions = spendingTxs,
+                    totalAmount = spendingTotalForBreakdown,
+                    isUnified = isUnified,
+                    displayCurrency = displayCurrency,
+                    currencyConversionService = currencyConversionService,
+                )
+
+                if (investmentInsights != null) {
+                    val investmentTxs = allTransactionsWithSplits.map { it.transaction }
+                        .filter { it.transactionType == TransactionType.INVESTMENT && !it.isExcludedFromTracking }
+                    accountBreakdowns["investments"] = computeAccountBreakdownForList(
+                        transactions = investmentTxs,
+                        totalAmount = investmentInsights.totalInvested,
+                        isUnified = isUnified,
+                        displayCurrency = displayCurrency,
+                        currencyConversionService = currencyConversionService,
+                    )
+                }
+
                 AnalyticsUiState(
                     totalSpending = totalSpending,
                     categoryBreakdown = categoryBreakdown,
@@ -505,6 +549,7 @@ class AnalyticsViewModel @Inject constructor(
                     periodOutflow = periodOutflow,
                     investmentInsights = investmentInsights,
                     paymentModeBreakdown = paymentModeBreakdown,
+                    accountBreakdowns = accountBreakdowns,
                 )
             }
         }
@@ -735,21 +780,15 @@ class AnalyticsViewModel @Inject constructor(
     ): PeriodOutflowSummary? {
         var spending = BigDecimal.ZERO
         var invested = BigDecimal.ZERO
-        var ccBillPayments = BigDecimal.ZERO
-        var excluded = BigDecimal.ZERO
+        var ccBillPayment = BigDecimal.ZERO
         var spendingCount = 0
         var investmentCount = 0
         var ccBillPaymentCount = 0
-        var excludedCount = 0
 
         for (item in allTransactionsWithSplits) {
             val tx = item.transaction
+            if (tx.isExcludedFromTracking) continue
             val amount = convertAmount(tx.amount, tx.currency, displayCurrency, isUnified)
-            if (tx.isExcludedFromTracking) {
-                excluded += amount
-                excludedCount++
-                continue
-            }
             when {
                 tx.matchesAnalyticsSpendingFilter() -> {
                     spending += amount
@@ -759,29 +798,25 @@ class AnalyticsViewModel @Inject constructor(
                     invested += amount
                     investmentCount++
                 }
-            }
-            if (tx.countsOnceTowardCcBillPaymentTotal()) {
-                ccBillPayments += amount
-                ccBillPaymentCount++
+                tx.countsOnceTowardCcBillPaymentTotal() -> {
+                    ccBillPayment += amount
+                    ccBillPaymentCount++
+                }
             }
         }
 
-        if (
-            spending <= BigDecimal.ZERO &&
-            invested <= BigDecimal.ZERO &&
-            ccBillPayments <= BigDecimal.ZERO &&
-            excluded <= BigDecimal.ZERO
-        ) return null
+        val total = spending + invested + ccBillPayment
+        if (total <= BigDecimal.ZERO) return null
 
         return PeriodOutflowSummary(
+            total = total,
             spending = spending,
             invested = invested,
-            ccBillPayments = ccBillPayments,
-            excluded = excluded,
+            ccBillPayment = ccBillPayment,
+            transactionCount = spendingCount + investmentCount + ccBillPaymentCount,
             spendingTransactionCount = spendingCount,
             investmentTransactionCount = investmentCount,
             ccBillPaymentTransactionCount = ccBillPaymentCount,
-            excludedTransactionCount = excludedCount,
             currency = displayCurrency,
         )
     }
@@ -1021,18 +1056,19 @@ data class AnalyticsUiState(
     val periodOutflow: PeriodOutflowSummary? = null,
     val investmentInsights: InvestmentInsights? = null,
     val paymentModeBreakdown: PaymentModeBreakdown? = null,
+    val accountBreakdowns: Map<String, List<AccountSpendData>> = emptyMap(),
 )
 
 /** Spending plus investments for the active period (independent of type filter). */
 data class PeriodOutflowSummary(
+    val total: BigDecimal,
     val spending: BigDecimal,
     val invested: BigDecimal,
-    val ccBillPayments: BigDecimal,
-    val excluded: BigDecimal,
+    val ccBillPayment: BigDecimal = BigDecimal.ZERO,
+    val transactionCount: Int,
     val spendingTransactionCount: Int,
     val investmentTransactionCount: Int,
-    val ccBillPaymentTransactionCount: Int,
-    val excludedTransactionCount: Int,
+    val ccBillPaymentTransactionCount: Int = 0,
     val currency: String,
 )
 
@@ -1106,4 +1142,62 @@ data class TagData(
     val transactionCount: Int,
     val totalAmount: BigDecimal
 )
+
+data class AccountSpendData(
+    val bankName: String,
+    val accountLast4: String,
+    val isCreditCard: Boolean,
+    val total: BigDecimal,
+    val transactionCount: Int,
+    val percentOfTotal: Float,
+    val currency: String,
+)
+
+private suspend fun computeAccountBreakdownForList(
+    transactions: List<com.pennywiseai.tracker.data.database.entity.TransactionEntity>,
+    totalAmount: BigDecimal,
+    isUnified: Boolean,
+    displayCurrency: String,
+    currencyConversionService: com.pennywiseai.tracker.data.currency.CurrencyConversionService,
+): List<AccountSpendData> {
+    if (totalAmount <= BigDecimal.ZERO) return emptyList()
+
+    val amountMap = mutableMapOf<String, BigDecimal>()
+    val countMap = mutableMapOf<String, Int>()
+    val metaMap = mutableMapOf<String, Triple<String, String, Boolean>>()
+
+    for (tx in transactions) {
+        val bankName = tx.bankName
+        val accountLast4 = tx.accountNumber
+        if (bankName.isNullOrBlank() || accountLast4.isNullOrBlank()) continue
+
+        val key = "$bankName-$accountLast4"
+        val converted = if (isUnified) {
+            currencyConversionService.convertAmount(tx.amount, tx.currency, displayCurrency)
+        } else {
+            tx.amount
+        }
+
+        amountMap[key] = (amountMap[key] ?: BigDecimal.ZERO) + converted
+        countMap[key] = (countMap[key] ?: 0) + 1
+        if (!metaMap.containsKey(key)) {
+            val isCreditCard = tx.transactionType == com.pennywiseai.tracker.data.database.entity.TransactionType.CREDIT
+            metaMap[key] = Triple(bankName, accountLast4, isCreditCard)
+        }
+    }
+
+    return amountMap.map { (key, total) ->
+        val (bankName, accountLast4, isCreditCard) = metaMap[key]!!
+        val percent = (total.divide(totalAmount, 4, java.math.RoundingMode.HALF_UP) * BigDecimal(100)).toFloat()
+        AccountSpendData(
+            bankName = bankName,
+            accountLast4 = accountLast4,
+            isCreditCard = isCreditCard,
+            total = total,
+            transactionCount = countMap[key]!!,
+            percentOfTotal = percent,
+            currency = displayCurrency,
+        )
+    }.sortedByDescending { it.total }
+}
 

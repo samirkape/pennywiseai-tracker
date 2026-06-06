@@ -78,6 +78,7 @@ fun TransactionTabContent(
     val categories by viewModel.categories.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
     val applyToAllFromMerchant by viewModel.applyToAllFromMerchant.collectAsState()
+    val tagSuggestions by viewModel.tagSuggestions.collectAsState()
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
@@ -85,6 +86,7 @@ fun TransactionTabContent(
     var showCreateCategoryDialog by remember { mutableStateOf(false) }
     var showAccountMenu by remember { mutableStateOf(false) }
     var showCurrencyMenu by remember { mutableStateOf(false) }
+    var tagInput by remember { mutableStateOf("") }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -731,6 +733,100 @@ fun TransactionTabContent(
                         )
                         Spacer(modifier = Modifier.width(Spacing.xs))
                         Text("Split across categories")
+                    }
+                }
+            }
+
+            // ── Tags ──
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                Text(
+                    text = "Tags (Optional)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (uiState.tags.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                    ) {
+                        uiState.tags.forEach { tag ->
+                            FilterChip(
+                                selected = true,
+                                onClick = { viewModel.removeTag(tag) },
+                                label = { Text(tag) },
+                                leadingIcon = null,
+                                trailingIcon = {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Remove tag",
+                                        modifier = Modifier.size(Dimensions.Icon.small)
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+                if (tagSuggestions.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                    ) {
+                        tagSuggestions.take(10).forEach { suggestion ->
+                            SuggestionChip(
+                                onClick = {
+                                    viewModel.addTag(suggestion)
+                                    tagInput = ""
+                                    viewModel.updateTagQuery("")
+                                },
+                                label = { Text(suggestion, style = MaterialTheme.typography.bodySmall) },
+                                border = null,
+                                colors = SuggestionChipDefaults.suggestionChipColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                )
+                            )
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    OutlinedTextField(
+                        value = tagInput,
+                        onValueChange = {
+                            tagInput = it
+                            viewModel.updateTagQuery(it)
+                        },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Add tag…", style = MaterialTheme.typography.bodyMedium) },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text,
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onDone = {
+                                if (tagInput.isNotBlank()) {
+                                    viewModel.addTag(tagInput)
+                                    tagInput = ""
+                                    viewModel.updateTagQuery("")
+                                }
+                            }
+                        )
+                    )
+                    TextButton(
+                        onClick = {
+                            if (tagInput.isNotBlank()) {
+                                viewModel.addTag(tagInput)
+                                tagInput = ""
+                                viewModel.updateTagQuery("")
+                            }
+                        }
+                    ) {
+                        Text("Add")
                     }
                 }
             }

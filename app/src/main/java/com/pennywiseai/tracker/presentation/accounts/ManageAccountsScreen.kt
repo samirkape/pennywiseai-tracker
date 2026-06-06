@@ -540,19 +540,7 @@ private fun CreditCardItem(
 ) {
     var showStatementDayDialog by remember { mutableStateOf(false) }
     val isManualAccount = card.sourceType == "MANUAL"
-    val available = (card.creditLimit ?: BigDecimal.ZERO) - card.balance
-    val utilization = if (card.creditLimit != null && card.creditLimit > BigDecimal.ZERO) {
-        ((card.balance.toDouble() / card.creditLimit.toDouble()) * 100).toInt()
-    } else {
-        0
-    }
-    
-    val utilizationColor = when {
-        utilization > 70 -> MaterialTheme.colorScheme.error
-        utilization > 30 -> MaterialTheme.colorScheme.tertiary
-        else -> MaterialTheme.colorScheme.primary
-    }
-    
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -562,243 +550,165 @@ private fun CreditCardItem(
                 MaterialTheme.colorScheme.surfaceContainerLow
             }
         ),
+        shape = MaterialTheme.shapes.large,
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(
+        // Header Row: icon box + info + menu
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(Dimensions.Padding.content),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Credit Card Header
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.surface,
+                            shape = MaterialTheme.shapes.medium
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.CreditCard,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary
                     )
-                    Column {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = card.bankName,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "••${card.accountLast4}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            if (isHidden) {
-                                Icon(
-                                    Icons.Default.VisibilityOff,
-                                    contentDescription = "Hidden",
-                                    modifier = Modifier.size(Dimensions.Icon.small),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
                 }
-            }
-
-            // Credit Card Details
-            Column(
-                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
-            ) {
-                // Outstanding Balance
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                Column(
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Text(
-                        text = "Outstanding",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = CurrencyFormatter.formatCurrency(card.balance, card.currency),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = if (card.balance > BigDecimal.ZERO) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        }
-                    )
-                }
-                
-                // Available Credit
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "Available",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = CurrencyFormatter.formatCurrency(available, card.currency),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                
-                // Credit Limit with Utilization
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "Credit Limit",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = CurrencyFormatter.formatCurrency(card.creditLimit ?: BigDecimal.ZERO, card.currency),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
+                            text = card.bankName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
+                        if (isHidden) {
+                            Icon(
+                                Icons.Default.VisibilityOff,
+                                contentDescription = "Hidden",
+                                modifier = Modifier.size(Dimensions.Icon.small),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Credit Card ••${card.accountLast4}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (card.statementDay != null) {
                         Text(
-                            text = "($utilization% used)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = utilizationColor,
-                            fontWeight = FontWeight.Medium
+                            text = "Statement: ${card.statementDay}th",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.tertiary
                         )
                     }
                 }
             }
 
-            // Action Buttons - Primary action + overflow menu
+            // Overflow menu (sits inline at the end of the header row)
             var showMenu by remember { mutableStateOf(false) }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Primary action
-                OutlinedButton(
-                    onClick = onUpdateBalance
-                ) {
+            Box {
+                IconButton(onClick = { showMenu = true }) {
                     Icon(
-                        Icons.Default.Edit,
-                        contentDescription = null,
-                        modifier = Modifier.size(Dimensions.Icon.small)
+                        Icons.Default.MoreVert,
+                        contentDescription = "More options",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.width(Spacing.xs))
-                    Text("Set Balance")
                 }
-
-                // Overflow menu
-                Box {
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(
-                            Icons.Default.MoreVert,
-                            contentDescription = "More options"
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false }
+                ) {
+                    if (isManualAccount) {
+                        DropdownMenuItem(
+                            text = { Text("Edit Account") },
+                            onClick = {
+                                showMenu = false
+                                onEditAccount()
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.EditNote,
+                                    contentDescription = null
+                                )
+                            }
                         )
                     }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
-                        if (isManualAccount) {
-                            DropdownMenuItem(
-                                text = { Text("Edit Account") },
-                                onClick = {
-                                    showMenu = false
-                                    onEditAccount()
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Default.EditNote,
-                                        contentDescription = null
-                                    )
-                                }
+                    DropdownMenuItem(
+                        text = { Text("History") },
+                        onClick = {
+                            showMenu = false
+                            onViewHistory()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.History,
+                                contentDescription = null
                             )
                         }
-                        DropdownMenuItem(
-                            text = { Text("History") },
-                            onClick = {
-                                showMenu = false
-                                onViewHistory()
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.History,
-                                    contentDescription = null
-                                )
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (isHidden) "Show" else "Hide") },
-                            onClick = {
-                                showMenu = false
-                                onToggleVisibility()
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    if (isHidden) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                    contentDescription = null
-                                )
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    if (card.statementDay != null) "Statement date: ${card.statementDay}"
-                                    else "Set statement date"
-                                )
-                            },
-                            onClick = {
-                                showMenu = false
-                                showStatementDayDialog = true
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.CalendarMonth,
-                                    contentDescription = null
-                                )
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Delete") },
-                            onClick = {
-                                showMenu = false
-                                onDeleteAccount()
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            },
-                            colors = MenuDefaults.itemColors(
-                                textColor = MaterialTheme.colorScheme.error
+                    )
+                    DropdownMenuItem(
+                        text = { Text(if (isHidden) "Show" else "Hide") },
+                        onClick = {
+                            showMenu = false
+                            onToggleVisibility()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                if (isHidden) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                contentDescription = null
                             )
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (card.statementDay != null) "Statement date: ${card.statementDay}"
+                                else "Set statement date"
+                            )
+                        },
+                        onClick = {
+                            showMenu = false
+                            showStatementDayDialog = true
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.CalendarMonth,
+                                contentDescription = null
+                            )
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete") },
+                        onClick = {
+                            showMenu = false
+                            onDeleteAccount()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        colors = MenuDefaults.itemColors(
+                            textColor = MaterialTheme.colorScheme.error
                         )
-                    }
+                    )
                 }
             }
         }
@@ -901,6 +811,7 @@ private fun AccountItem(
                 MaterialTheme.colorScheme.surfaceContainerLow
             }
         ),
+        shape = MaterialTheme.shapes.large,
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
@@ -909,22 +820,33 @@ private fun AccountItem(
                 .padding(Dimensions.Padding.content),
             verticalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
-            // Account Header
+            // Account Header Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.md),
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.AccountBalance,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                    // Icon box
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.surface,
+                                shape = MaterialTheme.shapes.medium
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AccountBalance,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     Column {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
@@ -932,13 +854,26 @@ private fun AccountItem(
                         ) {
                             Text(
                                 text = account.bankName,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
+                            if (isHidden) {
+                                Icon(
+                                    Icons.Default.VisibilityOff,
+                                    contentDescription = "Hidden",
+                                    modifier = Modifier.size(Dimensions.Icon.small),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = "••${account.accountLast4}",
+                                text = "Account ••${account.accountLast4}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -955,143 +890,18 @@ private fun AccountItem(
                                     )
                                 }
                             }
-                            if (isHidden) {
-                                Icon(
-                                    Icons.Default.VisibilityOff,
-                                    contentDescription = "Hidden",
-                                    modifier = Modifier.size(Dimensions.Icon.small),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
                         }
                     }
-                }
-
-                // Balance
-                Column(
-                    horizontalAlignment = Alignment.End
-                ) {
-                    Text(
-                        text = CurrencyFormatter.formatCurrency(account.balance, account.currency),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = "Balance",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            
-            // Linked Cards Section
-            if (linkedCards.isNotEmpty()) {
-                Column(
-                    modifier = Modifier.padding(top = Spacing.sm)
-                ) {
-                    Text(
-                        text = "Linked Cards",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = Spacing.xs)
-                    )
-                    linkedCards.forEach { card ->
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = Spacing.xs),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            shape = MaterialTheme.shapes.small
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = Spacing.sm, vertical = Spacing.xs),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.CreditCard,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(Dimensions.Icon.small),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Column {
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
-                                        ) {
-                                            Text(
-                                                text = "••${card.cardLast4}",
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                            if (!card.isActive) {
-                                                Text(
-                                                    text = "(Inactive)",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.error
-                                                )
-                                            }
-                                        }
-                                        // Show last transaction date if available
-                                        if (card.lastBalanceDate != null) {
-                                            Text(
-                                                text = "Updated: ${card.lastBalanceDate.format(java.time.format.DateTimeFormatter.ofPattern("MMM dd"))}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                }
-                                IconButton(
-                                    onClick = { onUnlinkCard(card.id) },
-                                    modifier = Modifier.size(Dimensions.Icon.medium)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.LinkOff,
-                                        contentDescription = "Unlink card",
-                                        modifier = Modifier.size(Dimensions.Icon.small),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Action Buttons - Primary action + overflow menu
-            var showMenu by remember { mutableStateOf(false) }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Primary action
-                OutlinedButton(
-                    onClick = onUpdateBalance
-                ) {
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = null,
-                        modifier = Modifier.size(Dimensions.Icon.small)
-                    )
-                    Spacer(modifier = Modifier.width(Spacing.xs))
-                    Text("Set Balance")
                 }
 
                 // Overflow menu
+                var showMenu by remember { mutableStateOf(false) }
                 Box {
                     IconButton(onClick = { showMenu = true }) {
                         Icon(
                             Icons.Default.MoreVert,
-                            contentDescription = "More options"
+                            contentDescription = "More options",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     DropdownMenu(
@@ -1171,6 +981,76 @@ private fun AccountItem(
                                 textColor = MaterialTheme.colorScheme.error
                             )
                         )
+                    }
+                }
+            }
+
+            // Linked Cards Section
+            if (linkedCards.isNotEmpty()) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = Spacing.xs),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+                Text(
+                    text = "Linked Cards",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = Spacing.xs)
+                )
+                linkedCards.forEach { card ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = Spacing.xs),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CreditCard,
+                                contentDescription = null,
+                                modifier = Modifier.size(Dimensions.Icon.small),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Column {
+                                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                                    Text(
+                                        text = "••${card.cardLast4}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    if (!card.isActive) {
+                                        Text(
+                                            text = "Inactive",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                                if (card.lastBalanceDate != null) {
+                                    Text(
+                                        text = "Updated: ${card.lastBalanceDate.format(java.time.format.DateTimeFormatter.ofPattern("MMM dd"))}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                        IconButton(
+                            onClick = { onUnlinkCard(card.id) },
+                            modifier = Modifier.size(Dimensions.Icon.medium)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.LinkOff,
+                                contentDescription = "Unlink card",
+                                modifier = Modifier.size(Dimensions.Icon.small),
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 }
             }

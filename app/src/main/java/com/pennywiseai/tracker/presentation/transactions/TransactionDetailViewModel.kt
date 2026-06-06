@@ -1418,23 +1418,7 @@ class TransactionDetailViewModel @Inject constructor(
         return normalizeMerchantName(raw)
     }
 
-    /**
-     * Normalizes merchant name to consistent format.
-     * Converts all-caps to proper case, preserves already mixed case.
-     */
-    private fun normalizeMerchantName(name: String): String {
-        val trimmed = name.trim()
-        
-        // If it's all uppercase, convert to proper case
-        return if (trimmed == trimmed.uppercase()) {
-            trimmed.lowercase().split(" ").joinToString(" ") { word ->
-                word.replaceFirstChar { it.uppercase() }
-            }
-        } else {
-            // Already has mixed case, keep as is
-            trimmed
-        }
-    }
+    private fun normalizeMerchantName(name: String): String = name.trim()
     
     fun getReportUrl(): String {
         val txn = _transaction.value ?: return ""
