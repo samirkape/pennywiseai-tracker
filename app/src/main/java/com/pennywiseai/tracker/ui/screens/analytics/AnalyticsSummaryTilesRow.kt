@@ -74,8 +74,11 @@ fun AnalyticsSummaryTilesRow(
     onInvestmentClick: () -> Unit,
     onCardAndBankClick: () -> Unit,
     onCashClick: () -> Unit,
+    onTileDetailClick: ((String) -> Unit)? = null,
+    onOutflowBreakdownRowClick: ((TransactionTypeFilter) -> Unit)? = null,
     onTileChanged: (String) -> Unit = {},
     compactMode: Boolean = true,
+    showInlineBreakdown: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val showOutflowTile = periodOutflow != null
@@ -240,23 +243,29 @@ fun AnalyticsSummaryTilesRow(
                     alpha = lerp(0.78f, 1f, t)
                 }
 
+            val detailNavigate = onTileDetailClick?.let { navigate -> { navigate(tile.key) } }
+
             when (tile) {
                 is AnalyticsSummaryTileEntry.Outflow -> PeriodOutflowMetricTile(
                     outflow = tile.summary,
                     currency = tile.summary.currency,
                     onClick = tile.onClick,
                     compactMode = compactMode,
+                    showInlineBreakdown = showInlineBreakdown,
+                    showMetricFilter = showInlineBreakdown,
+                    onDetailNavigate = detailNavigate,
+                    onBreakdownRowClick = onOutflowBreakdownRowClick,
                     modifier = tileModifier,
                 )
                 is AnalyticsSummaryTileEntry.Metric -> AnalyticsMetricTile(
                     content = tile.content,
-                    onClick = tile.onClick,
+                    onClick = detailNavigate ?: tile.onClick,
                     modifier = tileModifier,
                 )
                 is AnalyticsSummaryTileEntry.CardAndBank -> CardAndBankMetricTile(
                     summary = tile.summary,
                     currency = currency,
-                    onClick = tile.onClick,
+                    onClick = detailNavigate ?: tile.onClick,
                     modifier = tileModifier,
                 )
             }

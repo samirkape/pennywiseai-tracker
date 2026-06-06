@@ -438,6 +438,58 @@ fun MainScreen(
                             launchSingleTop = true
                         }
                     },
+                    onNavigateToBreakdown = { tileKey ->
+                        navController.navigate("analytics_breakdown/$tileKey") {
+                            launchSingleTop = true
+                        }
+                    },
+                )
+            }
+
+            composable(
+                route = Constants.Routes.ANALYTICS_BREAKDOWN,
+                arguments = listOf(
+                    navArgument("tileKey") { type = NavType.StringType },
+                ),
+            ) { backStackEntry ->
+                val tileKey = backStackEntry.arguments?.getString("tileKey") ?: "outflow"
+                com.pennywiseai.tracker.ui.screens.analytics.AnalyticsBreakdownScreen(
+                    tileKey = tileKey,
+                    navController = navController,
+                    onNavigateBack = { navController.safePopBackStack() },
+                    onNavigateToTransactions = { category, merchant, period, currency, transactionType, startDateEpoch, endDateEpoch, paymentMode, bankName, accountLast4 ->
+                        val route = buildString {
+                            append("transactions")
+                            val params = mutableListOf<String>()
+                            category?.let {
+                                val encoded = java.net.URLEncoder.encode(it, "UTF-8")
+                                params.add("category=$encoded")
+                            }
+                            merchant?.let {
+                                val encoded = java.net.URLEncoder.encode(it, "UTF-8")
+                                params.add("merchant=$encoded")
+                            }
+                            period?.let { params.add("period=$it") }
+                            currency?.let { params.add("currency=$it") }
+                            transactionType?.let { params.add("type=$it") }
+                            startDateEpoch?.let { params.add("startDateEpoch=$it") }
+                            endDateEpoch?.let { params.add("endDateEpoch=$it") }
+                            paymentMode?.let { params.add("paymentMode=$it") }
+                            bankName?.let {
+                                val encoded = java.net.URLEncoder.encode(it, "UTF-8")
+                                params.add("bankName=$encoded")
+                            }
+                            accountLast4?.let {
+                                val encoded = java.net.URLEncoder.encode(it, "UTF-8")
+                                params.add("accountLast4=$encoded")
+                            }
+                            if (params.isNotEmpty()) {
+                                append("?")
+                                append(params.joinToString("&"))
+                            }
+                        }
+                        navController.navigate(route) { launchSingleTop = true }
+                    },
                 )
             }
 

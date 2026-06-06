@@ -79,7 +79,8 @@ fun AnalyticsScreen(
     onNavigateToTransactionsMultiCategory: (categories: String, period: String?, currency: String?, startDateEpochDay: Long?, endDateEpochDay: Long?) -> Unit = { _, _, _, _, _ -> },
     onNavigateToTransaction: (Long) -> Unit = {},
     onNavigateToHome: () -> Unit = {},
-    onNavigateToBehavioralStats: () -> Unit = {}
+    onNavigateToBehavioralStats: () -> Unit = {},
+    onNavigateToBreakdown: (tileKey: String) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val selectedPeriod by viewModel.selectedPeriod.collectAsStateWithLifecycle()
@@ -92,6 +93,7 @@ fun AnalyticsScreen(
     val periodAnchorMonth by viewModel.periodAnchorMonth.collectAsStateWithLifecycle()
     val chartType by viewModel.selectedChartType.collectAsStateWithLifecycle()
     val categoryFilter by viewModel.categoryFilter.collectAsStateWithLifecycle()
+    val compactAnalyticsCards by viewModel.compactAnalyticsCards.collectAsStateWithLifecycle()
     // Use rememberSaveable to preserve UI state across navigation
     var showAdvancedFilters by rememberSaveable { mutableStateOf(false) }
     var showDateRangePicker by rememberSaveable { mutableStateOf(false) }
@@ -462,12 +464,18 @@ fun AnalyticsScreen(
                             paymentMode = PaymentMode.CASH.name,
                         )
                     },
+                    onTileDetailClick = if (compactAnalyticsCards) {
+                        { tileKey -> onNavigateToBreakdown(tileKey) }
+                    } else {
+                        null
+                    },
                     onTileChanged = { activeTileKey = it },
+                    showInlineBreakdown = !compactAnalyticsCards,
                 )
             }
 
             val spendByAccountList = uiState.accountBreakdowns[activeTileKey]
-            if (!spendByAccountList.isNullOrEmpty()) {
+            if (!compactAnalyticsCards && !spendByAccountList.isNullOrEmpty()) {
                 item {
                     val accountTransactionType = when (activeTileKey) {
                         "investments" -> TransactionTypeFilter.INVESTMENT.name

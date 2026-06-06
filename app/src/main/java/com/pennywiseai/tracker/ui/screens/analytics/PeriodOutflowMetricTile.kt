@@ -3,6 +3,7 @@ package com.pennywiseai.tracker.ui.screens.analytics
 import com.pennywiseai.tracker.presentation.common.TransactionTypeFilter
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.ChecklistRtl
@@ -58,6 +60,10 @@ fun PeriodOutflowMetricTile(
     currency: String,
     onClick: ((selectedTypes: Set<TransactionTypeFilter>) -> Unit)?,
     compactMode: Boolean = true,
+    showInlineBreakdown: Boolean = true,
+    showMetricFilter: Boolean = true,
+    onDetailNavigate: (() -> Unit)? = null,
+    onBreakdownRowClick: ((TransactionTypeFilter) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var isMenuExpanded by rememberSaveable { mutableStateOf(false) }
@@ -83,18 +89,26 @@ fun PeriodOutflowMetricTile(
     val formattedTotal = CurrencyFormatter.formatCurrency(total, currency)
     val isLongTotal = formattedTotal.length > 14
 
+    val cardClick: (() -> Unit)? = if (!showInlineBreakdown) {
+        onDetailNavigate?.let { navigate -> { navigate() } }
+    } else {
+        onClick?.let { handler ->
+            {
+                val selectedTypes = selectedMetrics.map {
+                    when (it) {
+                        OutflowMetricOption.SPENDING -> TransactionTypeFilter.EXPENSE
+                        OutflowMetricOption.INVESTED -> TransactionTypeFilter.INVESTMENT
+                        OutflowMetricOption.CC_PAYMENT -> TransactionTypeFilter.CC_BILL_PAYMENT
+                    }
+                }.toSet()
+                handler(selectedTypes)
+            }
+        }
+    }
+
     PennyWiseCard(
         modifier = modifier,
-        onClick = {
-            val selectedTypes = selectedMetrics.map {
-                when (it) {
-                    OutflowMetricOption.SPENDING -> TransactionTypeFilter.EXPENSE
-                    OutflowMetricOption.INVESTED -> TransactionTypeFilter.INVESTMENT
-                    OutflowMetricOption.CC_PAYMENT -> TransactionTypeFilter.CC_BILL_PAYMENT
-                }
-            }.toSet()
-            onClick?.invoke(selectedTypes)
-        }
+        onClick = cardClick,
     ) {
         Column(
             modifier = Modifier
@@ -151,79 +165,115 @@ fun PeriodOutflowMetricTile(
                 overflow = TextOverflow.Ellipsis,
             )
 
-            Spacer(modifier = Modifier.height(Spacing.sm))
+            if (showInlineBreakdown) {
+                Spacer(modifier = Modifier.height(Spacing.sm))
 
-            Column {
-                previewRows.forEachIndexed { index, row ->
-                    OutflowBreakdownRow(row = row, currency = currency)
-                    if (index != previewRows.lastIndex) {
-                        Spacer(modifier = Modifier.height(Spacing.xs))
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(Spacing.xs))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (compactMode && selectedRows.size > previewLimit) {
-                    TextButton(
-                        onClick = { isBreakdownExpanded = !isBreakdownExpanded },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    ) {
-                        Text(
-                            text = if (isBreakdownExpanded) "Show less" else "Show all",
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                        Spacer(modifier = Modifier.size(2.dp))
-                        Icon(
-                            imageVector = if (isBreakdownExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
-                } else {
-                    Spacer(modifier = Modifier)
-                }
-
-                Box {
-                    IconButton(onClick = { isMenuExpanded = !isMenuExpanded }) {
-                        Icon(
-                            imageVector = Icons.Default.ChecklistRtl,
-                            contentDescription = "Filter metrics",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = isMenuExpanded,
-                        onDismissRequest = { isMenuExpanded = false },
-                    ) {
-                        metricRows.forEach { row ->
-                            DropdownMenuItem(
-                                text = { Text(row.option.label) },
-                                leadingIcon = {
-                                    Checkbox(
-                                        checked = selectedMetrics.contains(row.option),
-                                        onCheckedChange = null,
-                                    )
-                                },
-                                trailingIcon = {
-                                    Icon(imageVector = row.option.icon, contentDescription = null)
-                                },
-                                onClick = {
-                                    val next = LinkedHashSet(selectedMetrics)
-                                    if (next.contains(row.option)) {
-                                        if (next.size > 1) next.remove(row.option)
-                                    } else {
-                                        next.add(row.option)
+                Column {
+                    previewRows.forEachIndexed { index, row ->
+                        OutflowBreakdownRow(
+                            row = row,
+                            currency = currency,
+                            onClick = onBreakdownRowClick?.let { handler ->
+                                {
+                                    val type = when (row.option) {
+                                        OutflowMetricOption.SPENDING -> TransactionTypeFilter.EXPENSE
+                                        OutflowMetricOption.INVESTED -> TransactionTypeFilter.INVESTMENT
+                                        OutflowMetricOption.CC_PAYMENT -> TransactionTypeFilter.CC_BILL_PAYMENT
                                     }
-                                    selectedMetrics = next
-                                },
-                            )
+                                    handler(type)
+                                }
+                            },
+                        )
+                        if (index != previewRows.lastIndex) {
+                            Spacer(modifier = Modifier.height(Spacing.xs))
                         }
                     }
+                }
+
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (compactMode && selectedRows.size > previewLimit) {
+                        TextButton(
+                            onClick = { isBreakdownExpanded = !isBreakdownExpanded },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        ) {
+                            Text(
+                                text = if (isBreakdownExpanded) "Show less" else "Show all",
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                            Spacer(modifier = Modifier.size(2.dp))
+                            Icon(
+                                imageVector = if (isBreakdownExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    } else {
+                        Spacer(modifier = Modifier)
+                    }
+
+                    if (showMetricFilter) {
+                        Box {
+                            IconButton(onClick = { isMenuExpanded = !isMenuExpanded }) {
+                                Icon(
+                                    imageVector = Icons.Default.ChecklistRtl,
+                                    contentDescription = "Filter metrics",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = isMenuExpanded,
+                                onDismissRequest = { isMenuExpanded = false },
+                            ) {
+                                metricRows.forEach { row ->
+                                    DropdownMenuItem(
+                                        text = { Text(row.option.label) },
+                                        leadingIcon = {
+                                            Checkbox(
+                                                checked = selectedMetrics.contains(row.option),
+                                                onCheckedChange = null,
+                                            )
+                                        },
+                                        trailingIcon = {
+                                            Icon(imageVector = row.option.icon, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            val next = LinkedHashSet(selectedMetrics)
+                                            if (next.contains(row.option)) {
+                                                if (next.size > 1) next.remove(row.option)
+                                            } else {
+                                                next.add(row.option)
+                                            }
+                                            selectedMetrics = next
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "View breakdown",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
                 }
             }
         }
@@ -234,10 +284,16 @@ fun PeriodOutflowMetricTile(
 private fun OutflowBreakdownRow(
     row: OutflowMetricRow,
     currency: String,
+    onClick: (() -> Unit)? = null,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         shape = CircleShape,
+        modifier = if (onClick != null) {
+            Modifier.clickable(onClick = onClick)
+        } else {
+            Modifier
+        },
     ) {
         Row(
             modifier = Modifier
