@@ -67,7 +67,7 @@ import com.pennywiseai.tracker.data.database.entity.UnrecognizedSmsEntity
  */
 @Database(
     entities = [TransactionEntity::class, SubscriptionEntity::class, ChatMessage::class, MerchantMappingEntity::class, MerchantAliasEntity::class, CategoryEntity::class, AccountBalanceEntity::class, UnrecognizedSmsEntity::class, CardEntity::class, RuleEntity::class, RuleApplicationEntity::class, ExchangeRateEntity::class, BudgetEntity::class, BudgetCategoryEntity::class, BudgetMonthSnapshotEntity::class, BudgetCategoryMonthSnapshotEntity::class, TransactionSplitEntity::class, BankNotificationEntity::class, LoanEntity::class, TransactionGroupEntity::class, ProfileEntity::class, SalaryMonthOverrideEntity::class, TransactionReceiptEntity::class],
-    version = 56,
+    version = 57,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -120,6 +120,7 @@ import com.pennywiseai.tracker.data.database.entity.UnrecognizedSmsEntity
         // 53→54 is a manual migration registered in DatabaseModule (add linked_transaction_id + transfer_kind to transactions)
         // 54→55 is a manual migration registered in DatabaseModule (backfill HDFC→CRED Club bill payments)
         // 55→56 is a manual migration registered in DatabaseModule (ensure Credit Card Payment category exists)
+        // 56→57 is a manual migration registered in DatabaseModule (add icon column to categories)
     ]
 )
 @TypeConverters(Converters::class)
@@ -650,6 +651,42 @@ abstract class PennyWiseDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
             }
+        }
+
+        val MIGRATION_56_57 = object : Migration(56, 57) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `categories` ADD COLUMN `icon` TEXT DEFAULT NULL")
+                categoryIconBackfill.forEach { (name, iconKey) ->
+                    db.execSQL(
+                        "UPDATE categories SET icon = ? WHERE name = ? AND icon IS NULL",
+                        arrayOf(iconKey, name)
+                    )
+                }
+            }
+
+            private val categoryIconBackfill = mapOf(
+                "Food & Dining" to "restaurant",
+                "Groceries" to "shopping_cart",
+                "Transportation" to "directions_car",
+                "Shopping" to "shopping_bag",
+                "Bills & Utilities" to "receipt",
+                "Entertainment" to "movie_filter",
+                "Healthcare" to "local_hospital",
+                "Investments" to "trending_up",
+                "Banking" to "account_balance",
+                "Personal Care" to "face",
+                "Education" to "school",
+                "Mobile" to "smartphone",
+                "Fitness" to "fitness_center",
+                "Insurance" to "shield",
+                "Travel" to "flight",
+                "Salary" to "payments",
+                "Income" to "add_circle",
+                "Others" to "category",
+                "Credit Card Payment" to "credit_card",
+                "Tax" to "account_balance_wallet",
+                "Bank Charges" to "money_off",
+            )
         }
 
         val MIGRATION_38_39 = object : Migration(38, 39) {

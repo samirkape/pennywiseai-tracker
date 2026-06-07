@@ -3,6 +3,7 @@ package com.pennywiseai.tracker.presentation.transactions
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pennywiseai.tracker.data.database.dao.TransactionSplitDao
+import com.pennywiseai.tracker.data.database.entity.AccountBalanceEntity
 import com.pennywiseai.tracker.data.database.entity.CategoryEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionSplitEntity
@@ -90,8 +91,19 @@ class TransactionsViewModel @Inject constructor(
     private val _selectedProfileId = MutableStateFlow<Long?>(null)
     val selectedProfileId: StateFlow<Long?> = _selectedProfileId.asStateFlow()
 
+    // Account/Card filtering - replace profile filtering
+    private val _selectedAccountKey = MutableStateFlow<String?>(null) // "bankName_accountLast4"
+    val selectedAccountKey: StateFlow<String?> = _selectedAccountKey.asStateFlow()
+
     private val _profileAccountKeys = MutableStateFlow<Map<Long, Set<String>>>(emptyMap())
     val profileAccountKeys: StateFlow<Map<Long, Set<String>>> = _profileAccountKeys.asStateFlow()
+
+    // Available accounts for filtering
+    private val _availableAccounts = MutableStateFlow<List<AccountBalanceEntity>>(emptyList())
+    val availableAccounts: StateFlow<List<AccountBalanceEntity>> = _availableAccounts.asStateFlow()
+
+    private val _availableAccountKeys = MutableStateFlow<Set<String>>(emptySet())
+    val availableAccountKeys: StateFlow<Set<String>> = _availableAccountKeys.asStateFlow()
 
     val profiles: StateFlow<List<ProfileEntity>> = profileRepository.observeAllProfiles()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -356,6 +368,7 @@ class TransactionsViewModel @Inject constructor(
         viewModelScope.launch {
             accountBalanceRepository.getAllLatestBalances().collect { balances ->
                 _profileAccountKeys.value = buildProfileAccountKeys(balances)
+                _availableAccounts.value = balances
             }
         }
 
@@ -449,6 +462,59 @@ class TransactionsViewModel @Inject constructor(
                 if (currentFilter != null && currentFilter !in filteredCategories) {
                     _categoryFilter.value = null
                 }
+            }
+            .launchIn(viewModelScope)
+
+        // Compute account chips independently so the disabled state reflects the selected period
+        // rather than whichever category/account filter is currently active.
+        merge(
+            selectedPeriod.map { "period" },
+            customDateRange.map { "customDate" },
+            userPreferencesRepository.monthStartDay.map { "monthStartDay" },
+            userPreferencesRepository.useFinancialMonth.map { "useFinancialMonth" },
+            userPreferencesRepository.useFixedBudgetPeriodEnd.map { "useFixedBudgetPeriodEnd" },
+            userPreferencesRepository.budgetPeriodEndDay.map { "budgetPeriodEndDay" },
+            salaryMonthOverrideRepository.overridesMap.map { "salaryOverrides" },
+            _includeExcluded.map { "includeExcluded" },
+        )
+            .flatMapLatest {
+                val period = selectedPeriod.value
+                val monthStartDay = userPreferencesRepository.monthStartDay.first()
+                val useFinancialMonth = userPreferencesRepository.useFinancialMonth.first()
+                val useFixedBudgetPeriodEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
+                val budgetPeriodEndDay = userPreferencesRepository.budgetPeriodEndDay.first()
+                val salaryOverrides = salaryMonthOverrideRepository.overridesMap.first()
+                val includeExcluded = _includeExcluded.value
+
+                getFilteredTransactions(
+                    "",
+                    period,
+                    null,
+                    null,
+                    TransactionTypeFilter.ALL,
+                    monthStartDay,
+                    useFinancialMonth,
+                    salaryOverrides,
+                    useFixedBudgetPeriodEnd,
+                    budgetPeriodEndDay,
+                    includeExcluded,
+                ).map { transactions ->
+                    transactions
+                        .asSequence()
+                        .mapNotNull { tx ->
+                            val bankName = tx.bankName?.trim().orEmpty()
+                            val accountLast4 = tx.accountNumber?.trim().orEmpty()
+                            if (bankName.isBlank() || accountLast4.isBlank()) {
+                                null
+                            } else {
+                                "${bankName}_${accountLast4}"
+                            }
+                        }
+                        .toSet()
+                }
+            }
+            .onEach { accountKeys ->
+                _availableAccountKeys.value = accountKeys
             }
             .launchIn(viewModelScope)
 
@@ -640,6 +706,30 @@ class TransactionsViewModel @Inject constructor(
         }
     }
 
+    fun setSelectedAccount(accountKey: String?) {
+        _selectedAccountKey.value = accountKey
+        if (accountKey.isNullOrBlank()) {
+            _bankNameFilter.value = null
+            _accountLast4Filter.value = null
+            return
+        }
+
+        val parts = accountKey.split("_", limit = 2)
+        if (parts.size == 2) {
+            _bankNameFilter.value = parts[0]
+            _accountLast4Filter.value = parts[1]
+        } else {
+            _bankNameFilter.value = null
+            _accountLast4Filter.value = null
+        }
+    }
+
+    fun clearSelectedAccount() {
+        _selectedAccountKey.value = null
+        _bankNameFilter.value = null
+        _accountLast4Filter.value = null
+    }
+
     fun setSortOption(option: SortOption) {
         _sortOption.value = option
     }
@@ -691,18 +781,15 @@ class TransactionsViewModel @Inject constructor(
             val useFixedEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
             val endDom = userPreferencesRepository.budgetPeriodEndDay.first()
             val overrides = salaryMonthOverrideRepository.overridesMap.first()
-            val usesCalendar = _selectedPeriod.value == TimePeriod.CALENDAR_MONTH
             when {
-                yearMonth == YearMonth.now() && usesCalendar ->
-                    selectPeriod(TimePeriod.CALENDAR_MONTH)
-                yearMonth == YearMonth.now() && !usesCalendar && payPeriodEnabled ->
+                yearMonth == YearMonth.now() && payPeriodEnabled ->
                     selectPeriod(TimePeriod.THIS_MONTH)
-                yearMonth == YearMonth.now() && !usesCalendar && !payPeriodEnabled ->
-                    selectPeriod(TimePeriod.CALENDAR_MONTH)
+                yearMonth == YearMonth.now() && !payPeriodEnabled ->
+                    selectPeriod(TimePeriod.THIS_MONTH)
                 else -> {
                     val range = com.pennywiseai.tracker.presentation.common.getDateRangeForYearMonthNavigation(
                         yearMonth = yearMonth,
-                        useCalendarMonth = usesCalendar,
+                        useCalendarMonth = false,
                         monthStartDay = monthStartDay,
                         monthStartOverrides = overrides,
                         useFixedBudgetPeriodEnd = useFixedEnd,
@@ -761,6 +848,7 @@ class TransactionsViewModel @Inject constructor(
         }
         setTransactionTypeFilter(TransactionTypeFilter.ALL)
         _selectedProfileId.value = null  // reset local state only; does not update the shared DataStore preference
+        clearSelectedAccount()
         setSortOption(SortOption.DATE_NEWEST)
         _includeExcluded.value = false
         // Don't reset currency as it might be user preference
@@ -866,6 +954,7 @@ class TransactionsViewModel @Inject constructor(
             _paymentModeGroupFilter.value = null
             _bankNameFilter.value = null
             _accountLast4Filter.value = null
+            _selectedAccountKey.value = null
             setSortOption(SortOption.DATE_NEWEST)
 
             category?.let {
@@ -913,6 +1002,15 @@ class TransactionsViewModel @Inject constructor(
                     java.net.URLDecoder.decode(it, "UTF-8")
                 } else it
                 _accountLast4Filter.value = decoded
+            }
+            if (bankName != null && accountLast4 != null) {
+                val decodedBank = if (bankName.contains("+") || bankName.contains("%")) {
+                    java.net.URLDecoder.decode(bankName, "UTF-8")
+                } else bankName
+                val decodedLast4 = if (accountLast4.contains("+") || accountLast4.contains("%")) {
+                    java.net.URLDecoder.decode(accountLast4, "UTF-8")
+                } else accountLast4
+                setSelectedAccount("${decodedBank}_${decodedLast4}")
             }
         }
     }
@@ -1039,7 +1137,18 @@ class TransactionsViewModel @Inject constructor(
         transactions: List<TransactionEntity>,
         profileId: Long?
     ): List<TransactionEntity> {
-        return filterTransactionsByProfile(transactions, profileId, _profileAccountKeys.value)
+        var filtered = filterTransactionsByProfile(transactions, profileId, _profileAccountKeys.value)
+
+        // Apply account/card filter if selected
+        val selectedAccountKey = _selectedAccountKey.value
+        if (selectedAccountKey != null) {
+            val (bankName, accountLast4) = selectedAccountKey.split("_", limit = 2)
+            filtered = filtered.filter { tx ->
+                tx.bankName == bankName && tx.accountNumber == accountLast4
+            }
+        }
+
+        return filtered
     }
 
     private fun getFilteredTransactions(
@@ -1250,7 +1359,7 @@ class TransactionsViewModel @Inject constructor(
         period ?: return
         when (period) {
             "THIS_MONTH" -> selectPeriod(TimePeriod.THIS_MONTH)
-            "CALENDAR_MONTH" -> selectPeriod(TimePeriod.CALENDAR_MONTH)
+            "CALENDAR_MONTH" -> selectPeriod(TimePeriod.THIS_MONTH)
             "LAST_MONTH" -> selectPeriod(TimePeriod.LAST_MONTH)
             "CURRENT_FY" -> selectPeriod(TimePeriod.CURRENT_FY)
             "ALL" -> selectPeriod(TimePeriod.ALL)
@@ -1267,7 +1376,7 @@ class TransactionsViewModel @Inject constructor(
                         useFinancialMonth && yearMonth == YearMonth.now() ->
                             selectPeriod(TimePeriod.THIS_MONTH)
                         !useFinancialMonth && yearMonth == YearMonth.now() ->
-                            selectPeriod(TimePeriod.CALENDAR_MONTH)
+                            selectPeriod(TimePeriod.THIS_MONTH)
                         else -> {
                             val range = getDateRangeForYearMonth(
                                 yearMonth,
@@ -1302,7 +1411,7 @@ class TransactionsViewModel @Inject constructor(
             endDom
         )
         val calendarMonthRange = getDateRangeForPeriod(
-            TimePeriod.CALENDAR_MONTH,
+            TimePeriod.THIS_MONTH,
             monthStartDay,
             useFinancialMonth = false,
             monthStartOverrides = overrides,
@@ -1315,7 +1424,7 @@ class TransactionsViewModel @Inject constructor(
                 selectPeriod(TimePeriod.THIS_MONTH)
             !useFinancialMonth && calendarMonthRange != null &&
                 start == calendarMonthRange.first && end == calendarMonthRange.second ->
-                selectPeriod(TimePeriod.CALENDAR_MONTH)
+                selectPeriod(TimePeriod.THIS_MONTH)
             else -> setCustomDateRange(start, end)
         }
     }

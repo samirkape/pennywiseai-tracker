@@ -32,6 +32,7 @@ import com.pennywiseai.tracker.data.repository.TransactionGroupRepository
 import com.pennywiseai.tracker.data.repository.SalaryMonthOverrideRepository
 import com.pennywiseai.tracker.data.manager.SmsScanManager
 import com.pennywiseai.tracker.data.repository.TransactionRepository
+import com.pennywiseai.tracker.data.repository.CategoryRepository
 import com.pennywiseai.tracker.worker.OptimizedSmsReaderWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -76,6 +77,7 @@ class HomeViewModel @Inject constructor(
     private val inAppUpdateManager: InAppUpdateManager,
     private val inAppReviewManager: InAppReviewManager,
     private val smsScanManager: SmsScanManager,
+    private val categoryRepository: CategoryRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     
@@ -781,16 +783,19 @@ class HomeViewModel @Inject constructor(
                     combine(
                         transactionGroupRepository.getUngroupedTransactionsForDate(date),
                         _cachedAccountBalances,
-                    ) { ungrouped, balances ->
+                        categoryRepository.getAllCategories(),
+                    ) { ungrouped, balances, categories ->
                         val profileId = _uiState.value.selectedProfileId
                         val keys = buildProfileAccountKeys(balances ?: emptyList())
+                        val categoryIconMap = categories.associate { it.name to it.icon }
                         filterTransactionsByProfile(ungrouped, profileId, keys)
-                            .map { HomeRecentItem.SingleTransaction(it) }
+                            .map { HomeRecentItem.SingleTransaction(it, categoryIconKey = categoryIconMap[it.category]) }
                     },
                     combine(
                         rawGroupsFlow,
                         _cachedAccountBalances,
-                    ) { groupPairs, balances ->
+                        categoryRepository.getAllCategories(),
+                    ) { groupPairs, balances, categories ->
                         val profileId = _uiState.value.selectedProfileId
                         val keys = buildProfileAccountKeys(balances ?: emptyList())
                         groupPairs.mapNotNull { (group, txns) ->

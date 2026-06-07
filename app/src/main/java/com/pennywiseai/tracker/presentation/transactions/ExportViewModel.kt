@@ -1,6 +1,7 @@
 package com.pennywiseai.tracker.presentation.transactions
 
 import androidx.lifecycle.ViewModel
+import com.pennywiseai.tracker.data.database.PennyWiseDatabase
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.data.export.CsvExporter
 import com.pennywiseai.tracker.data.export.ExportResult
@@ -13,7 +14,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ExportViewModel @Inject constructor(
-    private val csvExporter: CsvExporter
+    private val csvExporter: CsvExporter,
+    private val database: PennyWiseDatabase
 ) : ViewModel() {
 
     fun exportTransactions(
@@ -24,7 +26,12 @@ class ExportViewModel @Inject constructor(
             .filter { it.tags.isNotBlank() }
             .associate { tx -> tx.id to tx.tags.split(",").filter { it.isNotBlank() } }
 
-        csvExporter.exportTransactions(transactions, fileName, additionalCategories)
+        val allReceipts = database.transactionReceiptDao().getAllReceipts()
+        val transactionReceipts: Map<Long, List<String>> = allReceipts
+            .groupBy { it.transactionId }
+            .mapValues { (_, receipts) -> receipts.map { it.filePath } }
+
+        csvExporter.exportTransactions(transactions, fileName, additionalCategories, transactionReceipts)
             .collect { emit(it) }
     }.flowOn(Dispatchers.IO)
 }

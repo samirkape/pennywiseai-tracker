@@ -56,6 +56,7 @@ class CategoriesViewModel @Inject constructor(
         name: String,
         color: String,
         isIncome: Boolean,
+        icon: String,
     ) {
         viewModelScope.launch {
             try {
@@ -69,6 +70,7 @@ class CategoriesViewModel @Inject constructor(
                             name = if (editingCat.isSystem) editingCat.name else name,
                             color = if (editingCat.isSystem) editingCat.color else color,
                             isIncome = if (editingCat.isSystem) editingCat.isIncome else isIncome,
+                            icon = icon,
                         )
                     )
                     _snackbarMessage.value = "Category updated successfully"
@@ -84,6 +86,7 @@ class CategoriesViewModel @Inject constructor(
                         name = name,
                         color = color,
                         isIncome = isIncome,
+                        icon = icon,
                     )
                     _snackbarMessage.value = "Category created successfully"
                 }

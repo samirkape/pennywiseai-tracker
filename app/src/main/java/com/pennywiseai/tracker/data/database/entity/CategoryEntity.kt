@@ -20,6 +20,9 @@ data class CategoryEntity(
     
     @ColumnInfo(name = "color")
     val color: String,
+
+    @ColumnInfo(name = "icon")
+    val icon: String? = null,
     
     @ColumnInfo(name = "is_system")
     val isSystem: Boolean = false,

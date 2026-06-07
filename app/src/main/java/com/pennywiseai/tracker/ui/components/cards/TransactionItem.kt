@@ -59,6 +59,8 @@ fun TransactionItem(
     onDelete: (() -> Unit)? = null,
     /** When no brand logo exists, use this category's icon instead of merchant-name inference. */
     categoryForIconFallback: String? = null,
+    /** Custom icon key from database for the category. */
+    categoryIconKey: String? = null,
     modifier: Modifier = Modifier,
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -164,6 +166,7 @@ fun TransactionItem(
                 size = Dimensions.Icon.list + 2.dp,
                 showBackground = true,
                 categoryOverride = categoryForIconFallback,
+                iconKey = categoryIconKey,
             )
         },
         trailingContent = {

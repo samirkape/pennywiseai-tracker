@@ -954,8 +954,8 @@ fun TransactionTabContent(
         CategoryEditDialog(
             category = null,
             onDismiss = { showCreateCategoryDialog = false },
-            onSave = { name, color, isIncome ->
-                viewModel.createAndSelectTransactionCategory(name, color, isIncome)
+            onSave = { name, color, isIncome, icon ->
+                viewModel.createAndSelectTransactionCategory(name, color, isIncome, icon)
                 showCreateCategoryDialog = false
             }
         )

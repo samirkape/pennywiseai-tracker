@@ -2,16 +2,22 @@ package com.pennywiseai.tracker.presentation.transactions
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.verticalScroll
 import com.pennywiseai.tracker.ui.effects.overScrollVertical
 import com.pennywiseai.tracker.ui.effects.rememberOverscrollFlingBehavior
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
@@ -34,14 +40,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
-import android.view.HapticFeedbackConstants
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import kotlinx.coroutines.launch
+import com.pennywiseai.tracker.data.database.entity.AccountBalanceEntity
 import com.pennywiseai.tracker.data.database.entity.CategoryEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.presentation.common.TimePeriod
@@ -53,7 +57,6 @@ import com.pennywiseai.tracker.ui.components.*
 import com.pennywiseai.tracker.ui.components.skeleton.TransactionItemSkeleton
 import com.pennywiseai.tracker.ui.components.cards.PennyWiseCardV2
 import com.pennywiseai.tracker.ui.components.cards.SectionHeaderV2
-import com.pennywiseai.tracker.ui.components.CollapsibleFilterRow
 import com.pennywiseai.tracker.ui.components.CustomTitleTopAppBar
 import com.pennywiseai.tracker.ui.theme.*
 import com.pennywiseai.tracker.utils.DateRangeUtils
@@ -110,6 +113,9 @@ fun TransactionsScreen(
     val selectedProfileId by viewModel.selectedProfileId.collectAsState()
     val profiles by viewModel.profiles.collectAsState()
     val profileAccountKeys by viewModel.profileAccountKeys.collectAsState()
+    val selectedAccountKey by viewModel.selectedAccountKey.collectAsState()
+    val availableAccounts by viewModel.availableAccounts.collectAsState()
+    val availableAccountKeys by viewModel.availableAccountKeys.collectAsState()
     val includeExcluded by viewModel.includeExcluded.collectAsState()
     val pendingSelfTransferCount by viewModel.pendingSelfTransferCount.collectAsState()
     val selfTransferReview by viewModel.selfTransferReview.collectAsState()
@@ -117,69 +123,41 @@ fun TransactionsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showExportDialog by remember { mutableStateOf(false) }
-    // Use rememberSaveable to preserve UI state across navigation
-    var showAdvancedFilters by rememberSaveable { mutableStateOf(false) }
+    var showFilterSheet by rememberSaveable { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) } // Menu doesn't need saving
     var showDateRangePicker by rememberSaveable { mutableStateOf(false) }
+    val filterSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     
     // Focus management for search field
     val searchFocusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
-    val view = LocalView.current
     
-    // Active filter count for the "More Filters" row (profile, category, include-excluded).
-    // Period, type, search, and currency are outside this section and are not counted here.
+    val defaultPeriod = defaultTimePeriod(useFinancialMonth)
+
+    // Active filter count for all filters (period, type, account, category, include-excluded).
     val activeFilterCount = listOf(
-        selectedProfileId != null,
+        selectedPeriod != defaultPeriod,
+        transactionTypeFilter != TransactionTypeFilter.ALL,
+        selectedAccountKey != null,
         categoryFilter != null,
         !categoriesFilter.isNullOrEmpty(),
         includeExcluded
     ).count { it }
-
-    LaunchedEffect(categoryFilter, categoriesFilter) {
-        if (categoryFilter != null || !categoriesFilter.isNullOrEmpty()) {
-            showAdvancedFilters = true
-        }
-    }
-
-    val defaultPeriod = defaultTimePeriod(useFinancialMonth)
-
-    // Check if any filter is active (for showing "Clear all" button)
-    val hasAnyActiveFilter = searchQuery.isNotEmpty() ||
-        selectedPeriod != defaultPeriod ||
-        categoryFilter != null ||
-        categoriesFilter != null ||
-        transactionTypeFilter != TransactionTypeFilter.ALL ||
-        selectedProfileId != null ||
-        selectedCurrency != null ||
-        customDateRange != null ||
-        includeExcluded
 
     // Remember scroll position across navigation
     val listState = rememberSaveable(saver = LazyListState.Saver) {
         LazyListState()
     }
 
-    // Cache expensive operations — include CALENDAR_MONTH only when pay-month mode is enabled
+    // Cache expensive operations
     val timePeriods = remember(useFinancialMonth) {
-        if (useFinancialMonth) {
-            listOf(
-                TimePeriod.THIS_MONTH,
-                TimePeriod.CALENDAR_MONTH,
-                TimePeriod.LAST_MONTH,
-                TimePeriod.CURRENT_FY,
-                TimePeriod.ALL,
-                TimePeriod.CUSTOM
-            )
-        } else {
-            listOf(
-                TimePeriod.THIS_MONTH,
-                TimePeriod.LAST_MONTH,
-                TimePeriod.CURRENT_FY,
-                TimePeriod.ALL,
-                TimePeriod.CUSTOM
-            )
-        }
+        listOf(
+            TimePeriod.THIS_MONTH,
+            TimePeriod.LAST_MONTH,
+            TimePeriod.CURRENT_FY,
+            TimePeriod.ALL,
+            TimePeriod.CUSTOM
+        )
     }
     val customRangeLabel = remember(customDateRange) {
         DateRangeUtils.formatDateRange(customDateRange)
@@ -364,7 +342,8 @@ fun TransactionsScreen(
                 .fillMaxWidth()
                 .padding(horizontal = Dimensions.Padding.content)
                 .padding(top = Dimensions.Padding.content),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             TransactionSearchBar(
                 query = searchQuery,
@@ -372,6 +351,39 @@ fun TransactionsScreen(
                 categoryFilter = categoryFilter,
                 focusRequester = searchFocusRequester,
                 modifier = Modifier.weight(1f)
+            )
+
+            AssistChip(
+                onClick = { showFilterSheet = true },
+                label = {
+                    Text(
+                        if (activeFilterCount > 0) {
+                            "Filters ($activeFilterCount)"
+                        } else {
+                            "Filters"
+                        }
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.FilterList,
+                        contentDescription = null,
+                        modifier = Modifier.size(Dimensions.Icon.small)
+                    )
+                },
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor = if (activeFilterCount > 0) {
+                        MaterialTheme.colorScheme.secondaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    labelColor = if (activeFilterCount > 0) {
+                        MaterialTheme.colorScheme.onSecondaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
             )
             
             // Sort button
@@ -418,133 +430,46 @@ fun TransactionsScreen(
                 }
             }
         }
-        
-        // Period Filter Chips - Always visible
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = Spacing.sm),
-            contentPadding = PaddingValues(horizontal = Dimensions.Padding.content),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-        ) {
-            // Clear all filters chip - only show when any filter is active
-            if (hasAnyActiveFilter) {
-                item {
-                    FilterChip(
-                        selected = false,
-                        onClick = { viewModel.resetFilters() },
-                        label = { Text("Clear all") },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = null,
-                                modifier = Modifier.size(Dimensions.Icon.small)
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
-                            labelColor = MaterialTheme.colorScheme.error
-                        )
-                    )
-                }
-            }
 
-            // Period filter chips
-            items(timePeriods) { period ->
-                FilterChip(
-                    // Only show CUSTOM as selected if both period is CUSTOM AND dates are set
-                    selected = if (period == TimePeriod.CUSTOM) {
-                        selectedPeriod == period && customDateRange != null
-                    } else {
-                        selectedPeriod == period
-                    },
-                    onClick = {
+        if (showFilterSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showFilterSheet = false },
+                sheetState = filterSheetState,
+                dragHandle = { BottomSheetDefaults.DragHandle() },
+            ) {
+                TransactionsFilterSheetContent(
+                    activeFilterCount = activeFilterCount,
+                    selectedPeriod = selectedPeriod,
+                    timePeriods = timePeriods,
+                    customDateRange = customDateRange,
+                    customRangeLabel = customRangeLabel,
+                    transactionTypeFilter = transactionTypeFilter,
+                    selectedAccountKey = selectedAccountKey,
+                    availableAccounts = availableAccounts,
+                    availableAccountKeys = availableAccountKeys,
+                    categoryFilter = categoryFilter,
+                    categoriesFilter = categoriesFilter,
+                    availableCategories = availableCategories,
+                    includeExcluded = includeExcluded,
+                    onResetAll = { viewModel.resetFilters() },
+                    onPeriodSelected = { period ->
                         if (period == TimePeriod.CUSTOM) {
+                            showFilterSheet = false
                             showDateRangePicker = true
-                            // Don't change selectedPeriod until user confirms dates
                         } else {
                             viewModel.selectPeriod(period)
                         }
                     },
-                    label = {
-                        Text(
-                            when {
-                                period == TimePeriod.CUSTOM && customRangeLabel != null -> customRangeLabel
-                                period == TimePeriod.THIS_MONTH && !useFinancialMonth -> "This Month"
-                                else -> period.label
-                            }
-                        )
+                    onTransactionTypeSelected = viewModel::setTransactionTypeFilter,
+                    onClearAccount = viewModel::clearSelectedAccount,
+                    onAccountSelected = viewModel::setSelectedAccount,
+                    onClearCategories = {
+                        viewModel.clearCategoryFilter()
+                        viewModel.clearCategoriesFilter()
                     },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                )
-            }
-        }
-
-        // Transaction Type Filter Chips - Always visible second row
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = Spacing.xs),
-            contentPadding = PaddingValues(horizontal = Dimensions.Padding.content),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-        ) {
-            items(TransactionTypeFilter.values().toList()) { typeFilter ->
-                FilterChip(
-                    selected = transactionTypeFilter == typeFilter,
-                    onClick = {
-                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                        viewModel.setTransactionTypeFilter(typeFilter)
-                    },
-                    label = { Text(typeFilter.label) },
-                    leadingIcon = if (transactionTypeFilter == typeFilter) {
-                        {
-                            when (typeFilter) {
-                                TransactionTypeFilter.INCOME -> Icon(
-                                    Icons.AutoMirrored.Filled.TrendingUp,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(Dimensions.Icon.small)
-                                )
-                                TransactionTypeFilter.EXPENSE -> Icon(
-                                    Icons.AutoMirrored.Filled.TrendingDown,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(Dimensions.Icon.small)
-                                )
-                                TransactionTypeFilter.CREDIT -> Icon(
-                                    Icons.Default.CreditCard,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(Dimensions.Icon.small)
-                                )
-                                TransactionTypeFilter.TRANSFER -> Icon(
-                                    Icons.Default.SwapHoriz,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(Dimensions.Icon.small)
-                                )
-                                TransactionTypeFilter.CC_BILL_PAYMENT -> Icon(
-                                    Icons.Default.Payment,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(Dimensions.Icon.small)
-                                )
-                                TransactionTypeFilter.INVESTMENT -> Icon(
-                                    Icons.AutoMirrored.Filled.ShowChart,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(Dimensions.Icon.small)
-                                )
-                                TransactionTypeFilter.EXCLUDED -> Icon(
-                                    Icons.Default.VisibilityOff,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(Dimensions.Icon.small)
-                                )
-                                else -> null
-                            }
-                        }
-                    } else null,
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
+                    onCategorySelected = viewModel::setCategoryFilter,
+                    onIncludeExcludedToggle = viewModel::setIncludeExcluded,
+                    onDismiss = { showFilterSheet = false }
                 )
             }
         }
@@ -569,7 +494,7 @@ fun TransactionsScreen(
                         },
                         leadingIcon = {
                             Icon(
-                                Icons.Default.CompareArrows,
+                                Icons.AutoMirrored.Filled.CompareArrows,
                                 contentDescription = null,
                                 modifier = Modifier.size(Dimensions.Icon.small)
                             )
@@ -624,162 +549,6 @@ fun TransactionsScreen(
                         Text("Settings", style = MaterialTheme.typography.labelSmall)
                     }
                 }
-            }
-        }
-        
-        // Collapsible Advanced Filters
-        CollapsibleFilterRow(
-            isExpanded = showAdvancedFilters,
-            activeFilterCount = activeFilterCount,
-            onToggle = { showAdvancedFilters = !showAdvancedFilters },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column {
-            // Profile Filter Chips
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = Dimensions.Padding.content),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                // "All" chip
-                item {
-                    FilterChip(
-                        selected = selectedProfileId == null,
-                        onClick = {
-                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                            viewModel.setSelectedProfile(null)
-                        },
-                        label = { Text("All") },
-                        leadingIcon = if (selectedProfileId == null) {
-                            {
-                                Icon(
-                                    Icons.Outlined.AccountBalance,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(Dimensions.Icon.small)
-                                )
-                            }
-                        } else null,
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    )
-                }
-                items(profiles) { profile ->
-                    FilterChip(
-                        selected = selectedProfileId == profile.id,
-                        onClick = {
-                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                            viewModel.setSelectedProfile(profile.id)
-                        },
-                        label = { Text(profile.name) },
-                        leadingIcon = if (selectedProfileId == profile.id) {
-                            {
-                                Icon(
-                                    profileIcon(profile),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(Dimensions.Icon.small)
-                                )
-                            }
-                        } else null,
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    )
-                }
-            }
-
-            if (availableCategories.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(Spacing.xs))
-
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(horizontal = Dimensions.Padding.content),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                ) {
-                    item {
-                        FilterChip(
-                            selected = categoryFilter == null && categoriesFilter.isNullOrEmpty(),
-                            onClick = {
-                                viewModel.clearCategoryFilter()
-                                viewModel.clearCategoriesFilter()
-                            },
-                            label = { Text("All") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                        )
-                    }
-
-                    items(availableCategories) { category ->
-                        FilterChip(
-                            selected = categoryFilter == category,
-                            onClick = {
-                                if (categoryFilter == category) {
-                                    viewModel.clearCategoryFilter()
-                                } else {
-                                    viewModel.setCategoryFilter(category)
-                                }
-                            },
-                            label = { Text(category) },
-                            leadingIcon = {
-                                CategoryIcon(
-                                    category = category,
-                                    size = Dimensions.Icon.small
-                                )
-                            },
-                            trailingIcon = if (categoryFilter == category) {
-                                {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Clear category filter",
-                                        modifier = Modifier.size(Dimensions.Icon.small)
-                                    )
-                                }
-                            } else null,
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(Spacing.xs))
-
-            // Include excluded transactions toggle
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = Dimensions.Padding.content),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                item {
-                    FilterChip(
-                        selected = includeExcluded,
-                        onClick = {
-                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                            viewModel.setIncludeExcluded(!includeExcluded)
-                        },
-                        label = { Text("Include excluded") },
-                        leadingIcon = if (includeExcluded) {
-                            {
-                                Icon(
-                                    Icons.Default.Visibility,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(Dimensions.Icon.small)
-                                )
-                            }
-                        } else null,
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.errorContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    )
-                }
-            }
             }
         }
 
@@ -914,6 +683,280 @@ fun TransactionsScreen(
             onDismiss = { viewModel.dismissSelfTransferReview() },
         )
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TransactionsFilterSheetContent(
+    activeFilterCount: Int,
+    selectedPeriod: TimePeriod,
+    timePeriods: List<TimePeriod>,
+    customDateRange: Pair<java.time.LocalDate, java.time.LocalDate>?,
+    customRangeLabel: String?,
+    transactionTypeFilter: TransactionTypeFilter,
+    selectedAccountKey: String?,
+    availableAccounts: List<AccountBalanceEntity>,
+    availableAccountKeys: Set<String>,
+    categoryFilter: String?,
+    categoriesFilter: List<String>?,
+    availableCategories: List<String>,
+    includeExcluded: Boolean,
+    onResetAll: () -> Unit,
+    onPeriodSelected: (TimePeriod) -> Unit,
+    onTransactionTypeSelected: (TransactionTypeFilter) -> Unit,
+    onClearAccount: () -> Unit,
+    onAccountSelected: (String?) -> Unit,
+    onClearCategories: () -> Unit,
+    onCategorySelected: (String) -> Unit,
+    onIncludeExcludedToggle: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val scrollState = rememberScrollState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = Dimensions.Padding.content)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Filters",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+                if (activeFilterCount > 0) {
+                    Text(
+                        text = "$activeFilterCount active",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            TextButton(onClick = onResetAll) {
+                Text("Reset all")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(Spacing.md))
+
+        Box(modifier = Modifier.weight(1f, fill = true)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(scrollState)
+            ) {
+                FilterSheetSection(title = "Period") {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    ) {
+                        timePeriods.forEach { period ->
+                            val isSelected = if (period == TimePeriod.CUSTOM) {
+                                selectedPeriod == period && customDateRange != null
+                            } else {
+                                selectedPeriod == period
+                            }
+                            FilterSheetChip(
+                                label = when {
+                                    period == TimePeriod.CUSTOM && customRangeLabel != null -> customRangeLabel
+                                    else -> period.label
+                                },
+                                selected = isSelected,
+                                onClick = { onPeriodSelected(period) }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(Spacing.md))
+
+                FilterSheetSection(title = "Type") {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    ) {
+                        TransactionTypeFilter.values().toList().forEach { typeFilter ->
+                            FilterSheetChip(
+                                label = typeFilter.label,
+                                selected = transactionTypeFilter == typeFilter,
+                                onClick = { onTransactionTypeSelected(typeFilter) }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(Spacing.md))
+
+                FilterSheetSection(title = "Category") {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    ) {
+                        FilterSheetChip(
+                            label = "Any category",
+                            selected = categoryFilter == null && categoriesFilter.isNullOrEmpty(),
+                            onClick = onClearCategories
+                        )
+                        availableCategories.forEach { category ->
+                            FilterSheetChip(
+                                label = category,
+                                selected = categoryFilter == category,
+                                onClick = { onCategorySelected(category) },
+                                leadingIcon = {
+                                    CategoryIcon(
+                                        category = category,
+                                        size = Dimensions.Icon.small
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+
+                if (availableAccounts.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(Spacing.md))
+
+                    FilterSheetSection(title = "Accounts") {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        ) {
+                            FilterSheetChip(
+                                label = "All accounts",
+                                selected = selectedAccountKey == null,
+                                onClick = onClearAccount
+                            )
+                            availableAccounts.forEach { account ->
+                                val accountKey = "${account.bankName}_${account.accountLast4}"
+                                val hasActivityInPeriod = accountKey in availableAccountKeys
+                                FilterSheetChip(
+                                    label = if (account.isCreditCard) {
+                                        "${account.bankName} ••${account.accountLast4}"
+                                    } else {
+                                        "${account.bankName} ••${account.accountLast4}"
+                                    },
+                                    selected = selectedAccountKey == accountKey,
+                                    enabled = hasActivityInPeriod,
+                                    onClick = { onAccountSelected(accountKey) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = if (account.isCreditCard) {
+                                                Icons.Default.CreditCard
+                                            } else {
+                                                Icons.Default.AccountBalance
+                                            },
+                                            contentDescription = null,
+                                            modifier = Modifier.size(Dimensions.Icon.small)
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(Spacing.md))
+
+                FilterSheetSection(title = "Other") {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    ) {
+                        FilterSheetChip(
+                            label = "Include excluded",
+                            selected = includeExcluded,
+                            onClick = { onIncludeExcludedToggle(!includeExcluded) },
+                            leadingIcon = if (includeExcluded) {
+                                {
+                                    Icon(
+                                        Icons.Default.Visibility,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(Dimensions.Icon.small)
+                                    )
+                                }
+                            } else null,
+                            selectedContainerColor = MaterialTheme.colorScheme.errorContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(Spacing.md))
+
+        Button(
+            onClick = onDismiss,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+        ) {
+            Text("Apply filters")
+        }
+
+        Spacer(modifier = Modifier.height(Spacing.lg))
+    }
+}
+
+@Composable
+private fun FilterSheetSection(
+    title: String,
+    content: @Composable () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+        Text(
+            text = title.uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Medium,
+        )
+        content()
+    }
+}
+
+@Composable
+private fun FilterSheetChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    leadingIcon: (@Composable () -> Unit)? = null,
+    selectedContainerColor: Color = MaterialTheme.colorScheme.primaryContainer,
+    selectedLabelColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
+) {
+    FilterChip(
+        selected = selected,
+        enabled = enabled,
+        onClick = onClick,
+        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        leadingIcon = leadingIcon,
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = if (enabled) selectedContainerColor else MaterialTheme.colorScheme.surfaceVariant,
+            selectedLabelColor = if (enabled) selectedLabelColor else MaterialTheme.colorScheme.onSurfaceVariant,
+            containerColor = if (enabled) {
+                MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.7f)
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.35f)
+            },
+            labelColor = if (enabled) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+            },
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            borderWidth = 0.dp,
+            selected = selected,
+            enabled = enabled,
+        ),
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

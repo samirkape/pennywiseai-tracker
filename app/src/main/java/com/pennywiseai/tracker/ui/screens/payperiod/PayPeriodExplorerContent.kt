@@ -1,6 +1,7 @@
 package com.pennywiseai.tracker.ui.screens.payperiod
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,6 +31,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.pennywiseai.tracker.ui.theme.Dimensions
@@ -128,6 +130,8 @@ fun PayPeriodExplorerContent(
 				TimelineSparkline(
 					values = uiState.cumulativeSeries,
 					selectedIndex = selectedIndex,
+					dayLabels = uiState.dayLabels,
+					onPointSelected = { date -> viewModel.selectDate(date) },
 					modifier = Modifier
 						.fillMaxWidth()
 						.height(110.dp),
@@ -166,11 +170,23 @@ fun PayPeriodExplorerContent(
 private fun TimelineSparkline(
 	values: List<BigDecimal>,
 	selectedIndex: Int,
+	dayLabels: List<LocalDate>,
+	onPointSelected: (LocalDate) -> Unit,
 	modifier: Modifier = Modifier,
 ) {
 	val lineColor = MaterialTheme.colorScheme.primary
 	val surfaceColor = MaterialTheme.colorScheme.surface
-	Canvas(modifier = modifier) {
+	Canvas(
+		modifier = modifier.pointerInput(Unit) {
+			detectTapGestures { offset ->
+				if (values.isEmpty()) return@detectTapGestures
+				val index = ((offset.x / size.width) * values.size).toInt().coerceIn(0, values.lastIndex)
+				if (index < dayLabels.size) {
+					onPointSelected(dayLabels[index])
+				}
+			}
+		}
+	) {
 		if (values.isEmpty()) return@Canvas
 
 		val maxValue = maxOf(values.maxOf { it.toFloat() }, 1f)

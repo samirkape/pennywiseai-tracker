@@ -38,12 +38,14 @@ class CsvExporter @Inject constructor(
      * @param transactions List of transactions to export
      * @param fileName Optional custom filename (without extension)
      * @param additionalCategories Map of transactionId -> list of extra category tags from junction table
+     * @param transactionReceipts Map of transactionId -> list of receipt file paths
      * @return Flow emitting progress updates and final Uri
      */
     fun exportTransactions(
         transactions: List<TransactionEntity>,
         fileName: String? = null,
-        additionalCategories: Map<Long, List<String>> = emptyMap()
+        additionalCategories: Map<Long, List<String>> = emptyMap(),
+        transactionReceipts: Map<Long, List<String>> = emptyMap()
     ): Flow<ExportResult> = flow {
         emit(ExportResult.Progress(0f, "Preparing export..."))
         
@@ -81,7 +83,8 @@ class CsvExporter @Inject constructor(
                         "Account",
                         "Balance After",
                         "Description",
-                        "SMS Body"
+                        "SMS Body",
+                        "Receipts"
                     ))
 
                     // Write transactions with progress updates
@@ -89,6 +92,9 @@ class CsvExporter @Inject constructor(
                     transactions.forEachIndexed { index, transaction ->
                         val tags = additionalCategories[transaction.id]
                             ?.filter { it != transaction.category }
+                            ?.joinToString("; ")
+                            ?: ""
+                        val receipts = transactionReceipts[transaction.id]
                             ?.joinToString("; ")
                             ?: ""
                         // Write transaction row
@@ -111,7 +117,8 @@ class CsvExporter @Inject constructor(
                             transaction.accountNumber ?: "",
                             transaction.balanceAfter?.toString() ?: "",
                             transaction.description ?: "",
-                            transaction.smsBody ?: ""
+                            transaction.smsBody ?: "",
+                            receipts
                         ))
                         
                         // Update progress (10% to 90% for writing)
@@ -157,7 +164,8 @@ class CsvExporter @Inject constructor(
     suspend fun exportTransactionsToFile(
         transactions: List<TransactionEntity>,
         fileName: String? = null,
-        additionalCategories: Map<Long, List<String>> = emptyMap()
+        additionalCategories: Map<Long, List<String>> = emptyMap(),
+        transactionReceipts: Map<Long, List<String>> = emptyMap()
     ): Uri = withContext(Dispatchers.IO) {
         val exportDir = File(context.cacheDir, EXPORT_DIR)
         if (!exportDir.exists()) {
@@ -184,13 +192,17 @@ class CsvExporter @Inject constructor(
                     "Account",
                     "Balance After",
                     "Description",
-                    "SMS Body"
+                    "SMS Body",
+                    "Receipts"
                 ))
 
                 // Write transactions
                 transactions.forEach { transaction ->
                     val tags = additionalCategories[transaction.id]
                         ?.filter { it != transaction.category }
+                        ?.joinToString("; ")
+                        ?: ""
+                    val receipts = transactionReceipts[transaction.id]
                         ?.joinToString("; ")
                         ?: ""
                     csvWriter.writeNext(arrayOf(
@@ -212,7 +224,8 @@ class CsvExporter @Inject constructor(
                         transaction.accountNumber ?: "",
                         transaction.balanceAfter?.toString() ?: "",
                         transaction.description ?: "",
-                        transaction.smsBody ?: ""
+                        transaction.smsBody ?: "",
+                        receipts
                     ))
                 }
             }

@@ -27,6 +27,8 @@ import com.pennywiseai.tracker.presentation.common.PaymentModeGroup
 import com.pennywiseai.tracker.presentation.common.TimePeriod
 import com.pennywiseai.tracker.presentation.common.TransactionTypeFilter
 import com.pennywiseai.tracker.ui.components.PennyWiseStandardScaffold
+import com.pennywiseai.tracker.ui.components.cards.SpendingBreakdownData
+import com.pennywiseai.tracker.ui.components.cards.SpendingBreakdownTile
 import com.pennywiseai.tracker.ui.effects.overScrollVertical
 import com.pennywiseai.tracker.ui.effects.rememberOverscrollFlingBehavior
 import com.pennywiseai.tracker.ui.theme.Dimensions
@@ -164,16 +166,9 @@ fun AnalyticsBreakdownScreen(
                     onInvestmentClick = {
                         drillDownToTransactions(transactionType = TransactionTypeFilter.INVESTMENT.name)
                     },
-                    onCardAndBankClick = {
+                    onSpendingBreakdownClick = {
                         drillDownToTransactions(
                             transactionType = TransactionTypeFilter.EXPENSE.name,
-                            paymentMode = PaymentModeGroup.CARD_AND_BANK.name,
-                        )
-                    },
-                    onCashClick = {
-                        drillDownToTransactions(
-                            transactionType = TransactionTypeFilter.EXPENSE.name,
-                            paymentMode = PaymentMode.CASH.name,
                         )
                     },
                 )
@@ -207,8 +202,7 @@ private fun BreakdownMetricSection(
     onOutflowBreakdownRowClick: (TransactionTypeFilter) -> Unit,
     onSpendingClick: () -> Unit,
     onInvestmentClick: () -> Unit,
-    onCardAndBankClick: () -> Unit,
-    onCashClick: () -> Unit,
+    onSpendingBreakdownClick: () -> Unit,
 ) {
     when (tileKey) {
         "outflow" -> uiState.periodOutflow?.let { outflow ->
@@ -278,40 +272,42 @@ private fun BreakdownMetricSection(
                 onClick = onInvestmentClick,
             )
         }
-        "card_and_bank" -> uiState.paymentModeBreakdown?.cardAndBank?.let { summary ->
-            CardAndBankMetricTile(
-                summary = summary,
-                currency = uiState.currency,
-                onClick = onCardAndBankClick,
-            )
-        }
-        "payment_cash" -> uiState.paymentModeBreakdown?.cash?.let { cash ->
-            val average = if (cash.transactionCount > 0) {
-                cash.total.divide(
-                    BigDecimal(cash.transactionCount),
-                    2,
-                    java.math.RoundingMode.HALF_UP,
-                )
-            } else {
-                BigDecimal.ZERO
-            }
-            AnalyticsMetricTile(
-                content = AnalyticsMetricTileContent(
-                    topLabel = PaymentMode.CASH.label.uppercase(),
-                    primaryValue = CurrencyFormatter.formatCurrency(cash.total, uiState.currency),
-                    transactionCount = cash.transactionCount,
-                    countBadgeIcon = Icons.Default.Payments,
-                    bottomLeftLabel = "AVERAGE",
-                    bottomLeftValue = CurrencyFormatter.formatCurrency(average, uiState.currency),
-                    bottomLeftSuffix = " /txn",
-                    bottomRightCaption = "${cash.percentOfTotal.toInt()}% of spend",
-                    bottomRightPill = AnalyticsTilePill.Labeled(
-                        text = PaymentMode.CASH.label,
-                        icon = Icons.Default.Payments,
+        "spending_breakdown" -> uiState.paymentModeBreakdown?.let { breakdown ->
+            val cardAndBank = breakdown.cardAndBank
+            val cash = breakdown.cash
+            if (cardAndBank != null || cash != null) {
+                val totalAmount = (cardAndBank?.total ?: BigDecimal.ZERO) + (cash?.total ?: BigDecimal.ZERO)
+                val cardTxnCount = cardAndBank?.creditCount ?: 0
+                val cashTxnCount = cash?.transactionCount ?: 0
+                val creditCardAmount = CurrencyFormatter.formatCurrency(cardAndBank?.creditTotal ?: BigDecimal.ZERO, breakdown.currency)
+                val creditCardTxns = cardAndBank?.creditCount ?: 0
+                val bankAmount = CurrencyFormatter.formatCurrency(cardAndBank?.bankTotal ?: BigDecimal.ZERO, breakdown.currency)
+                val bankTxns = cardAndBank?.bankCount ?: 0
+                val cashAmount = CurrencyFormatter.formatCurrency(cash?.total ?: BigDecimal.ZERO, breakdown.currency)
+                val cashTxns = cash?.transactionCount ?: 0
+                val cashPercent = cash?.percentOfTotal ?: 0f
+                val footerNote = if (cashPercent > 0f) {
+                    "Cash is ${cashPercent.toInt()}% of spend · excl. investments"
+                } else {
+                    "Excl. investments"
+                }
+                
+                SpendingBreakdownTile(
+                    data = SpendingBreakdownData(
+                        totalAmount = CurrencyFormatter.formatCurrency(totalAmount, breakdown.currency),
+                        cardTxnCount = cardTxnCount,
+                        cashTxnCount = cashTxnCount,
+                        creditCardAmount = creditCardAmount,
+                        creditCardTxns = creditCardTxns,
+                        bankAmount = bankAmount,
+                        bankTxns = bankTxns,
+                        cashAmount = cashAmount,
+                        cashTxns = cashTxns,
+                        footerNote = footerNote,
                     ),
-                ),
-                onClick = onCashClick,
-            )
+                    onClick = onSpendingBreakdownClick,
+                )
+            }
         }
     }
 }
@@ -320,7 +316,6 @@ private fun breakdownTitle(tileKey: String): String = when (tileKey) {
     "outflow" -> "Outflow Breakdown"
     "spending" -> "Spending Breakdown"
     "investments" -> "Investment Breakdown"
-    "card_and_bank" -> "Card & Bank Breakdown"
-    "payment_cash" -> "Cash Breakdown"
+    "spending_breakdown" -> "Spending Breakdown"
     else -> "Breakdown"
 }

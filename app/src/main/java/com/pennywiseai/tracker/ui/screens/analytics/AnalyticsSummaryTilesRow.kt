@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import com.pennywiseai.tracker.presentation.common.PaymentMode
 import com.pennywiseai.tracker.presentation.common.TransactionTypeFilter
+import com.pennywiseai.tracker.ui.components.cards.SpendingBreakdownData
+import com.pennywiseai.tracker.ui.components.cards.SpendingBreakdownTile
 import com.pennywiseai.tracker.ui.theme.Spacing
 import com.pennywiseai.tracker.utils.CurrencyFormatter
 import java.math.BigDecimal
@@ -56,24 +58,23 @@ private sealed interface AnalyticsSummaryTileEntry {
         val summary: CardAndBankSpendSummary,
         val onClick: (() -> Unit)?,
     ) : AnalyticsSummaryTileEntry
+
+    data class SpendingBreakdown(
+        override val key: String,
+        val data: SpendingBreakdownData,
+        val onClick: (() -> Unit)?,
+    ) : AnalyticsSummaryTileEntry
 }
 
 @Composable
 fun AnalyticsSummaryTilesRow(
-    spendingTotal: BigDecimal,
-    spendingTransactionCount: Int,
-    spendingAverage: BigDecimal,
-    spendingTopCategory: String?,
-    spendingTopCategoryPercentage: Float,
     currency: String,
     periodOutflow: PeriodOutflowSummary?,
     investmentInsights: InvestmentInsights?,
     paymentModeBreakdown: PaymentModeBreakdown?,
-    onSpendingClick: () -> Unit,
     onOutflowClick: ((Set<TransactionTypeFilter>) -> Unit)? = null,
     onInvestmentClick: () -> Unit,
-    onCardAndBankClick: () -> Unit,
-    onCashClick: () -> Unit,
+    onSpendingBreakdownClick: () -> Unit,
     onTileDetailClick: ((String) -> Unit)? = null,
     onOutflowBreakdownRowClick: ((TransactionTypeFilter) -> Unit)? = null,
     onTileChanged: (String) -> Unit = {},
@@ -82,7 +83,6 @@ fun AnalyticsSummaryTilesRow(
     modifier: Modifier = Modifier,
 ) {
     val showOutflowTile = periodOutflow != null
-    val spendingTopLabel = if (showOutflowTile) "SPENDING" else "TOTAL"
 
     val tiles = buildList {
         periodOutflow?.let { outflow ->
@@ -95,47 +95,46 @@ fun AnalyticsSummaryTilesRow(
             )
         }
 
-        if (spendingTotal > BigDecimal.ZERO || spendingTransactionCount > 0) {
-            add(
-                AnalyticsSummaryTileEntry.Metric(
-                    key = "spending",
-                    content = AnalyticsMetricTileContent(
-                        topLabel = spendingTopLabel,
-                        primaryValue = CurrencyFormatter.formatCurrency(spendingTotal, currency),
-                        transactionCount = spendingTransactionCount,
-                        countBadgeIcon = Icons.Default.Receipt,
-                        bottomLeftLabel = "AVERAGE",
-                        bottomLeftValue = CurrencyFormatter.formatCurrency(
-                            if (spendingTransactionCount > 0) spendingAverage else BigDecimal.ZERO,
-                            currency,
+
+        paymentModeBreakdown?.let { breakdown ->
+            val cardAndBank = breakdown.cardAndBank
+            val cash = breakdown.cash
+            if (cardAndBank != null || cash != null) {
+                val totalAmount = (cardAndBank?.total ?: BigDecimal.ZERO) + (cash?.total ?: BigDecimal.ZERO)
+                val cardTxnCount = cardAndBank?.creditCount ?: 0
+                val cashTxnCount = cash?.transactionCount ?: 0
+                val creditCardAmount = CurrencyFormatter.formatCurrency(cardAndBank?.creditTotal ?: BigDecimal.ZERO, breakdown.currency)
+                val creditCardTxns = cardAndBank?.creditCount ?: 0
+                val bankAmount = CurrencyFormatter.formatCurrency(cardAndBank?.bankTotal ?: BigDecimal.ZERO, breakdown.currency)
+                val bankTxns = cardAndBank?.bankCount ?: 0
+                val cashAmount = CurrencyFormatter.formatCurrency(cash?.total ?: BigDecimal.ZERO, breakdown.currency)
+                val cashTxns = cash?.transactionCount ?: 0
+                val cashPercent = cash?.percentOfTotal ?: 0f
+                val footerNote = if (cashPercent > 0f) {
+                    "Cash is ${cashPercent.toInt()}% of spend · excl. investments"
+                } else {
+                    "Excl. investments"
+                }
+                
+                add(
+                    AnalyticsSummaryTileEntry.SpendingBreakdown(
+                        key = "spending_breakdown",
+                        data = SpendingBreakdownData(
+                            totalAmount = CurrencyFormatter.formatCurrency(totalAmount, breakdown.currency),
+                            cardTxnCount = cardTxnCount,
+                            cashTxnCount = cashTxnCount,
+                            creditCardAmount = creditCardAmount,
+                            creditCardTxns = creditCardTxns,
+                            bankAmount = bankAmount,
+                            bankTxns = bankTxns,
+                            cashAmount = cashAmount,
+                            cashTxns = cashTxns,
+                            footerNote = footerNote,
                         ),
-                        bottomLeftSuffix = " /day",
-                        bottomRightCaption = if (spendingTopCategory != null && spendingTopCategoryPercentage > 0) {
-                            "${spendingTopCategoryPercentage.toInt()}% of total"
-                        } else {
-                            null
-                        },
-                        bottomRightPill = spendingTopCategory?.takeIf {
-                            spendingTopCategoryPercentage > 0
-                        }?.let { AnalyticsTilePill.Category(it) },
+                        onClick = onSpendingBreakdownClick,
                     ),
-                    onClick = onSpendingClick,
-                ),
-            )
-        }
-
-        paymentModeBreakdown?.cardAndBank?.let { summary ->
-            add(
-                AnalyticsSummaryTileEntry.CardAndBank(
-                    key = "card_and_bank",
-                    summary = summary,
-                    onClick = onCardAndBankClick,
-                ),
-            )
-        }
-
-        paymentModeBreakdown?.cash?.let { cash ->
-            add(cashPaymentModeTile(cash, paymentModeBreakdown.currency, onCashClick))
+                )
+            }
         }
 
         investmentInsights?.let { insights ->
@@ -268,6 +267,11 @@ fun AnalyticsSummaryTilesRow(
                     onClick = detailNavigate ?: tile.onClick,
                     modifier = tileModifier,
                 )
+                is AnalyticsSummaryTileEntry.SpendingBreakdown -> SpendingBreakdownTile(
+                    data = tile.data,
+                    onClick = detailNavigate ?: tile.onClick,
+                    modifier = tileModifier,
+                )
             }
         }
     }
@@ -276,40 +280,11 @@ fun AnalyticsSummaryTilesRow(
 private fun AnalyticsSummaryTileEntry.tabLabel(): String = when (this) {
     is AnalyticsSummaryTileEntry.Outflow -> "Outflow"
     is AnalyticsSummaryTileEntry.CardAndBank -> "Card+Bank"
+    is AnalyticsSummaryTileEntry.SpendingBreakdown -> "Spending"
     is AnalyticsSummaryTileEntry.Metric -> when (key) {
         "spending" -> "Spending"
         "payment_cash" -> "Cash"
         "investments" -> "Invested"
         else -> "Metric"
     }
-}
-
-private fun cashPaymentModeTile(
-    stat: PaymentModeStat,
-    currency: String,
-    onCashClick: () -> Unit,
-): AnalyticsSummaryTileEntry.Metric {
-    val average = if (stat.transactionCount > 0) {
-        stat.total.divide(BigDecimal(stat.transactionCount), 2, RoundingMode.HALF_UP)
-    } else {
-        BigDecimal.ZERO
-    }
-    return AnalyticsSummaryTileEntry.Metric(
-        key = "payment_cash",
-        content = AnalyticsMetricTileContent(
-            topLabel = PaymentMode.CASH.label.uppercase(),
-            primaryValue = CurrencyFormatter.formatCurrency(stat.total, currency),
-            transactionCount = stat.transactionCount,
-            countBadgeIcon = Icons.Default.Payments,
-            bottomLeftLabel = "AVERAGE",
-            bottomLeftValue = CurrencyFormatter.formatCurrency(average, currency),
-            bottomLeftSuffix = " /txn",
-            bottomRightCaption = "${stat.percentOfTotal.toInt()}% of spend",
-            bottomRightPill = AnalyticsTilePill.Labeled(
-                text = PaymentMode.CASH.label,
-                icon = Icons.Default.Payments,
-            ),
-        ),
-        onClick = onCashClick,
-    )
 }

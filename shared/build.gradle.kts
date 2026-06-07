@@ -4,6 +4,21 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+fun xcodeToolsAvailable(): Boolean = try {
+    val process = ProcessBuilder("/usr/bin/xcrun", "xcodebuild", "-version")
+        .redirectErrorStream(true)
+        .start()
+    process.waitFor() == 0
+} catch (_: Exception) {
+    false
+}
+
+val enableIosTargets = providers
+    .gradleProperty("enableIosTargets")
+    .orNull
+    ?.toBooleanStrictOrNull()
+    ?: xcodeToolsAvailable()
+
 kotlin {
     androidLibrary {
         namespace = "com.pennywiseai.shared"
@@ -11,9 +26,11 @@ kotlin {
         minSdk = 26
     }
 
-    iosX64()
-    iosArm64()
-    iosSimulatorArm64()
+    if (enableIosTargets) {
+        iosX64()
+        iosArm64()
+        iosSimulatorArm64()
+    }
 
     targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>().configureEach {
         binaries.framework {
@@ -46,9 +63,11 @@ kotlin {
 
 dependencies {
     add("kspAndroid", libs.androidx.room.compiler)
-    add("kspIosX64", libs.androidx.room.compiler)
-    add("kspIosArm64", libs.androidx.room.compiler)
-    add("kspIosSimulatorArm64", libs.androidx.room.compiler)
+    if (enableIosTargets) {
+        add("kspIosX64", libs.androidx.room.compiler)
+        add("kspIosArm64", libs.androidx.room.compiler)
+        add("kspIosSimulatorArm64", libs.androidx.room.compiler)
+    }
 }
 
 ksp {

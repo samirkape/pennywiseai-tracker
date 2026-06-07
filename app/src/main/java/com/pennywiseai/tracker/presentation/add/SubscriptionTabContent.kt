@@ -436,8 +436,8 @@ fun SubscriptionTabContent(
         CategoryEditDialog(
             category = null,
             onDismiss = { showCreateCategoryDialog = false },
-            onSave = { name, color, isIncome ->
-                viewModel.createAndSelectSubscriptionCategory(name, color, isIncome)
+            onSave = { name, color, isIncome, icon ->
+                viewModel.createAndSelectSubscriptionCategory(name, color, isIncome, icon)
                 showCreateCategoryDialog = false
             }
         )

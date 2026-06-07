@@ -78,20 +78,19 @@ fun parseYearMonthNavPeriod(period: String): YearMonth? {
     return YearMonth.parse(period)
 }
 
-/** Default period chip when pay-month mode is on vs off. */
-fun defaultTimePeriod(useFinancialMonth: Boolean): TimePeriod =
-    if (useFinancialMonth) TimePeriod.THIS_MONTH else TimePeriod.CALENDAR_MONTH
+/** Default period chip. */
+fun defaultTimePeriod(useFinancialMonth: Boolean): TimePeriod = TimePeriod.THIS_MONTH
 
 /** Navigation query value for [defaultTimePeriod]. */
 fun defaultTimePeriodNavParam(useFinancialMonth: Boolean): String =
     defaultTimePeriod(useFinancialMonth).name
 
 enum class TimePeriod(val label: String) {
-    THIS_MONTH("Pay Month"),
+    THIS_MONTH("This Month"),
     CALENDAR_MONTH("Calendar Month"),
     LAST_MONTH("Last Month"),
     CURRENT_FY("Current FY"),
-    ALL("All Time"),
+    ALL("All time"),
     CUSTOM("Custom Range")
 }
 
@@ -141,7 +140,7 @@ fun TransactionEntity.countsOnceTowardCcBillPaymentTotal(): Boolean {
 }
 
 enum class TransactionTypeFilter(val label: String) {
-    ALL("All"),
+    ALL("Any Type"),
     INCOME("Income"),
     EXPENSE("Spending"),
     CREDIT("Credit Card"),

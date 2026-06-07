@@ -76,7 +76,8 @@ class BackupExporter @Inject constructor(
         val transactionSplits = database.transactionSplitDao().getAllSplits().first()
         val bankNotifications = database.bankNotificationDao().getAllNotifications().first()
         val salaryMonthOverrides = database.salaryMonthOverrideDao().getAllOverrides().first()
-        
+        val transactionReceipts = database.transactionReceiptDao().getAllReceipts()
+
         // Get preferences from repository
         val prefs = userPreferencesRepository.userPreferences.first()
         val systemPrompt = userPreferencesRepository.getSystemPrompt().first()
@@ -140,6 +141,7 @@ class BackupExporter @Inject constructor(
                     totalBudgetCategories = exportedBudgetCategories.size,
                     totalTransactionSplits = exportedTransactionSplits.size,
                     totalBankNotifications = exportedBankNotifications.size,
+                    totalReceipts = transactionReceipts.size,
                     dateRange = dateRange
                 )
             ),
@@ -160,7 +162,8 @@ class BackupExporter @Inject constructor(
                 budgetCategories = exportedBudgetCategories,
                 transactionSplits = exportedTransactionSplits,
                 bankNotifications = exportedBankNotifications,
-                salaryMonthOverrides = exportedSalaryMonthOverrides
+                salaryMonthOverrides = exportedSalaryMonthOverrides,
+                transactionReceipts = transactionReceipts
             ),
             preferences = PreferencesSnapshot(
                 theme = ThemePreferences(

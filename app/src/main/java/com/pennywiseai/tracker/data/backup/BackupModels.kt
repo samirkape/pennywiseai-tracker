@@ -87,6 +87,9 @@ data class BackupStatistics(
     @SerializedName("total_bank_notifications")
     val totalBankNotifications: Int = 0,
     
+    @SerializedName("total_receipts")
+    val totalReceipts: Int = 0,
+    
     @SerializedName("date_range")
     val dateRange: DateRange?
 )
@@ -155,7 +158,10 @@ data class DatabaseSnapshot(
     val bankNotifications: List<BankNotificationEntity> = emptyList(),
 
     @SerializedName("salary_month_overrides")
-    val salaryMonthOverrides: List<SalaryMonthOverrideEntity> = emptyList()
+    val salaryMonthOverrides: List<SalaryMonthOverrideEntity> = emptyList(),
+    
+    @SerializedName("transaction_receipts")
+    val transactionReceipts: List<TransactionReceiptEntity> = emptyList()
 )
 
 /**

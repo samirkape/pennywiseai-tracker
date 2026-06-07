@@ -10,7 +10,8 @@ sealed class HomeRecentItem {
 
     data class SingleTransaction(
         val transaction: TransactionEntity,
-        val convertedAmount: BigDecimal? = null
+        val convertedAmount: BigDecimal? = null,
+        val categoryIconKey: String? = null
     ) : HomeRecentItem() {
         override val sortTime: LocalDateTime get() = transaction.dateTime
     }

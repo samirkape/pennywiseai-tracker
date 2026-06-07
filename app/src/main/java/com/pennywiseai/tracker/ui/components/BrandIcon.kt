@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.pennywiseai.tracker.ui.icons.BrandIcons
+import com.pennywiseai.tracker.ui.icons.CategoryIcons
 import com.pennywiseai.tracker.ui.icons.CategoryMapping
 import com.pennywiseai.tracker.ui.icons.IconProvider
 import com.pennywiseai.tracker.ui.icons.IconResource
@@ -34,13 +35,29 @@ fun BrandIcon(
     size: Dp = 40.dp,
     showBackground: Boolean = true,
     categoryOverride: String? = null,
+    iconKey: String? = null,
 ) {
     val iconResource = IconProvider.getIconForMerchant(
         merchantName = merchantName,
         categoryOverride = categoryOverride,
     )
+
+    // If brand icon not found and custom category icon is provided, use it
+    val finalIconResource = if (iconResource is IconResource.VectorIcon && iconKey != null && categoryOverride != null) {
+        // Check if this is using the default category fallback (not a brand icon)
+        // If so, use the custom category icon from database
+        val resolvedIcon = CategoryIcons.getIcon(CategoryIcons.resolveKey(categoryOverride, iconKey))
+        val categoryInfo = CategoryMapping.categories[categoryOverride]
+            ?: CategoryMapping.categories["Others"]!!
+        IconResource.VectorIcon(
+            icon = resolvedIcon,
+            tint = categoryInfo.color
+        )
+    } else {
+        iconResource
+    }
     val brandColor = BrandIcons.getBrandColor(merchantName)
-    
+
     Box(
         modifier = modifier
             .size(size)
@@ -59,11 +76,11 @@ fun BrandIcon(
             ),
         contentAlignment = Alignment.Center
     ) {
-        when (iconResource) {
+        when (finalIconResource) {
             is IconResource.DrawableResource -> {
                 // Brand logo from drawable
                 Image(
-                    painter = painterResource(id = iconResource.resId),
+                    painter = painterResource(id = finalIconResource.resId),
                     contentDescription = merchantName,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -71,9 +88,9 @@ fun BrandIcon(
             is IconResource.VectorIcon -> {
                 // Category icon fallback
                 Icon(
-                    imageVector = iconResource.icon,
+                    imageVector = finalIconResource.icon,
                     contentDescription = merchantName,
-                    tint = if (showBackground) Color.White else iconResource.tint,
+                    tint = if (showBackground) Color.White else finalIconResource.tint,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -112,20 +129,23 @@ fun LetterAvatar(
 }
 
 /**
- * Category icon with consistent styling
+ * Category icon with consistent styling.
+ * Pass [iconKey] when the stored category icon is known.
  */
 @Composable
 fun CategoryIcon(
     category: String,
     modifier: Modifier = Modifier,
     size: Dp = 24.dp,
-    tint: Color? = null
+    tint: Color? = null,
+    iconKey: String? = null,
 ) {
     val categoryInfo = CategoryMapping.categories[category]
         ?: CategoryMapping.categories["Others"]!!
-    
+    val resolvedIcon = CategoryIcons.getIcon(CategoryIcons.resolveKey(category, iconKey))
+
     Icon(
-        imageVector = categoryInfo.icon,
+        imageVector = resolvedIcon,
         contentDescription = category,
         tint = tint ?: categoryInfo.color,
         modifier = modifier.size(size)

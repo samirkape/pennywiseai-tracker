@@ -197,9 +197,13 @@ class BudgetGroupRepository @Inject constructor(
 
     private suspend fun getGroupsForMonth(year: Int, month: Int): List<BudgetWithCategories> {
         val groupSnapshots = snapshotDao.getGroupSnapshots(year, month)
-        if (groupSnapshots.isEmpty()) return emptyList()
-        val catSnapshots = snapshotDao.getCategorySnapshots(year, month)
-        return reconstructFromSnapshots(groupSnapshots, catSnapshots)
+        if (groupSnapshots.isNotEmpty()) {
+            val catSnapshots = snapshotDao.getCategorySnapshots(year, month)
+            return reconstructFromSnapshots(groupSnapshots, catSnapshots)
+        }
+        // Snapshots are only written for the current month when budgets change; fall back to
+        // active budgets so historical months still show spending against today's structure.
+        return budgetDao.getActiveBudgetsWithCategories().first()
     }
 
     private fun reconstructFromSnapshots(

@@ -62,6 +62,15 @@ class BudgetGroupsViewModel @Inject constructor(
 
     init {
         loadBudgetData()
+        observeActiveGroups()
+    }
+
+    private fun observeActiveGroups() {
+        viewModelScope.launch {
+            budgetGroupRepository.getActiveGroups().collect { groups ->
+                _uiState.value = _uiState.value.copy(hasGroups = groups.isNotEmpty())
+            }
+        }
     }
 
     private fun loadBudgetData() {
@@ -211,7 +220,6 @@ class BudgetGroupsViewModel @Inject constructor(
             }.collect { summary ->
                 _uiState.value = _uiState.value.copy(
                     summary = summary,
-                    hasGroups = summary.groups.isNotEmpty(),
                     isLoading = false
                 )
             }
@@ -396,12 +404,14 @@ class BudgetGroupsViewModel @Inject constructor(
 
     fun selectPreviousMonth() {
         _selectedYearMonth.value = _selectedYearMonth.value.minusMonths(1)
+        _uiState.value = _uiState.value.copy(isLoading = true)
     }
 
     fun selectNextMonth() {
         val next = _selectedYearMonth.value.plusMonths(1)
         if (!next.isAfter(YearMonth.now())) {
             _selectedYearMonth.value = next
+            _uiState.value = _uiState.value.copy(isLoading = true)
         }
     }
 

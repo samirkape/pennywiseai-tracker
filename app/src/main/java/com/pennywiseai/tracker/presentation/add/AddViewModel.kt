@@ -261,9 +261,9 @@ class AddViewModel @Inject constructor(
         }
     }
 
-    fun createAndSelectTransactionCategory(name: String, color: String, isIncome: Boolean) {
+    fun createAndSelectTransactionCategory(name: String, color: String, isIncome: Boolean, icon: String) {
         viewModelScope.launch {
-            categoryRepository.createCategory(name, color, isIncome)
+            categoryRepository.createCategory(name, color, isIncome, icon)
             updateTransactionCategory(name)
         }
     }
@@ -500,9 +500,9 @@ class AddViewModel @Inject constructor(
         }
     }
 
-    fun createAndSelectSubscriptionCategory(name: String, color: String, isIncome: Boolean) {
+    fun createAndSelectSubscriptionCategory(name: String, color: String, isIncome: Boolean, icon: String) {
         viewModelScope.launch {
-            categoryRepository.createCategory(name, color, isIncome)
+            categoryRepository.createCategory(name, color, isIncome, icon)
             updateSubscriptionCategory(name)
         }
     }

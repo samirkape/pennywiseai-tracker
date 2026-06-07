@@ -418,24 +418,16 @@ fun AnalyticsScreen(
         }
 
         if (
-            uiState.totalSpending > BigDecimal.ZERO ||
-            uiState.transactionCount > 0 ||
             uiState.periodOutflow != null ||
             uiState.investmentInsights != null ||
             uiState.paymentModeBreakdown != null
         ) {
             item {
                 AnalyticsSummaryTilesRow(
-                    spendingTotal = uiState.totalSpending,
-                    spendingTransactionCount = uiState.transactionCount,
-                    spendingAverage = uiState.averageAmount,
-                    spendingTopCategory = uiState.topCategory,
-                    spendingTopCategoryPercentage = uiState.topCategoryPercentage,
                     currency = uiState.currency,
                     periodOutflow = uiState.periodOutflow,
                     investmentInsights = uiState.investmentInsights,
                     paymentModeBreakdown = uiState.paymentModeBreakdown,
-                    onSpendingClick = { drillDownToTransactions(category = categoryFilter) },
                     onOutflowClick = { selectedTypes ->
                         val typeName = if (selectedTypes.size == 1) {
                             selectedTypes.first().name
@@ -452,16 +444,9 @@ fun AnalyticsScreen(
                             transactionType = TransactionTypeFilter.INVESTMENT.name,
                         )
                     },
-                    onCardAndBankClick = {
+                    onSpendingBreakdownClick = {
                         drillDownToTransactions(
                             transactionType = TransactionTypeFilter.EXPENSE.name,
-                            paymentMode = PaymentModeGroup.CARD_AND_BANK.name,
-                        )
-                    },
-                    onCashClick = {
-                        drillDownToTransactions(
-                            transactionType = TransactionTypeFilter.EXPENSE.name,
-                            paymentMode = PaymentMode.CASH.name,
                         )
                     },
                     onTileDetailClick = if (compactAnalyticsCards) {

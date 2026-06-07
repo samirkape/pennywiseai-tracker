@@ -17,6 +17,9 @@ interface TransactionReceiptDao {
     @Query("SELECT * FROM transaction_receipts WHERE transaction_id = :transactionId ORDER BY created_at ASC")
     suspend fun getReceiptsForTransaction(transactionId: Long): List<TransactionReceiptEntity>
 
+    @Query("SELECT * FROM transaction_receipts")
+    suspend fun getAllReceipts(): List<TransactionReceiptEntity>
+
     @Query("DELETE FROM transaction_receipts WHERE id = :id")
     suspend fun deleteReceipt(id: Long)
 

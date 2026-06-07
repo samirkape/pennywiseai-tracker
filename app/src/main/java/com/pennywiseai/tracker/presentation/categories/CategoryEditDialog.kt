@@ -20,7 +20,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.pennywiseai.tracker.data.database.entity.CategoryEntity
+import com.pennywiseai.tracker.ui.components.CategoryChip
 import com.pennywiseai.tracker.ui.components.cards.PennyWiseCardV2
+import com.pennywiseai.tracker.ui.icons.CategoryIcons
 import com.pennywiseai.tracker.ui.theme.Dimensions
 import com.pennywiseai.tracker.ui.theme.Spacing
 
@@ -43,12 +45,21 @@ private val presetColors = listOf(
 fun CategoryEditDialog(
     category: CategoryEntity? = null,
     onDismiss: () -> Unit,
-    onSave: (name: String, color: String, isIncome: Boolean) -> Unit
+    onSave: (name: String, color: String, isIncome: Boolean, icon: String) -> Unit
 ) {
+    val isSystemCategory = category?.isSystem == true
     var name by remember { mutableStateOf(category?.name ?: "") }
     var isIncome by remember { mutableStateOf(category?.isIncome ?: false) }
     var nameError by remember { mutableStateOf<String?>(null) }
     var selectedColor by remember { mutableStateOf(category?.color ?: "#4CAF50") }
+    var selectedIcon by remember {
+        mutableStateOf(
+            CategoryIcons.resolveKey(
+                categoryName = category?.name.orEmpty(),
+                storedIcon = category?.icon,
+            )
+        )
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         PennyWiseCardV2(
@@ -65,24 +76,38 @@ fun CategoryEditDialog(
                     .padding(Dimensions.Padding.card),
                 verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
-                // Title
                 Text(
-                    text = if (category == null) "Add Category" else "Edit Category",
+                    text = when {
+                        category == null -> "Add Category"
+                        isSystemCategory -> "Edit Category Icon"
+                        else -> "Edit Category"
+                    },
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
 
-                // Category Name Input
+                if (isSystemCategory) {
+                    Text(
+                        text = "System categories keep their name, color, and type. You can change the icon.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
                 TextField(
                     value = name,
                     onValueChange = {
-                        name = it
-                        nameError = if (it.isBlank()) "Category name is required" else null
+                        if (!isSystemCategory) {
+                            name = it
+                            nameError = if (it.isBlank()) "Category name is required" else null
+                        }
                     },
                     label = { Text("Category Name", fontWeight = FontWeight.SemiBold) },
                     isError = nameError != null,
                     supportingText = nameError?.let { { Text(it) } },
                     singleLine = true,
+                    readOnly = isSystemCategory,
+                    enabled = !isSystemCategory,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     colors = TextFieldDefaults.colors(
@@ -91,41 +116,88 @@ fun CategoryEditDialog(
                         focusedIndicatorColor = Color.Transparent,
                         unfocusedIndicatorColor = Color.Transparent,
                         focusedLabelColor = MaterialTheme.colorScheme.primary,
-                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.7f)
+                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.7f),
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
                     )
                 )
 
-                // Category Type Selection
-                Column {
-                    Text(
-                        text = "Category Type",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(Spacing.xs))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                    ) {
-                        FilterChip(
-                            selected = !isIncome,
-                            onClick = { isIncome = false },
-                            label = { Text("Expense") },
-                            modifier = Modifier.weight(1f)
+                if (!isSystemCategory) {
+                    Column {
+                        Text(
+                            text = "Category Type",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
                         )
-                        FilterChip(
-                            selected = isIncome,
-                            onClick = { isIncome = true },
-                            label = { Text("Income") },
-                            modifier = Modifier.weight(1f)
+                        Spacer(modifier = Modifier.height(Spacing.xs))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                        ) {
+                            FilterChip(
+                                selected = !isIncome,
+                                onClick = { isIncome = false },
+                                label = { Text("Expense") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = isIncome,
+                                onClick = { isIncome = true },
+                                label = { Text("Income") },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    Column {
+                        Text(
+                            text = "Color",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
                         )
+                        Spacer(modifier = Modifier.height(Spacing.sm))
+
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                        ) {
+                            presetColors.forEach { colorHex ->
+                                val color = try {
+                                    Color(android.graphics.Color.parseColor(colorHex))
+                                } catch (e: Exception) {
+                                    MaterialTheme.colorScheme.primary
+                                }
+                                val isSelected = selectedColor == colorHex
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(color)
+                                        .then(
+                                            if (isSelected) {
+                                                Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                                            } else Modifier
+                                        )
+                                        .clickable { selectedColor = colorHex },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            Icons.Default.Check,
+                                            contentDescription = "Selected",
+                                            tint = if (isLightColor(color)) Color.Black.copy(alpha = 0.87f) else Color.White,
+                                            modifier = Modifier.size(Dimensions.Icon.small)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
-                // Color Selection
                 Column {
                     Text(
-                        text = "Color",
+                        text = "Icon",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium
                     )
@@ -135,40 +207,37 @@ fun CategoryEditDialog(
                         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                         verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                     ) {
-                        presetColors.forEach { colorHex ->
-                            val color = try {
-                                Color(android.graphics.Color.parseColor(colorHex))
+                        CategoryIcons.pickerIcons.forEach { iconEntry ->
+                            val previewColor = try {
+                                Color(android.graphics.Color.parseColor(selectedColor))
                             } catch (e: Exception) {
                                 MaterialTheme.colorScheme.primary
                             }
-                            val isSelected = selectedColor == colorHex
+                            val isSelected = selectedIcon == iconEntry.key
                             Box(
                                 modifier = Modifier
-                                    .size(36.dp)
+                                    .size(40.dp)
                                     .clip(CircleShape)
-                                    .background(color)
+                                    .background(previewColor.copy(alpha = 0.12f))
                                     .then(
                                         if (isSelected) {
-                                            Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                                            Modifier.border(2.dp, previewColor, CircleShape)
                                         } else Modifier
                                     )
-                                    .clickable { selectedColor = colorHex },
+                                    .clickable { selectedIcon = iconEntry.key },
                                 contentAlignment = Alignment.Center
                             ) {
-                                if (isSelected) {
-                                    Icon(
-                                        Icons.Default.Check,
-                                        contentDescription = "Selected",
-                                        tint = if (isLightColor(color)) Color.Black.copy(alpha = 0.87f) else Color.White,
-                                        modifier = Modifier.size(Dimensions.Icon.small)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = iconEntry.icon,
+                                    contentDescription = iconEntry.key,
+                                    tint = previewColor,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                         }
                     }
                 }
 
-                // Preview
                 PennyWiseCardV2(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -182,28 +251,17 @@ fun CategoryEditDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(Spacing.xs))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.md)
-                    ) {
-                        // Show selected color
-                        Box(
-                            modifier = Modifier
-                                .size(Dimensions.Icon.medium)
-                                .clip(CircleShape)
-                                .background(
-                                    try { Color(android.graphics.Color.parseColor(selectedColor)) }
-                                    catch (e: Exception) { MaterialTheme.colorScheme.primary }
-                                )
-                        )
-                        Text(
-                            text = name.ifBlank { "Category Name" },
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
+                    CategoryChip(
+                        category = CategoryEntity(
+                            name = name.ifBlank { "Category Name" },
+                            color = selectedColor,
+                            icon = selectedIcon,
+                            isIncome = isIncome,
+                        ),
+                        showText = true,
+                    )
                 }
 
-                // Action Buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
@@ -217,7 +275,7 @@ fun CategoryEditDialog(
                     Button(
                         onClick = {
                             if (name.isNotBlank()) {
-                                onSave(name.trim(), selectedColor, isIncome)
+                                onSave(name.trim(), selectedColor, isIncome, selectedIcon)
                             } else {
                                 nameError = "Category name is required"
                             }
