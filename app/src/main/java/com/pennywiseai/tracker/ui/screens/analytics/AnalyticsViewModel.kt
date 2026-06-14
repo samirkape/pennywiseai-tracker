@@ -9,6 +9,9 @@ import com.pennywiseai.tracker.data.database.entity.TransactionWithSplits
 import com.pennywiseai.tracker.data.preferences.UserPreferencesRepository
 import com.pennywiseai.tracker.data.repository.SalaryMonthOverrideRepository
 import com.pennywiseai.tracker.data.repository.TransactionRepository
+import com.pennywiseai.tracker.data.repository.InsightsRepository
+import com.pennywiseai.tracker.domain.model.SmartInsight
+import com.pennywiseai.tracker.domain.usecase.ComputeInsightsUseCase
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.pennywiseai.tracker.presentation.common.TimePeriod
 import com.pennywiseai.tracker.presentation.common.TransactionTypeFilter
@@ -41,9 +44,11 @@ class AnalyticsViewModel @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val currencyConversionService: CurrencyConversionService,
     private val salaryMonthOverrideRepository: SalaryMonthOverrideRepository,
+    private val insightsRepository: InsightsRepository,
+    private val computeInsightsUseCase: ComputeInsightsUseCase,
     private val savedStateHandle: androidx.lifecycle.SavedStateHandle
 ) : ViewModel() {
-    
+
     private val _selectedPeriod = MutableStateFlow(TimePeriod.THIS_MONTH)
     val selectedPeriod: StateFlow<TimePeriod> = _selectedPeriod.asStateFlow()
     
@@ -111,6 +116,10 @@ class AnalyticsViewModel @Inject constructor(
                 }
             }
         }
+
+        viewModelScope.launch {
+            computeInsightsUseCase()
+        }
     }
 
     // Store custom date range as epoch days to survive process death
@@ -133,8 +142,13 @@ class AnalyticsViewModel @Inject constructor(
     private val _availableCurrencies = MutableStateFlow<List<String>>(emptyList())
     val availableCurrencies: StateFlow<List<String>> = _availableCurrencies.asStateFlow()
 
-    // Reactive UI state that automatically updates when any filter changes
-    // Uses flatMapLatest to cancel previous data loads when filters change (prevents race conditions)
+    private val _categorizationCoverage = MutableStateFlow(1f)
+    val categorizationCoverage: StateFlow<Float> = _categorizationCoverage.asStateFlow()
+
+    val insights: StateFlow<List<SmartInsight>> = insightsRepository.getAllInsights()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // UI state used by the composable
     val uiState: StateFlow<AnalyticsUiState> = combine(
         combine(
             _selectedPeriod,
@@ -365,6 +379,12 @@ class AnalyticsViewModel @Inject constructor(
                 // Get top category info
                 val topCategory = categoryBreakdown.firstOrNull()
 
+                // Compute categorization coverage (percentage of transactions with categories other than "Others")
+                val totalCount = filteredTransactions.size
+                val categorizedCount = filteredTransactions.count { it.category != "Others" && !it.category.isNullOrBlank() }
+                val coverage = if (totalCount > 0) categorizedCount.toFloat() / totalCount else 1f
+                _categorizationCoverage.value = coverage
+
                 val previousRange = previousDateRange(dateRange.first, dateRange.second)
                 val previousPeriodTxs = if (filterState.isUnifiedMode) {
                     transactionRepository.getTransactionsWithSplitsFiltered(
@@ -383,6 +403,7 @@ class AnalyticsViewModel @Inject constructor(
                     allTransactionsWithSplits = allTransactionsWithSplits,
                     isUnified = isUnified,
                     displayCurrency = displayCurrency,
+                    previousPeriodTxs = previousPeriodTxs,
                 )
 
                 val investmentInsights = computeInvestmentInsights(
@@ -398,6 +419,7 @@ class AnalyticsViewModel @Inject constructor(
                         totalSpending = totalSpending,
                         isUnified = isUnified,
                         displayCurrency = displayCurrency,
+                        previousPeriodTxs = previousPeriodTxs.map { it.transaction },
                     )
                 } else {
                     null
@@ -464,23 +486,25 @@ class AnalyticsViewModel @Inject constructor(
                 }
 
                 AnalyticsUiState(
-                    totalSpending = totalSpending,
+                    transactions = filteredTransactions,
+                    totalExpense = totalSpending,
+                    totalIncome = BigDecimal.ZERO,
+                    netSavings = BigDecimal.ZERO,
                     categoryBreakdown = categoryBreakdown,
                     topMerchants = merchantBreakdown,
-                    transactionCount = filteredTransactions.size,
-                    averageAmount = averageAmount,
-                    topCategory = topCategory?.name,
-                    topCategoryPercentage = topCategory?.percentage ?: 0f,
-                    currency = displayCurrency,
-                    isLoading = false,
                     spendingTrend = calculateSpendingTrend(filteredTransactions, dateRange.first, dateRange.second),
-                    availableCategories = allCategoryNames,
+                    isLoading = false,
+                    error = null,
+                    dateRange = dateRange,
                     periodStart = dateRange.first,
                     periodEnd = dateRange.second,
                     periodOutflow = periodOutflow,
                     investmentInsights = investmentInsights,
                     paymentModeBreakdown = paymentModeBreakdown,
                     accountBreakdowns = accountBreakdowns,
+                    currency = displayCurrency,
+                    insights = insights.value,
+                    categorizationCoverage = coverage,
                 )
             }
         }
@@ -708,6 +732,7 @@ class AnalyticsViewModel @Inject constructor(
         allTransactionsWithSplits: List<TransactionWithSplits>,
         isUnified: Boolean,
         displayCurrency: String,
+        previousPeriodTxs: List<TransactionWithSplits> = emptyList(),
     ): PeriodOutflowSummary? {
         var spending = BigDecimal.ZERO
         var invested = BigDecimal.ZERO
@@ -721,23 +746,30 @@ class AnalyticsViewModel @Inject constructor(
             if (tx.isExcludedFromTracking) continue
             val amount = convertAmount(tx.amount, tx.currency, displayCurrency, isUnified)
             when {
-                tx.matchesAnalyticsSpendingFilter() -> {
-                    spending += amount
-                    spendingCount++
-                }
-                tx.transactionType == TransactionType.INVESTMENT -> {
-                    invested += amount
-                    investmentCount++
-                }
-                tx.countsOnceTowardCcBillPaymentTotal() -> {
-                    ccBillPayment += amount
-                    ccBillPaymentCount++
-                }
+                tx.matchesAnalyticsSpendingFilter() -> { spending += amount; spendingCount++ }
+                tx.transactionType == TransactionType.INVESTMENT -> { invested += amount; investmentCount++ }
+                tx.countsOnceTowardCcBillPaymentTotal() -> { ccBillPayment += amount; ccBillPaymentCount++ }
             }
         }
 
         val total = spending + invested + ccBillPayment
         if (total <= BigDecimal.ZERO) return null
+
+        var previousTotal = BigDecimal.ZERO
+        for (item in previousPeriodTxs) {
+            val tx = item.transaction
+            if (tx.isExcludedFromTracking) continue
+            val amount = convertAmount(tx.amount, tx.currency, displayCurrency, isUnified)
+            when {
+                tx.matchesAnalyticsSpendingFilter() -> previousTotal += amount
+                tx.transactionType == TransactionType.INVESTMENT -> previousTotal += amount
+                tx.countsOnceTowardCcBillPaymentTotal() -> previousTotal += amount
+            }
+        }
+        val deltaPercent = if (previousTotal > BigDecimal.ZERO) {
+            val delta = total.subtract(previousTotal)
+            (delta.divide(previousTotal, 4, java.math.RoundingMode.HALF_UP) * BigDecimal(100)).toFloat()
+        } else null
 
         return PeriodOutflowSummary(
             total = total,
@@ -749,6 +781,7 @@ class AnalyticsViewModel @Inject constructor(
             investmentTransactionCount = investmentCount,
             ccBillPaymentTransactionCount = ccBillPaymentCount,
             currency = displayCurrency,
+            deltaPercent = deltaPercent,
         )
     }
 
@@ -859,6 +892,7 @@ class AnalyticsViewModel @Inject constructor(
         totalSpending: BigDecimal,
         isUnified: Boolean,
         displayCurrency: String,
+        previousPeriodTxs: List<TransactionEntity> = emptyList(),
     ): PaymentModeBreakdown? {
         val spendingTxs = transactions.filter {
             !it.isExcludedFromTracking && it.matchesAnalyticsSpendingFilter()
@@ -876,18 +910,9 @@ class AnalyticsViewModel @Inject constructor(
             val mode = tx.paymentMode() ?: continue
             val converted = convertAmount(tx.amount, tx.currency, displayCurrency, isUnified)
             when (mode) {
-                PaymentMode.CREDIT_CARD -> {
-                    creditTotal += converted
-                    creditCount++
-                }
-                PaymentMode.BANK_ACCOUNT -> {
-                    bankTotal += converted
-                    bankCount++
-                }
-                PaymentMode.CASH -> {
-                    cashTotal += converted
-                    cashCount++
-                }
+                PaymentMode.CREDIT_CARD -> { creditTotal += converted; creditCount++ }
+                PaymentMode.BANK_ACCOUNT -> { bankTotal += converted; bankCount++ }
+                PaymentMode.CASH -> { cashTotal += converted; cashCount++ }
             }
         }
 
@@ -899,9 +924,7 @@ class AnalyticsViewModel @Inject constructor(
                 transactionCount = count,
                 percentOfTotal = if (totalSpending > BigDecimal.ZERO) {
                     (total.divide(totalSpending, 4, java.math.RoundingMode.HALF_UP) * BigDecimal(100)).toFloat()
-                } else {
-                    0f
-                },
+                } else 0f,
             )
         }
 
@@ -910,34 +933,43 @@ class AnalyticsViewModel @Inject constructor(
         val cash = stat(PaymentMode.CASH, cashTotal, cashCount)
 
         val cardAndBank = if (creditCard != null || bankAccount != null) {
-            val creditTotal = creditCard?.total ?: BigDecimal.ZERO
-            val bankTotal = bankAccount?.total ?: BigDecimal.ZERO
-            val combined = creditTotal + bankTotal
+            val cTotal = creditCard?.total ?: BigDecimal.ZERO
+            val bTotal = bankAccount?.total ?: BigDecimal.ZERO
+            val combined = cTotal + bTotal
             if (combined <= BigDecimal.ZERO) null else {
                 CardAndBankSpendSummary(
                     total = combined,
                     transactionCount = (creditCard?.transactionCount ?: 0) + (bankAccount?.transactionCount ?: 0),
-                    creditTotal = creditTotal,
+                    creditTotal = cTotal,
                     creditCount = creditCard?.transactionCount ?: 0,
-                    bankTotal = bankTotal,
+                    bankTotal = bTotal,
                     bankCount = bankAccount?.transactionCount ?: 0,
                     percentOfSpending = if (totalSpending > BigDecimal.ZERO) {
                         (combined.divide(totalSpending, 4, java.math.RoundingMode.HALF_UP) * BigDecimal(100)).toFloat()
-                    } else {
-                        0f
-                    },
+                    } else 0f,
                 )
             }
-        } else {
-            null
-        }
+        } else null
 
         if (cardAndBank == null && cash == null) return null
+
+        var prevSpending = BigDecimal.ZERO
+        for (tx in previousPeriodTxs) {
+            if (!tx.isExcludedFromTracking && tx.matchesAnalyticsSpendingFilter()) {
+                prevSpending += convertAmount(tx.amount, tx.currency, displayCurrency, isUnified)
+            }
+        }
+        val deltaPercent = if (prevSpending > BigDecimal.ZERO) {
+            val delta = totalSpending.subtract(prevSpending)
+            (delta.divide(prevSpending, 4, java.math.RoundingMode.HALF_UP) * BigDecimal(100)).toFloat()
+        } else null
 
         return PaymentModeBreakdown(
             cardAndBank = cardAndBank,
             cash = cash,
             currency = displayCurrency,
+            deltaPercent = deltaPercent,
+            totalTransactionCount = spendingTxs.size,
         )
     }
 }
@@ -968,23 +1000,25 @@ private data class FilterState(
 )
 
 data class AnalyticsUiState(
-    val totalSpending: BigDecimal = BigDecimal.ZERO,
+    val transactions: List<TransactionEntity> = emptyList(),
+    val totalExpense: BigDecimal = BigDecimal.ZERO,
+    val totalIncome: BigDecimal = BigDecimal.ZERO,
+    val netSavings: BigDecimal = BigDecimal.ZERO,
     val categoryBreakdown: List<CategoryData> = emptyList(),
     val topMerchants: List<MerchantData> = emptyList(),
-    val transactionCount: Int = 0,
-    val averageAmount: BigDecimal = BigDecimal.ZERO,
-    val topCategory: String? = null,
-    val topCategoryPercentage: Float = 0f,
-    val currency: String = "",
-    val isLoading: Boolean = true,
     val spendingTrend: List<BalancePoint> = emptyList(),
-    val availableCategories: List<String> = emptyList(),
+    val isLoading: Boolean = false,
+    val error: String? = null,
+    val dateRange: Pair<LocalDate, LocalDate>? = null,
     val periodStart: LocalDate? = null,
     val periodEnd: LocalDate? = null,
     val periodOutflow: PeriodOutflowSummary? = null,
     val investmentInsights: InvestmentInsights? = null,
     val paymentModeBreakdown: PaymentModeBreakdown? = null,
     val accountBreakdowns: Map<String, List<AccountSpendData>> = emptyMap(),
+    val currency: String = "INR",
+    val insights: List<SmartInsight> = emptyList(),
+    val categorizationCoverage: Float = 1f
 )
 
 /** Spending plus investments for the active period (independent of type filter). */
@@ -998,6 +1032,7 @@ data class PeriodOutflowSummary(
     val investmentTransactionCount: Int,
     val ccBillPaymentTransactionCount: Int = 0,
     val currency: String,
+    val deltaPercent: Float? = null,
 )
 
 data class InvestmentInsights(
@@ -1034,6 +1069,8 @@ data class PaymentModeBreakdown(
     val cardAndBank: CardAndBankSpendSummary?,
     val cash: PaymentModeStat?,
     val currency: String,
+    val deltaPercent: Float? = null,
+    val totalTransactionCount: Int = 0,
 )
 
 data class CategoryData(

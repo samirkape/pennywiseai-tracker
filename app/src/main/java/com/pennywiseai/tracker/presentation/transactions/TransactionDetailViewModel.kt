@@ -937,6 +937,17 @@ class TransactionDetailViewModel @Inject constructor(
     }
 
     /**
+     * Creates a new category and makes it immediately available in the split editor.
+     * The [categories] StateFlow observes the DB and refreshes automatically.
+     */
+    fun createAndSelectSplitCategory(name: String, color: String, isIncome: Boolean, icon: String) {
+        viewModelScope.launch {
+            categoryRepository.createCategory(name, color, isIncome, icon)
+            // categories StateFlow auto-refreshes via DB observation
+        }
+    }
+
+    /**
      * Validates that splits sum equals the transaction total (within tolerance).
      * @return true if splits are valid, false otherwise
      */

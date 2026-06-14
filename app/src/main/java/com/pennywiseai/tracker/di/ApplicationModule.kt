@@ -1,5 +1,6 @@
 package com.pennywiseai.tracker.di
 
+import com.google.gson.Gson
 import com.pennywiseai.tracker.data.currency.CurrencyConversionService
 import com.pennywiseai.tracker.data.currency.ExchangeRateProvider
 import com.pennywiseai.tracker.data.currency.ExchangeRateProviderFactory
@@ -17,6 +18,10 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object ApplicationModule {
+
+    @Provides
+    @Singleton
+    fun provideGson(): Gson = Gson()
 
     /**
      * Provides the ExchangeRateProvider implementation.

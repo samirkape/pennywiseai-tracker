@@ -132,6 +132,8 @@ class UserPreferencesRepository @Inject constructor(
         // One-shot flag: has the historical credit-card-bill-payment linker pass run?
         val HAS_RUN_CC_PAYMENT_BACKFILL = booleanPreferencesKey("has_run_cc_payment_backfill")
 
+        // Smart Insights
+        val INSIGHTS_DATA_WINDOW_MONTHS = intPreferencesKey("insights_data_window_months")
     }
 
     val hasRunCcPaymentBackfill: Flow<Boolean> = context.dataStore.data
@@ -139,6 +141,13 @@ class UserPreferencesRepository @Inject constructor(
 
     suspend fun setHasRunCcPaymentBackfill(value: Boolean) {
         context.dataStore.edit { it[PreferencesKeys.HAS_RUN_CC_PAYMENT_BACKFILL] = value }
+    }
+
+    val insightsDataWindowMonths: Flow<Int> = context.dataStore.data
+        .map { it[PreferencesKeys.INSIGHTS_DATA_WINDOW_MONTHS] ?: 3 } // Default 3 months
+
+    suspend fun updateInsightsDataWindowMonths(months: Int) {
+        context.dataStore.edit { it[PreferencesKeys.INSIGHTS_DATA_WINDOW_MONTHS] = months }
     }
 
     val userPreferences: Flow<UserPreferences> = context.dataStore.data
@@ -177,7 +186,8 @@ class UserPreferencesRepository @Inject constructor(
                     ?: if (preferences[PreferencesKeys.HAS_COMPLETED_ONBOARDING] == true) "avatar://0" else null,
                 profileBackgroundColor = preferences[PreferencesKeys.PROFILE_BACKGROUND_COLOR] ?: 0,
                 hasCompletedOnboarding = preferences[PreferencesKeys.HAS_COMPLETED_ONBOARDING] ?: false,
-                mainAccountKey = preferences[PreferencesKeys.MAIN_ACCOUNT_KEY]
+                mainAccountKey = preferences[PreferencesKeys.MAIN_ACCOUNT_KEY],
+                insightsDataWindowMonths = preferences[PreferencesKeys.INSIGHTS_DATA_WINDOW_MONTHS] ?: 3
             )
         }
 
@@ -790,5 +800,7 @@ data class UserPreferences(
     val profileBackgroundColor: Int = 0,
     val hasCompletedOnboarding: Boolean = false,
     val mainAccountKey: String? = null,
-    val selectedProfileId: Long? = null
+    val selectedProfileId: Long? = null,
+    val insightsDataWindowMonths: Int = 3
 )
+

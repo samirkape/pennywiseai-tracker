@@ -51,8 +51,15 @@ fun MainScreen(
     spotlightViewModel: SpotlightViewModel = hiltViewModel(),
     mainViewModel: MainViewModel = hiltViewModel(),
     initialCategory: String? = null,
+    initialMerchant: String? = null,
     initialPeriod: String? = null,
-    initialCurrency: String? = null
+    initialCurrency: String? = null,
+    initialTransactionType: String? = null,
+    initialStartDateEpochDay: Long? = null,
+    initialEndDateEpochDay: Long? = null,
+    initialPaymentMode: String? = null,
+    initialBankName: String? = null,
+    initialAccountLast4: String? = null,
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -87,15 +94,44 @@ fun MainScreen(
     }
 
     // Navigate to transactions with filter if provided
-    LaunchedEffect(initialCategory) {
-        if (initialCategory != null) {
+    LaunchedEffect(
+        initialCategory,
+        initialMerchant,
+        initialPeriod,
+        initialCurrency,
+        initialTransactionType,
+        initialStartDateEpochDay,
+        initialEndDateEpochDay,
+        initialPaymentMode,
+        initialBankName,
+        initialAccountLast4
+    ) {
+        if (initialCategory != null || initialMerchant != null || initialTransactionType != null || initialStartDateEpochDay != null) {
             val route = buildString {
                 append("transactions")
                 val params = mutableListOf<String>()
-                val encoded = java.net.URLEncoder.encode(initialCategory, "UTF-8")
-                params.add("category=$encoded")
+                initialCategory?.let {
+                    val encoded = java.net.URLEncoder.encode(it, "UTF-8")
+                    params.add("category=$encoded")
+                }
+                initialMerchant?.let {
+                    val encoded = java.net.URLEncoder.encode(it, "UTF-8")
+                    params.add("merchant=$encoded")
+                }
                 initialPeriod?.let { params.add("period=$it") }
                 initialCurrency?.let { params.add("currency=$it") }
+                initialTransactionType?.let { params.add("type=$it") }
+                initialStartDateEpochDay?.let { params.add("startDateEpoch=$it") }
+                initialEndDateEpochDay?.let { params.add("endDateEpoch=$it") }
+                initialPaymentMode?.let { params.add("paymentMode=$it") }
+                initialBankName?.let {
+                    val encoded = java.net.URLEncoder.encode(it, "UTF-8")
+                    params.add("bankName=$encoded")
+                }
+                initialAccountLast4?.let {
+                    val encoded = java.net.URLEncoder.encode(it, "UTF-8")
+                    params.add("accountLast4=$encoded")
+                }
                 if (params.isNotEmpty()) {
                     append("?")
                     append(params.joinToString("&"))
@@ -442,6 +478,11 @@ fun MainScreen(
                         navController.navigate("analytics_breakdown/$tileKey") {
                             launchSingleTop = true
                         }
+                    },
+                    onNavigateToInsights = {
+                        rootNavController?.navigate(
+                            com.pennywiseai.tracker.navigation.Insights
+                        ) { launchSingleTop = true }
                     },
                 )
             }

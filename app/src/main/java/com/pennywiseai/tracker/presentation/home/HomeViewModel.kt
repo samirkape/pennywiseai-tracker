@@ -22,6 +22,8 @@ import com.pennywiseai.tracker.presentation.common.filterAccountsByProfile
 import com.pennywiseai.tracker.presentation.common.filterTransactionsByProfile
 import com.pennywiseai.tracker.presentation.common.matchesAnalyticsSpendingFilter
 import com.pennywiseai.tracker.data.repository.AccountBalanceRepository
+import com.pennywiseai.tracker.data.repository.BudgetGroupRepository
+import com.pennywiseai.tracker.data.repository.BudgetOverallSummary
 import com.pennywiseai.tracker.data.repository.ProfileRepository
 import com.pennywiseai.tracker.data.repository.LlmRepository
 import com.pennywiseai.tracker.data.database.entity.LoanEntity
@@ -42,6 +44,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
@@ -78,6 +81,7 @@ class HomeViewModel @Inject constructor(
     private val inAppReviewManager: InAppReviewManager,
     private val smsScanManager: SmsScanManager,
     private val categoryRepository: CategoryRepository,
+    private val budgetGroupRepository: BudgetGroupRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     
@@ -684,11 +688,24 @@ class HomeViewModel @Inject constructor(
                     incomeTodayLabel = stripLabels.incomeTodayLabel,
                     topCategoryName = stripLabels.topCategoryName,
                     topCategorySubLabel = stripLabels.topCategorySubLabel,
+                    topCategories = stripLabels.topCategories,
                     dailyAverageLabel = stripLabels.dailyAverageLabel,
                     paceLabel = stripLabels.paceLabel,
                 )
                 calculateMonthlyChange()
             }
+        }
+
+        launch {
+            _uiState
+                .map { it.selectedCurrency }
+                .distinctUntilChanged()
+                .flatMapLatest { currency ->
+                    budgetGroupRepository.getGroupSpending(spendingStart, periodEnd, currency)
+                }
+                .collect { budgetSummary ->
+                    _uiState.value = _uiState.value.copy(currentBudgetSummary = budgetSummary)
+                }
         }
 
         launch {
@@ -1467,6 +1484,7 @@ class HomeViewModel @Inject constructor(
         val incomeTodayLabel: String,
         val topCategoryName: String,
         val topCategorySubLabel: String,
+        val topCategories: List<HomeTopCategory>,
         val dailyAverageLabel: String,
         val paceLabel: String,
     )
@@ -1506,6 +1524,25 @@ class HomeViewModel @Inject constructor(
             categoryTotals[category] = (categoryTotals[category] ?: BigDecimal.ZERO) + amount
         }
         val topEntry = categoryTotals.maxByOrNull { it.value }
+        val topCategories = categoryTotals.entries
+            .filter { it.value > BigDecimal.ZERO }
+            .sortedByDescending { it.value }
+            .take(4)
+            .map { entry ->
+                val share = if (totalExpenses > BigDecimal.ZERO) {
+                    entry.value
+                        .multiply(BigDecimal(100))
+                        .divide(totalExpenses, 0, RoundingMode.HALF_UP)
+                        .toInt()
+                } else {
+                    0
+                }
+                HomeTopCategory(
+                    name = entry.key,
+                    amount = entry.value,
+                    sharePercent = share,
+                )
+            }
         val (topCategoryName, topCategorySubLabel) = if (topEntry == null || topEntry.value <= BigDecimal.ZERO) {
             context.getString(R.string.home_top_category_unknown) to
                 context.getString(R.string.home_top_category_empty)
@@ -1539,6 +1576,7 @@ class HomeViewModel @Inject constructor(
             incomeTodayLabel = incomeTodayLabel,
             topCategoryName = topCategoryName,
             topCategorySubLabel = topCategorySubLabel,
+            topCategories = topCategories,
             dailyAverageLabel = dailyAverageLabel,
             paceLabel = paceLabel,
         )
@@ -1549,6 +1587,12 @@ class HomeViewModel @Inject constructor(
         inAppUpdateManager.cleanup()
     }
 }
+
+data class HomeTopCategory(
+    val name: String,
+    val amount: BigDecimal,
+    val sharePercent: Int,
+)
 
 data class HomeUiState(
     val userName: String = "User",
@@ -1596,8 +1640,10 @@ data class HomeUiState(
     val incomeTodayLabel: String = "",
     val topCategoryName: String = "",
     val topCategorySubLabel: String = "",
+    val topCategories: List<HomeTopCategory> = emptyList(),
     val dailyAverageLabel: String = "",
     val paceLabel: String = "",
+    val currentBudgetSummary: BudgetOverallSummary? = null,
 )
 
 data class LoanSummary(

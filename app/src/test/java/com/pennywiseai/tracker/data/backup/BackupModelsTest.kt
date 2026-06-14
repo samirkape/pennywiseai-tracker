@@ -223,6 +223,9 @@ class BackupModelsTest {
         val rule = deserialized.database.rules[0]
         assertEquals("Test Rule", rule.name)
 
+        val transaction = deserialized.database.transactions[0]
+        assertEquals("Test description", transaction.description)
+
         val rate = deserialized.database.exchangeRates[0]
         assertEquals("USD", rate.fromCurrency)
         assertEquals(BigDecimal("83.0"), rate.rate)
@@ -287,5 +290,25 @@ class BackupModelsTest {
         assertEquals(0, deserialized.database.rules.size)
         assertEquals(0, deserialized.database.exchangeRates.size)
         assertEquals(0, deserialized.database.budgets.size)
+    }
+
+    @Test
+    fun transactionDescriptionDeserializesFromLegacyNotesField() {
+        val json = """
+            {
+              "id": 1,
+              "amount": "99.99",
+              "merchant_name": "Test Merchant",
+              "category": "Food",
+              "transaction_type": "EXPENSE",
+              "date_time": "2024-01-01T10:00:00",
+              "notes": "Legacy backup note",
+              "transaction_hash": "hash123"
+            }
+        """.trimIndent()
+
+        val transaction = gson.fromJson(json, TransactionEntity::class.java)
+
+        assertEquals("Legacy backup note", transaction.description)
     }
 }

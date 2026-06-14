@@ -12,6 +12,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
@@ -21,19 +22,25 @@ import com.pennywiseai.tracker.ui.effects.overScrollVertical
 import com.pennywiseai.tracker.ui.effects.rememberOverscrollFlingBehavior
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
+import com.pennywiseai.tracker.domain.model.InsightType
+import com.pennywiseai.tracker.domain.model.SmartInsight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -57,8 +64,6 @@ import java.math.BigDecimal
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
-private enum class CategoryViewType { CHART, LIST }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnalyticsScreen(
@@ -81,12 +86,12 @@ fun AnalyticsScreen(
     onNavigateToHome: () -> Unit = {},
     onNavigateToBehavioralStats: () -> Unit = {},
     onNavigateToBreakdown: (tileKey: String) -> Unit = {},
+    onNavigateToInsights: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val selectedPeriod by viewModel.selectedPeriod.collectAsStateWithLifecycle()
     val transactionTypeFilter by viewModel.transactionTypeFilter.collectAsStateWithLifecycle()
     val selectedCurrency by viewModel.selectedCurrency.collectAsStateWithLifecycle()
-    val availableCurrencies by viewModel.availableCurrencies.collectAsStateWithLifecycle()
     val customDateRange by viewModel.customDateRange.collectAsStateWithLifecycle()
     val isUnifiedMode by viewModel.isUnifiedMode.collectAsStateWithLifecycle()
     val useFinancialMonth by viewModel.useFinancialMonth.collectAsStateWithLifecycle()
@@ -95,42 +100,15 @@ fun AnalyticsScreen(
     val categoryFilter by viewModel.categoryFilter.collectAsStateWithLifecycle()
     val compactAnalyticsCards by viewModel.compactAnalyticsCards.collectAsStateWithLifecycle()
     // Use rememberSaveable to preserve UI state across navigation
-    var showAdvancedFilters by rememberSaveable { mutableStateOf(false) }
     var showDateRangePicker by rememberSaveable { mutableStateOf(false) }
-    var categoryViewType by rememberSaveable { mutableStateOf(CategoryViewType.LIST) }
     var showChartTypeSelector by remember { mutableStateOf(false) }
-    var activeTileKey by remember { mutableStateOf("outflow") }
+    var selectedOverviewTab by rememberSaveable { mutableStateOf(AnalyticsOverviewTab.OUTFLOW) }
 
     // Remember scroll position across navigation
     val listState = rememberSaveable(saver = LazyListState.Saver) {
         LazyListState()
     }
 
-    // Calculate active filter count (transaction type + category filter)
-    val activeFilterCount = (if (transactionTypeFilter != TransactionTypeFilter.EXPENSE) 1 else 0) +
-        (if (categoryFilter != null) 1 else 0)
-
-    // Cache expensive operations — include CALENDAR_MONTH only when financial month is enabled
-    val timePeriods = remember(useFinancialMonth) {
-        if (useFinancialMonth) {
-            listOf(
-                TimePeriod.THIS_MONTH,
-                TimePeriod.CALENDAR_MONTH,
-                TimePeriod.LAST_MONTH,
-                TimePeriod.CURRENT_FY,
-                TimePeriod.ALL,
-                TimePeriod.CUSTOM
-            )
-        } else {
-            listOf(
-                TimePeriod.THIS_MONTH,
-                TimePeriod.LAST_MONTH,
-                TimePeriod.CURRENT_FY,
-                TimePeriod.ALL,
-                TimePeriod.CUSTOM
-            )
-        }
-    }
     val customRangeLabel = remember(customDateRange) {
         DateRangeUtils.formatDateRange(customDateRange)
     }
@@ -151,7 +129,9 @@ fun AnalyticsScreen(
             selectedPeriod != TimePeriod.ALL &&
             selectedPeriod != TimePeriod.CURRENT_FY
     }
-
+    val canNavigateToNextPeriod = remember(periodAnchorMonth) {
+        periodAnchorMonth?.isBefore(YearMonth.now()) == true
+    }
     val drillDownPeriodEpochs: Pair<Long?, Long?> = remember(activePeriodRange) {
         val range = activePeriodRange
         if (range == null) null to null else range.first.toEpochDay() to range.second.toEpochDay()
@@ -205,10 +185,10 @@ fun AnalyticsScreen(
                 hazeState = hazeState,
                 hasActionButton = true,
                 actionContent = {
-                    IconButton(onClick = onNavigateToBehavioralStats) {
+                    IconButton(onClick = onNavigateToInsights) {
                         Icon(
-                            imageVector = Icons.Default.Insights,
-                            contentDescription = "Behavioral Stats"
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "Smart Insights"
                         )
                     }
                 }
@@ -225,400 +205,135 @@ fun AnalyticsScreen(
         contentPadding = PaddingValues(
             start = Dimensions.Padding.content,
             end = Dimensions.Padding.content,
-            top = paddingValues.calculateTopPadding() + Spacing.md,
+            top = paddingValues.calculateTopPadding() + Spacing.sm,
             bottom = Dimensions.Component.bottomBarHeight + Spacing.md
         ),
-        verticalArrangement = Arrangement.spacedBy(Spacing.md),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
         flingBehavior = rememberOverscrollFlingBehavior { listState }
     ) {
-        // Period Selector - Always visible
         item {
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                items(timePeriods) { period ->
-                    FilterChip(
-                        // Only show CUSTOM as selected if both period is CUSTOM AND dates are set
-                        selected = if (period == TimePeriod.CUSTOM) {
-                            selectedPeriod == period && customDateRange != null
-                        } else {
-                            selectedPeriod == period
-                        },
-                        onClick = {
-                            if (period == TimePeriod.CUSTOM) {
-                                showDateRangePicker = true
-                                // Don't change selectedPeriod until user confirms dates
-                            } else {
-                                viewModel.selectPeriod(period)
-                            }
-                        },
-                        label = {
-                            Text(
-                                when {
-                                    period == TimePeriod.CUSTOM && customRangeLabel != null -> customRangeLabel
-                                    period == TimePeriod.THIS_MONTH && useFinancialMonth -> "Pay Month"
-                                    else -> period.label
-                                }
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    )
-                }
-            }
+            AnalyticsReferencePeriodChipRow(
+                selectedPeriod = selectedPeriod,
+                onPeriodSelected = { viewModel.selectPeriod(it) },
+                onCustomSelected = { showDateRangePicker = true },
+            )
         }
 
         periodAnchorMonth?.let { anchorMonth ->
             if (showPeriodNavigator && periodRangeLabel != null) {
                 item {
-                    PeriodRangeNavigator(
-                        rangeLabel = periodRangeLabel,
+                    AnalyticsReferenceDateNavigator(
+                        label = periodRangeLabel,
                         onPrevious = { viewModel.navigateToMonth(anchorMonth.minusMonths(1)) },
                         onNext = { viewModel.navigateToMonth(anchorMonth.plusMonths(1)) },
-                        canGoNext = anchorMonth < YearMonth.now(),
+                        canGoNext = canNavigateToNextPeriod,
                     )
                 }
             }
         }
 
-        // Currency Selector (if multiple currencies available and not in unified mode)
-        if (availableCurrencies.size > 1 && !isUnifiedMode) {
-            item {
-                CurrencyFilterRow(
-                    selectedCurrency = selectedCurrency,
-                    availableCurrencies = availableCurrencies,
-                    onCurrencySelected = { viewModel.selectCurrency(it) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-
-        // Collapsible Transaction Type + Category Filter
         item {
-            CollapsibleFilterRow(
-                isExpanded = showAdvancedFilters,
-                activeFilterCount = activeFilterCount,
-                onToggle = { showAdvancedFilters = !showAdvancedFilters },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    // Transaction Type chips
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                    ) {
-                        items(TransactionTypeFilter.values().toList()) { typeFilter ->
-                            FilterChip(
-                                selected = transactionTypeFilter == typeFilter,
-                                onClick = { viewModel.setTransactionTypeFilter(typeFilter) },
-                                label = { Text(typeFilter.label) },
-                                leadingIcon = if (transactionTypeFilter == typeFilter) {
-                                    {
-                                        when (typeFilter) {
-                                            TransactionTypeFilter.INCOME -> Icon(
-                                                Icons.AutoMirrored.Filled.TrendingUp,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(Dimensions.Icon.small)
-                                            )
-                                            TransactionTypeFilter.EXPENSE -> Icon(
-                                                Icons.AutoMirrored.Filled.TrendingDown,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(Dimensions.Icon.small)
-                                            )
-                                            TransactionTypeFilter.CREDIT -> Icon(
-                                                Icons.Default.CreditCard,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(Dimensions.Icon.small)
-                                            )
-                                            TransactionTypeFilter.TRANSFER -> Icon(
-                                                Icons.Default.SwapHoriz,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(Dimensions.Icon.small)
-                                            )
-                                            TransactionTypeFilter.CC_BILL_PAYMENT -> Icon(
-                                                Icons.Default.Payment,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(Dimensions.Icon.small)
-                                            )
-                                            TransactionTypeFilter.INVESTMENT -> Icon(
-                                                Icons.AutoMirrored.Filled.ShowChart,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(Dimensions.Icon.small)
-                                            )
-                                            TransactionTypeFilter.EXCLUDED -> Icon(
-                                                Icons.Default.VisibilityOff,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(Dimensions.Icon.small)
-                                            )
-                                            else -> null
-                                        }
-                                    }
-                                } else null,
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
-                                )
-                            )
-                        }
-                    }
-
-                    // Category filter chips (shown only when categories are available)
-                    if (uiState.availableCategories.isNotEmpty()) {
-                        LazyRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                        ) {
-                            item {
-                                FilterChip(
-                                    selected = categoryFilter == null,
-                                    onClick = { viewModel.clearCategoryFilter() },
-                                    label = { Text("All") },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                )
-                            }
-                            items(uiState.availableCategories) { category ->
-                                FilterChip(
-                                    selected = categoryFilter == category,
-                                    onClick = {
-                                        if (categoryFilter == category) viewModel.clearCategoryFilter()
-                                        else viewModel.setCategoryFilter(category)
-                                    },
-                                    label = { Text(category) },
-                                    leadingIcon = {
-                                        CategoryIcon(
-                                            category = category,
-                                            size = Dimensions.Icon.small
-                                        )
-                                    },
-                                    trailingIcon = if (categoryFilter == category) {
-                                        {
-                                            Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = "Clear category filter",
-                                                modifier = Modifier.size(Dimensions.Icon.small)
-                                            )
-                                        }
-                                    } else null,
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+            AnalyticsReferenceOverviewTabs(
+                selectedTab = selectedOverviewTab,
+                onTabSelected = { selectedOverviewTab = it },
+            )
         }
 
-        if (
-            uiState.periodOutflow != null ||
-            uiState.investmentInsights != null ||
-            uiState.paymentModeBreakdown != null
-        ) {
+        if (uiState.periodOutflow != null || uiState.investmentInsights != null || uiState.paymentModeBreakdown != null) {
             item {
-                AnalyticsSummaryTilesRow(
-                    currency = uiState.currency,
+                AnalyticsReferenceHeroCard(
+                    selectedTab = selectedOverviewTab,
                     periodOutflow = uiState.periodOutflow,
                     investmentInsights = uiState.investmentInsights,
                     paymentModeBreakdown = uiState.paymentModeBreakdown,
-                    onOutflowClick = { selectedTypes ->
-                        val typeName = if (selectedTypes.size == 1) {
-                            selectedTypes.first().name
-                        } else {
-                            TransactionTypeFilter.ALL.name
-                        }
-                        drillDownToTransactions(
-                            category = categoryFilter,
-                            transactionType = typeName,
-                        )
-                    },
-                    onInvestmentClick = {
-                        drillDownToTransactions(
-                            transactionType = TransactionTypeFilter.INVESTMENT.name,
-                        )
-                    },
-                    onSpendingBreakdownClick = {
-                        drillDownToTransactions(
-                            transactionType = TransactionTypeFilter.EXPENSE.name,
-                        )
-                    },
-                    onTileDetailClick = if (compactAnalyticsCards) {
-                        { tileKey -> onNavigateToBreakdown(tileKey) }
-                    } else {
-                        null
-                    },
-                    onTileChanged = { activeTileKey = it },
-                    showInlineBreakdown = !compactAnalyticsCards,
+                    currency = selectedCurrency,
                 )
             }
-
-            val spendByAccountList = uiState.accountBreakdowns[activeTileKey]
-            if (!compactAnalyticsCards && !spendByAccountList.isNullOrEmpty()) {
-                item {
-                    val accountTransactionType = when (activeTileKey) {
-                        "investments" -> TransactionTypeFilter.INVESTMENT.name
-                        "spending" -> TransactionTypeFilter.EXPENSE.name
-                        // outflow and card_and_bank tiles span multiple types — use ALL
-                        else -> TransactionTypeFilter.ALL.name
-                    }
-                    AccountSpendTile(
-                        accounts = spendByAccountList,
-                        currency = uiState.currency,
-                        onAccountClick = { bankName, accountLast4, _ ->
-                            drillDownToTransactions(
-                                transactionType = accountTransactionType,
-                                bankName = bankName,
-                                accountLast4 = accountLast4,
-                            )
-                        },
-                        modifier = Modifier.padding(top = Spacing.xs),
-                    )
-                }
-            }
         }
 
-        uiState.investmentInsights?.takeIf { it.topMerchants.isNotEmpty() }?.let { insights ->
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    SectionHeaderV2(title = "Top Investment Merchants")
-                    ExpandableList(
-                        items = insights.topMerchants,
-                        visibleItemCount = 3,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { merchant ->
-                        AnalyticsMerchantListItem(
-                            merchant = merchant,
-                            currency = insights.currency,
-                            onClick = {
-                                drillDownToTransactions(
-                                    merchant = merchant.name,
-                                    transactionType = TransactionTypeFilter.INVESTMENT.name,
-                                )
-                            },
-                        )
-                    }
-                }
-            }
-        }
-
-        // Chart Section with Type Selector
         if (uiState.spendingTrend.size >= 2) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     SectionHeaderV2(
-                        title = "Trends",
+                        title = "Balance trend",
                         action = {
-                            Button(
-                                onClick = { showChartTypeSelector = !showChartTypeSelector },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                ),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = Spacing.xs)
-                            ) {
-                                Icon(
-                                    imageVector = when (chartType) {
-                                        ChartType.LINE -> Icons.AutoMirrored.Filled.ShowChart
-                                        ChartType.BAR -> Icons.Default.BarChart
-                                        ChartType.HEATMAP -> Icons.Default.GridView
-                                    },
-                                    contentDescription = null,
-                                    modifier = Modifier.size(Dimensions.Icon.small)
-                                )
-                                Spacer(modifier = Modifier.width(Spacing.xs))
-                                Text(
-                                    text = when (chartType) {
-                                        ChartType.LINE -> "Line"
-                                        ChartType.BAR -> "Bar"
-                                        ChartType.HEATMAP -> "Heatmap"
-                                    },
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            }
-                        }
-                    )
-
-                    // Expandable chart type selector card
-                    AnimatedVisibility(visible = showChartTypeSelector) {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = Spacing.sm),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                            ),
-                            shape = MaterialTheme.shapes.medium
-                        ) {
-                            ChartType.entries.forEach { type ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .clickable {
-                                            viewModel.setChartType(type)
-                                            showChartTypeSelector = false
-                                        }
-                                        .padding(horizontal = Spacing.md, vertical = 12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                            Box {
+                                TextButton(
+                                    onClick = { showChartTypeSelector = !showChartTypeSelector },
+                                    colors = ButtonDefaults.textButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.primary,
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = Spacing.xs)
                                 ) {
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = when (type) {
-                                                ChartType.LINE -> Icons.AutoMirrored.Filled.ShowChart
-                                                ChartType.BAR -> Icons.Default.BarChart
-                                                ChartType.HEATMAP -> Icons.Default.GridView
+                                    Text(
+                                        text = when (chartType) {
+                                            ChartType.LINE -> "Line"
+                                            ChartType.BAR -> "Bar"
+                                            ChartType.HEATMAP -> "Heatmap"
+                                        },
+                                        style = MaterialTheme.typography.labelMedium,
+                                    )
+                                    Icon(
+                                        imageVector = if (showChartTypeSelector) {
+                                            Icons.Default.KeyboardArrowUp
+                                        } else {
+                                            Icons.Default.KeyboardArrowDown
+                                        },
+                                        contentDescription = null,
+                                        modifier = Modifier.size(Dimensions.Icon.small),
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showChartTypeSelector,
+                                    onDismissRequest = { showChartTypeSelector = false },
+                                ) {
+                                    ChartType.entries.forEach { type ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = when (type) {
+                                                        ChartType.LINE -> "Line Chart"
+                                                        ChartType.BAR -> "Bar Chart"
+                                                        ChartType.HEATMAP -> "Heatmap"
+                                                    },
+                                                )
                                             },
-                                            contentDescription = null,
-                                            tint = if (chartType == type)
-                                                MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Text(
-                                            text = when (type) {
-                                                ChartType.LINE -> "Line Chart"
-                                                ChartType.BAR -> "Bar Chart"
-                                                ChartType.HEATMAP -> "Heatmap"
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = when (type) {
+                                                        ChartType.LINE -> Icons.AutoMirrored.Filled.ShowChart
+                                                        ChartType.BAR -> Icons.Default.BarChart
+                                                        ChartType.HEATMAP -> Icons.Default.GridView
+                                                    },
+                                                    contentDescription = null,
+                                                )
                                             },
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = if (chartType == type)
-                                                MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-                                    if (chartType == type) {
-                                        Icon(
-                                            Icons.Default.Check,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(Dimensions.Icon.medium)
+                                            trailingIcon = if (chartType == type) {
+                                                {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = null,
+                                                    )
+                                                }
+                                            } else null,
+                                            onClick = {
+                                                viewModel.setChartType(type)
+                                                showChartTypeSelector = false
+                                            },
                                         )
                                     }
                                 }
                             }
                         }
-                    }
+                    )
 
-                    // Chart display with crossfade transition
                     Crossfade(
                         targetState = chartType,
                         label = "chart_transition"
                     ) { type ->
                         when (type) {
-                            ChartType.LINE -> BalanceChart(
-                                primaryCurrency = selectedCurrency,
+                            ChartType.LINE -> AnalyticsReferenceTrendCard(
                                 balanceHistory = uiState.spendingTrend,
-                                height = 220
                             )
                             ChartType.BAR -> SpendingBarChart(
                                 primaryCurrency = selectedCurrency,
@@ -634,87 +349,62 @@ fun AnalyticsScreen(
             }
         }
 
-        // Category Breakdown Section with Pie/List toggle
         if (uiState.categoryBreakdown.isNotEmpty()) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     SectionHeaderV2(
-                        title = "Top Categories",
+                        title = "Spending by category",
                         action = {
-                            IconButton(onClick = {
-                                categoryViewType = if (categoryViewType == CategoryViewType.CHART) {
-                                    CategoryViewType.LIST
-                                } else {
-                                    CategoryViewType.CHART
-                                }
-                            }) {
+                            TextButton(
+                                onClick = {
+                                    val categories = uiState.categoryBreakdown
+                                        .map { it.name }
+                                        .joinToString("|")
+                                    drillDownMultiCategory(categories)
+                                },
+                            ) {
+                                Text(text = "View all", style = MaterialTheme.typography.labelMedium)
                                 Icon(
-                                    imageVector = if (categoryViewType == CategoryViewType.CHART)
-                                        Icons.AutoMirrored.Filled.List
-                                    else Icons.Default.PieChart,
-                                    contentDescription = "Toggle View",
-                                    tint = MaterialTheme.colorScheme.primary
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(Dimensions.Icon.small),
                                 )
                             }
-                        }
-                    )
-
-                    // Animated content swap
-                    AnimatedContent(
-                        targetState = categoryViewType,
-                        transitionSpec = {
-                            if (targetState == CategoryViewType.CHART) {
-                                (slideInHorizontally { -it } + fadeIn()) togetherWith
-                                    (slideOutHorizontally { it } + fadeOut()) using
-                                    SizeTransform(clip = false)
-                            } else {
-                                (slideInHorizontally { it } + fadeIn()) togetherWith
-                                    (slideOutHorizontally { -it } + fadeOut()) using
-                                    SizeTransform(clip = false)
-                            }
                         },
-                        label = "category_view_transition"
-                    ) { viewType ->
-                        when (viewType) {
-                            CategoryViewType.CHART -> CategoryPieChart(
-                                categories = uiState.categoryBreakdown,
-                                currency = selectedCurrency,
-                                onCategoryClick = { category ->
-                                    drillDownToTransactions(category = category.name)
-                                }
-                            )
-                            CategoryViewType.LIST -> CategoryBreakdownCard(
-                                categories = uiState.categoryBreakdown,
-                                currency = selectedCurrency,
-                                onCategoryClick = { category ->
-                                    drillDownToTransactions(category = category.name)
-                                }
-                            )
-                        }
-                    }
+                    )
+                    AnalyticsCategoryCard(
+                        categories = uiState.categoryBreakdown,
+                        currency = selectedCurrency,
+                        onCategoryClick = { category -> drillDownToTransactions(category = category.name) },
+                    )
                 }
             }
         }
 
-        // Top Merchants Section
         if (uiState.topMerchants.isNotEmpty()) {
             item {
-                SectionHeaderV2(
-                    title = "Top Merchants"
-                )
-            }
-
-            // All Merchants with expandable list
-            item {
-                ExpandableList(
-                    items = uiState.topMerchants,
-                    visibleItemCount = 3,
-                    modifier = Modifier.fillMaxWidth()
-                ) { merchant ->
-                    AnalyticsMerchantListItem(
-                        merchant = merchant,
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    SectionHeaderV2(
+                        title = "Top merchants",
+                        action = {
+                            TextButton(
+                                onClick = { drillDownToTransactions() },
+                                contentPadding = PaddingValues(horizontal = Spacing.xs, vertical = 0.dp),
+                            ) {
+                                Text(text = "View all", style = MaterialTheme.typography.labelMedium)
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(Dimensions.Icon.small),
+                                )
+                            }
+                        },
+                    )
+                    AnalyticsReferenceMerchantCard(
+                        merchants = uiState.topMerchants,
                         currency = selectedCurrency,
-                        onClick = { drillDownToTransactions(merchant = merchant.name) },
+                        onMerchantClick = { merchant -> drillDownToTransactions(merchant = merchant.name) },
                     )
                 }
             }
@@ -740,6 +430,219 @@ fun AnalyticsScreen(
             initialStartDate = customDateRange?.first,
             initialEndDate = customDateRange?.second
         )
+    }
+}
+
+@Composable
+private fun AnalyticsCategoryCard(
+    categories: List<CategoryData>,
+    currency: String,
+    onCategoryClick: (CategoryData) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val sorted = remember(categories) { categories.sortedByDescending { it.amount } }
+    val visible = if (expanded) sorted else sorted.take(5)
+    val hiddenCount = (sorted.size - visible.size).coerceAtLeast(0)
+    val maxAmount = sorted.maxOfOrNull { it.amount } ?: BigDecimal.ZERO
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+            visible.forEachIndexed { index, category ->
+                val info = CategoryMapping.categories[category.name] ?: CategoryMapping.categories["Others"]!!
+                val fraction = if (maxAmount > BigDecimal.ZERO)
+                    (category.amount.toFloat() / maxAmount.toFloat()).coerceIn(0f, 1f)
+                else 0f
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onCategoryClick(category) }
+                        .padding(vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    // Name row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // Left: dot + name
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(info.color),
+                            )
+                            Text(
+                                text = category.name,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        // Right: % + amount
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "${category.percentage.toInt()}%",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            )
+                            Text(
+                                text = CurrencyFormatter.formatCurrency(category.amount, currency),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+
+                    // Progress bar
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(fraction)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(info.color),
+                        )
+                    }
+                }
+
+                if (index != visible.lastIndex) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 0.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f),
+                    )
+                }
+            }
+
+            if (hiddenCount > 0 || expanded) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { expanded = !expanded }
+                        .padding(vertical = 10.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = if (expanded) "Show less" else "$hiddenCount more categories",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AnalyticsTopMerchantsCard(
+    merchants: List<MerchantData>,
+    currency: String,
+    onMerchantClick: (MerchantData) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val sorted = remember(merchants) { merchants.sortedByDescending { it.amount } }
+    val visible = if (expanded) sorted else sorted.take(3)
+    val hiddenCount = (sorted.size - visible.size).coerceAtLeast(0)
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = Spacing.sm, vertical = Spacing.xs)) {
+            visible.forEachIndexed { index, merchant ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onMerchantClick(merchant) }
+                        .padding(horizontal = Spacing.sm, vertical = Spacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                ) {
+                    BrandIcon(
+                        merchantName = merchant.name,
+                        size = 38.dp,
+                        showBackground = true,
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = merchant.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = "${merchant.transactionCount} txn${if (merchant.transactionCount != 1) "s" else ""}" +
+                                if (merchant.isSubscription) " · Subscription" else "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Text(
+                        text = CurrencyFormatter.formatCurrency(merchant.amount, currency),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                if (index != visible.lastIndex) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f))
+                }
+            }
+
+            if (hiddenCount > 0 || expanded) {
+                TextButton(
+                    onClick = { expanded = !expanded },
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                ) {
+                    Text(
+                        text = if (expanded) "Show less" else "$hiddenCount more merchants",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(Dimensions.Icon.small),
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -835,3 +738,4 @@ private fun CurrencyFilterRow(
         }
     }
 }
+

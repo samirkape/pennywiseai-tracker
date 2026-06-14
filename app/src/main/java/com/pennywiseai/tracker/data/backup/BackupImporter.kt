@@ -244,7 +244,8 @@ class BackupImporter @Inject constructor(
                     .getAllTransactions().first()
                 val existingTransactionHashes = existingTransactions.map { it.transactionHash }.toSet()
                 val existingHashToIdMap = existingTransactions.associateBy({ it.transactionHash }, { it.id })
-                
+                val existingHashToTransactionMap = existingTransactions.associateBy { it.transactionHash }
+
                 val existingCategories = database.categoryDao()
                     .getAllCategories().first()
                     .map { it.name }
@@ -280,6 +281,20 @@ class BackupImporter @Inject constructor(
                         if (transaction.id != 0L && localId != null) {
                             oldToNewTransactionIdMap[transaction.id] = localId
                         }
+
+                        // Preserve user-entered notes when the local duplicate does not have one yet.
+                        existingHashToTransactionMap[transaction.transactionHash]?.let { existingTransaction ->
+                            val backupDescription = transaction.description?.trim()
+                            val existingDescription = existingTransaction.description?.trim()
+                            if (!backupDescription.isNullOrEmpty() && existingDescription.isNullOrEmpty()) {
+                                database.transactionDao().updateTransactionDescriptionIfEmpty(
+                                    id = existingTransaction.id,
+                                    description = backupDescription,
+                                    updatedAt = LocalDateTime.now(),
+                                )
+                            }
+                        }
+
                         skippedDuplicates++
                     }
                 }

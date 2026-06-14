@@ -1,5 +1,13 @@
 package com.pennywiseai.tracker.ui.screens.analytics
 
+// HTML reference: spending_invested_tiles.html  .hero-card "Invested" tab
+// .card-label "INVESTED"
+// .amount-row : amount + delta-badge
+// .txn-count "6 transactions · via Groww"
+// .divider
+// .stat-row  2-col: [Largest single / ₹20k / 1 txn]  [Average per txn / ₹8,833 / across 6 txns]
+// .invested-badge  [📈 View investment breakdown]
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,9 +18,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -24,24 +38,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.pennywiseai.tracker.ui.components.CategoryIcon
 import com.pennywiseai.tracker.ui.components.PennyWiseCard
 import com.pennywiseai.tracker.ui.icons.CategoryMapping
 import com.pennywiseai.tracker.ui.theme.Dimensions
 import com.pennywiseai.tracker.ui.theme.Spacing
 
-/**
- * Shared **tile grammar** for analytics ([docs/analytics-tiles.md](../../../../../docs/analytics-tiles.md)).
- *
- * Right-side pill on the metric tile footer.
- */
 sealed interface AnalyticsTilePill {
     data class Category(val name: String) : AnalyticsTilePill
-    data class Labeled(
-        val text: String,
-        val icon: ImageVector? = null,
-    ) : AnalyticsTilePill
+    data class Labeled(val text: String, val icon: ImageVector? = null) : AnalyticsTilePill
 }
 
 data class AnalyticsMetricTileContent(
@@ -54,6 +59,10 @@ data class AnalyticsMetricTileContent(
     val bottomLeftSuffix: String? = null,
     val bottomRightCaption: String? = null,
     val bottomRightPill: AnalyticsTilePill? = null,
+    // delta for amount-row badge
+    val deltaPercent: Float? = null,
+    // optional subtitle after txn count (e.g. "· via Groww")
+    val txnCountSuffix: String? = null,
 )
 
 @Composable
@@ -62,183 +71,179 @@ fun AnalyticsMetricTile(
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    PennyWiseCard(
-        modifier = modifier,
-        onClick = onClick,
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(Dimensions.Padding.content),
-        ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+
+            // .card-label
+            Text(
+                text = content.topLabel,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // .amount-row : large amount + delta-badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = Alignment.Bottom,
             ) {
+                val isLong = content.primaryValue.length > 14
                 Text(
-                    text = content.topLabel,
-                    style = MaterialTheme.typography.labelMedium,
+                    text = content.primaryValue,
+                    style = if (isLong) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.displaySmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    letterSpacing = 1.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f, fill = false),
                 )
-                Box(
-                    modifier = Modifier
-                        .background(
-                            color = MaterialTheme.colorScheme.tertiaryContainer,
-                            shape = RoundedCornerShape(Spacing.sm),
-                        )
-                        .padding(horizontal = Spacing.sm, vertical = Spacing.xs),
-                ) {
+                val delta = content.deltaPercent
+                if (delta != null) {
+                    val isUp = delta >= 0f
+                    // for investments: higher = more invested = positive (green)
+                    val bg = if (isUp) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
+                    val fg = if (isUp) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                    Spacer(modifier = Modifier.width(8.dp))
                     Row(
+                        modifier = Modifier.background(bg, RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
                     ) {
                         Icon(
-                            imageVector = content.countBadgeIcon,
+                            imageVector = if (isUp) Icons.AutoMirrored.Filled.TrendingUp else Icons.AutoMirrored.Filled.TrendingDown,
                             contentDescription = null,
-                            modifier = Modifier.size(Dimensions.Icon.small),
-                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.size(13.dp),
+                            tint = fg,
                         )
                         Text(
-                            text = "${content.transactionCount} TXNS",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            text = "${if (isUp) "+" else ""}${delta.toInt()}% vs last",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = fg,
                         )
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(2.dp))
-            val isLong = content.primaryValue.length > 14
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // .txn-count  "6 transactions · via Groww"
+            val txnLabel = buildString {
+                append("${content.transactionCount} transaction${if (content.transactionCount != 1) "s" else ""}")
+                content.txnCountSuffix?.let { append(" $it") }
+            }
             Text(
-                text = content.primaryValue,
-                style = if (isLong) {
-                    MaterialTheme.typography.headlineMedium
-                } else {
-                    MaterialTheme.typography.headlineLarge
-                },
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
+                text = txnLabel,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // .divider
+            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // .stat-row  2-col stat boxes
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // left stat box (.stat-box)
+                StatBox(
+                    label = content.bottomLeftLabel,
+                    value = content.bottomLeftValue,
+                    sub = content.bottomLeftSuffix,
+                    modifier = Modifier.weight(1f),
+                )
+                // right stat box — shown when bottomRightCaption + pill present
+                content.bottomRightCaption?.let { caption ->
+                    val pillText = when (val pill = content.bottomRightPill) {
+                        is AnalyticsTilePill.Labeled -> pill.text
+                        is AnalyticsTilePill.Category -> pill.name
+                        null -> null
+                    }
+                    StatBox(
+                        label = caption,
+                        value = pillText ?: "",
+                        sub = null,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+
+            // .invested-badge  "View investment breakdown"
+            if (onClick != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .background(
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                            shape = RoundedCornerShape(20.dp),
+                        )
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ShowChart,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = "View investment breakdown",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        }
+    }
+}
+
+// .stat-box
+@Composable
+private fun StatBox(
+    label: String,
+    value: String,
+    sub: String?,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .background(
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
+                shape = RoundedCornerShape(12.dp),
+            )
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-
-            Spacer(modifier = Modifier.height(Spacing.md))
-            HorizontalDivider(
-                thickness = 1.5.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-            )
-            Spacer(modifier = Modifier.height(Spacing.md))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column {
-                    Text(
-                        text = content.bottomLeftLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        letterSpacing = 1.sp,
-                    )
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            text = content.bottomLeftValue,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        content.bottomLeftSuffix?.let { suffix ->
-                            Text(
-                                text = suffix,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                modifier = Modifier.padding(bottom = 2.dp),
-                            )
-                        }
-                    }
-                }
-
-                content.bottomRightPill?.let { pill ->
-                    Column(horizontalAlignment = Alignment.End) {
-                        content.bottomRightCaption?.let { caption ->
-                            Text(
-                                text = caption,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(bottom = 4.dp),
-                            )
-                        }
-                        when (pill) {
-                            is AnalyticsTilePill.Category -> {
-                                val categoryInfo = CategoryMapping.categories[pill.name]
-                                    ?: CategoryMapping.categories["Others"]!!
-                                Row(
-                                    modifier = Modifier
-                                        .background(
-                                            color = categoryInfo.color.copy(alpha = 0.15f),
-                                            shape = RoundedCornerShape(8.dp),
-                                        )
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    CategoryIcon(
-                                        category = pill.name,
-                                        size = 16.dp,
-                                        tint = categoryInfo.color,
-                                    )
-                                    Text(
-                                        text = pill.name,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                            is AnalyticsTilePill.Labeled -> {
-                                Row(
-                                    modifier = Modifier
-                                        .background(
-                                            color = MaterialTheme.colorScheme.secondaryContainer,
-                                            shape = RoundedCornerShape(8.dp),
-                                        )
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    pill.icon?.let { icon ->
-                                        Icon(
-                                            imageVector = icon,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                        )
-                                    }
-                                    Text(
-                                        text = pill.text,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+            sub?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

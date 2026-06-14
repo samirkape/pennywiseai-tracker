@@ -447,6 +447,7 @@ private fun ForecastSummaryStrip(
 ) {
     val recentPaceSub = if (forecast.daysElapsed < 7) "per day" else "per day · 7d"
     val showRemaining = forecast.periodIsCurrent && forecast.daysRemaining > 0
+    val spentSubLabel = if (forecast.periodIsCurrent) "so far" else "period total"
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -460,7 +461,7 @@ private fun ForecastSummaryStrip(
             ForecastStripColumn(
                 label = "Spent",
                 value = CurrencyFormatter.formatCurrency(forecast.spentSoFar, currency),
-                subLabel = "so far",
+                subLabel = spentSubLabel,
                 modifier = Modifier.weight(1f),
             )
             VerticalDivider(

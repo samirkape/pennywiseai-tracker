@@ -12,7 +12,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -73,6 +72,7 @@ import com.pennywiseai.tracker.ui.components.cards.TransactionItem
 import com.pennywiseai.tracker.ui.components.cards.formatStatAmount
 import com.pennywiseai.tracker.ui.components.skeleton.TransactionItemSkeleton
 import com.pennywiseai.tracker.ui.components.spotlightTarget
+import com.pennywiseai.tracker.ui.icons.CategoryMapping
 import com.pennywiseai.tracker.presentation.common.buildProfileAccountKeys
 import com.pennywiseai.tracker.presentation.common.defaultTimePeriodNavParam
 import com.pennywiseai.tracker.ui.components.ProfileFilterDropdown
@@ -89,7 +89,9 @@ import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.LocalDate
+import java.time.LocalTime
 
 /**
  * Primary dashboard: hero balances and charts, date-scoped feed, and recent activity.
@@ -358,88 +360,53 @@ fun HomeScreen(
                         verticalArrangement = Arrangement.spacedBy(Spacing.xs),
                     ) {
                         Text(
-                            text = stringResource(R.string.brand_display_name),
+                            text = greetingFor(uiState.userName),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        Text(
+                            text = "Here's your money snapshot",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         if (!uiState.isBalanceReady) {
                             com.pennywiseai.tracker.ui.components.skeleton.BalanceCardSkeleton(
                                 modifier = Modifier.fillMaxWidth()
                             )
                         } else {
-                            val loan = uiState.loanSummary
-                            val loanSubtitle = loan?.let { ls ->
-                                when {
-                                    ls.totalLentRemaining > java.math.BigDecimal.ZERO &&
-                                        ls.totalBorrowedRemaining > java.math.BigDecimal.ZERO ->
-                                        "${ls.activeLoans.size} active"
-                                    ls.totalLentRemaining > java.math.BigDecimal.ZERO ->
-                                        CurrencyFormatter.formatCurrency(ls.totalLentRemaining, uiState.selectedCurrency)
-                                    else ->
-                                        CurrencyFormatter.formatCurrency(ls.totalBorrowedRemaining, uiState.selectedCurrency)
-                                }
-                            }
-                            HomeHeroPager(
+                            SimpleBalanceSummaryCard(
+                                totalBalance = uiState.totalBalance,
+                                income = uiState.currentMonthIncome,
+                                spent = uiState.currentMonthExpenses,
+                                saved = uiState.currentMonthIncome - uiState.currentMonthExpenses,
+                                currency = uiState.selectedCurrency,
                                 modifier = Modifier.fillMaxWidth(),
-                            blurEffects = blurEffects,
-                            hazeState = hazeStateHero,
-                            monthlyChange = uiState.monthlyChange,
-                            monthlyChangePercent = uiState.monthlyChangePercent,
-                            currency = uiState.selectedCurrency,
-                            currentMonthExpenses = uiState.currentMonthExpenses,
-                            currentMonthIncome = uiState.currentMonthIncome,
-                            currentMonthTotal = uiState.currentMonthTotal,
-                            currentMonthInvestment = uiState.currentMonthInvestment,
-                            spendingHistory = uiState.spendingHistory,
-                            lastMonthSpendingHistory = uiState.lastMonthSpendingHistory,
-                            periodDayLabel = uiState.periodDayLabel,
-                            availableCurrencies = uiState.availableCurrencies,
-                            isUnifiedMode = uiState.isUnifiedMode,
-                            spendingPeriodLabel = uiState.spendingPeriodLabel,
-                            useFinancialMonth = uiState.useFinancialMonth,
-                            onToggleSpendingMode = { viewModel.toggleSpendingMonthMode() },
-                            onCurrencySelect = { viewModel.selectCurrency(it) },
-                            onNavigateToTransactions = { onNavigateToTransactions(transactionsPeriod) },
-                            onNavigateToInvestmentTransactions = {
-                                onNavigateToInvestmentTransactions(transactionsPeriod)
-                            },
-                            onNavigateToBudgets = onNavigateToBudgets,
-                            onShowBreakdown = { viewModel.showBreakdownDialog() },
-                            onOpenPayPeriodSettings = onNavigateToPayPeriodSettings,
-                            onSpendSoFarClick = if (
-                                uiState.payPeriodStartEpochDay >= 0L &&
-                                uiState.payPeriodEndEpochDay >= 0L
-                            ) {
-                                { showSpendTimelineSheet = true }
-                            } else {
-                                null
-                            },
-                            moreStatsIncomeText = formatStatAmount(uiState.currentMonthIncome, uiState.selectedCurrency),
-                            moreStatsIncomeSubLabel = uiState.incomeTodayLabel,
-                            moreStatsTopCategoryName = uiState.topCategoryName,
-                            moreStatsTopCategorySubLabel = uiState.topCategorySubLabel,
-                            moreStatsPaceText = uiState.dailyAverageLabel,
-                            moreStatsPaceSubLabel = uiState.paceLabel,
-                            moreStatsLoanLabel = if (loan != null) "Lent/Borrowed" else null,
-                            moreStatsLoanText = loanSubtitle,
-                            onMoreStatsIncomeClick = { onNavigateToTransactions(transactionsPeriod) },
-                            onMoreStatsTopCategoryClick = { onNavigateToTransactions(transactionsPeriod) },
-                            onMoreStatsPaceClick = onNavigateToAnalytics,
-                            onMoreStatsLoanClick = if (loan != null) onNavigateToLoans else null,
-                            moreStatsSubscriptionsLabel = stringResource(R.string.home_more_stats_subscriptions),
-                            moreStatsSubscriptionsValue = if (uiState.activeSubscriptionCount > 0) {
-                                stringResource(
-                                    R.string.home_more_stats_subscriptions_active,
-                                    uiState.activeSubscriptionCount,
-                                )
-                            } else {
-                                stringResource(R.string.home_more_stats_subscriptions_hint)
-                            },
-                            onMoreStatsSubscriptionsClick = onNavigateToSubscriptions,
                             )
                         }
                     }
+                }
+            }
+
+            // 2. Dashboard summary cards (20ms)
+            item {
+                val visible = remember { mutableStateOf(hasAnimated) }
+                LaunchedEffect(Unit) {
+                    if (!hasAnimated) { delay(20); visible.value = true }
+                }
+                AnimatedVisibility(
+                    visible = visible.value,
+                    enter = fadeIn(tween(300)) + slideInVertically(
+                        initialOffsetY = { slideOffsetPx },
+                        animationSpec = tween(300)
+                    )
+                ) {
+                    HomeSnapshotDashboard(
+                        uiState = uiState,
+                        onNavigateToBudgets = onNavigateToBudgets,
+                        onNavigateToAnalytics = onNavigateToAnalytics,
+                        modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
+                    )
                 }
             }
 
@@ -447,7 +414,7 @@ fun HomeScreen(
             item {
                 val visible = remember { mutableStateOf(hasAnimated) }
                 LaunchedEffect(Unit) {
-                    if (!hasAnimated) { delay(20); visible.value = true }
+                    if (!hasAnimated) { delay(40); visible.value = true }
                 }
                 AnimatedVisibility(
                     visible = visible.value,
@@ -793,6 +760,384 @@ fun HomeScreen(
     }
     }
 }
+
+private fun greetingFor(userName: String): String {
+    val greeting = when (LocalTime.now().hour) {
+        in 5..11 -> "Good Morning"
+        in 12..16 -> "Good Afternoon"
+        else -> "Good Evening"
+    }
+    return "$greeting, $userName"
+}
+
+@Composable
+private fun SimpleBalanceSummaryCard(
+    totalBalance: BigDecimal,
+    income: BigDecimal,
+    spent: BigDecimal,
+    saved: BigDecimal,
+    currency: String,
+    modifier: Modifier = Modifier,
+) {
+    val containerColor = MaterialTheme.colorScheme.primary
+    val contentColor = MaterialTheme.colorScheme.onPrimary
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = containerColor,
+        contentColor = contentColor,
+        tonalElevation = 2.dp,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Dimensions.Padding.card),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                Text(
+                    text = "Total Balance",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = contentColor.copy(alpha = 0.8f),
+                )
+                Text(
+                    text = CurrencyFormatter.formatCurrency(totalBalance, currency),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                BalanceSummaryMetric(
+                    label = "Income",
+                    value = income,
+                    currency = currency,
+                    modifier = Modifier.weight(1f),
+                )
+                BalanceSummaryMetric(
+                    label = "Spent",
+                    value = spent,
+                    currency = currency,
+                    modifier = Modifier.weight(1f),
+                )
+                BalanceSummaryMetric(
+                    label = "Saved",
+                    value = saved,
+                    currency = currency,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BalanceSummaryMetric(
+    label: String,
+    value: BigDecimal,
+    currency: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f),
+        )
+        Text(
+            text = CurrencyFormatter.formatAbbreviated(value.abs().toDouble(), currency),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onPrimary,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun HomeSnapshotDashboard(
+    uiState: HomeUiState,
+    onNavigateToBudgets: () -> Unit,
+    onNavigateToAnalytics: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+    ) {
+        MonthlyBudgetSnapshotCard(
+            uiState = uiState,
+            onClick = onNavigateToBudgets,
+        )
+        TopCategoriesSnapshotCard(
+            categories = uiState.topCategories,
+            currency = uiState.selectedCurrency,
+            onClick = onNavigateToAnalytics,
+        )
+        InsightsSnapshotCard(uiState = uiState)
+    }
+}
+
+@Composable
+private fun MonthlyBudgetSnapshotCard(
+    uiState: HomeUiState,
+    onClick: () -> Unit,
+) {
+    val budgetSummary = uiState.currentBudgetSummary
+    val totalBudget = budgetSummary?.totalLimitBudget ?: BigDecimal.ZERO
+    val totalSpent = budgetSummary?.totalLimitSpent ?: uiState.currentMonthExpenses
+    val projectedSpend = remember(totalSpent, budgetSummary) {
+        val daysElapsed = budgetSummary?.groups?.firstOrNull()?.daysElapsed ?: 0
+        if (budgetSummary != null && daysElapsed > 0) {
+            val daysInPeriod = daysElapsed + budgetSummary.daysRemaining
+            totalSpent
+                .multiply(BigDecimal(daysInPeriod))
+                .divide(BigDecimal(daysElapsed), 0, RoundingMode.HALF_UP)
+        } else {
+            totalSpent
+        }
+    }
+    val progress = if (totalBudget > BigDecimal.ZERO) {
+        totalSpent.divide(totalBudget, 4, RoundingMode.HALF_UP).toFloat().coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    val statusText = if (totalBudget > BigDecimal.ZERO) {
+        "${CurrencyFormatter.formatCurrency(totalSpent, uiState.selectedCurrency)} / " +
+            "${CurrencyFormatter.formatCurrency(totalBudget, uiState.selectedCurrency)} used"
+    } else {
+        "Set a monthly budget"
+    }
+    val projectionText = if (totalBudget > BigDecimal.ZERO) {
+        "Projected spend: ${CurrencyFormatter.formatCurrency(projectedSpend, uiState.selectedCurrency)}"
+    } else {
+        "Create budgets to track monthly limits"
+    }
+
+    PennyWiseCardV2(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        contentPadding = Dimensions.Padding.card,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Monthly Budget",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (totalBudget > BigDecimal.ZERO) {
+                    Text(
+                        text = "${(progress * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+                color = if (progress > 0.9f) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    if (isSystemInDarkTheme()) income_dark else income_light
+                },
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            )
+            Text(
+                text = "$statusText · $projectionText",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TopCategoriesSnapshotCard(
+    categories: List<HomeTopCategory>,
+    currency: String,
+    onClick: () -> Unit,
+) {
+    PennyWiseCardV2(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        contentPadding = Dimensions.Padding.card,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md),
+        ) {
+            Text(
+                text = "Top Categories",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            val visibleCategories = categories.take(3)
+            if (visibleCategories.isEmpty()) {
+                Text(
+                    text = "No category spend yet",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    visibleCategories.forEach { category ->
+                        TopCategoryRow(
+                            category = category,
+                            currency = currency,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopCategoryRow(
+    category: HomeTopCategory,
+    currency: String,
+) {
+    val categoryInfo = CategoryMapping.categories[category.name]
+    val accentColor = categoryInfo?.color ?: MaterialTheme.colorScheme.primary
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(accentColor.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = categoryInfo?.icon ?: Icons.Default.BarChart,
+                contentDescription = null,
+                tint = accentColor,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = category.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+            )
+            Text(
+                text = "${category.sharePercent}% of spending",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
+        Text(
+            text = CurrencyFormatter.formatAbbreviated(category.amount.toDouble(), currency),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
+private fun InsightsSnapshotCard(uiState: HomeUiState) {
+    val insights = remember(
+        uiState.paceLabel,
+        uiState.dailyAverageLabel,
+        uiState.topCategorySubLabel,
+        uiState.activeSubscriptionCount,
+        uiState.currentMonthIncome,
+        uiState.currentMonthExpenses,
+        uiState.selectedCurrency,
+    ) {
+        buildList {
+            if (uiState.paceLabel.isNotBlank()) {
+                add("${uiState.paceLabel.toSentenceStart()}. Average spend is ${uiState.dailyAverageLabel}.")
+            }
+            if (uiState.topCategorySubLabel.isNotBlank()) {
+                add(uiState.topCategorySubLabel)
+            }
+            if (uiState.activeSubscriptionCount > 0) {
+                add("${uiState.activeSubscriptionCount} active subscriptions are being tracked.")
+            }
+            val savings = uiState.currentMonthIncome - uiState.currentMonthExpenses
+            if (savings > BigDecimal.ZERO) {
+                add("On track to save ${CurrencyFormatter.formatCurrency(savings, uiState.selectedCurrency)} this period.")
+            }
+        }.take(2)
+    }
+
+    PennyWiseCardV2(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = Dimensions.Padding.card,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+        ) {
+            Text(
+                text = "Insights",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (insights.isEmpty()) {
+                Text(
+                    text = "Insights will appear as your spending history grows.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                insights.forEach { insight ->
+                    Text(
+                        text = insight,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                            .padding(horizontal = Spacing.sm, vertical = Spacing.sm),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun String.toSentenceStart(): String =
+    replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1485,4 +1830,3 @@ private fun CalendarBottomSheet(
         }
     }
 }
-

@@ -13,7 +13,18 @@ object OnBoarding
 object Permission
 
 @Serializable
-object Home
+data class Home(
+    val category: String? = null,
+    val merchant: String? = null,
+    val period: String? = null,
+    val currency: String? = null,
+    val transactionType: String? = null,
+    val startDateEpochDay: Long? = null,
+    val endDateEpochDay: Long? = null,
+    val paymentMode: String? = null,
+    val bankName: String? = null,
+    val accountLast4: String? = null,
+)
 
 @Serializable
 object Transactions
@@ -26,6 +37,15 @@ object Categories
 
 @Serializable
 object Analytics
+
+@Serializable
+object Insights
+
+@Serializable
+object QuickCategorize
+
+@Serializable
+object BehavioralStats
 
 @Serializable
 data class TransactionDetail(val transactionId: Long)
@@ -102,3 +122,12 @@ data class TransactionsWithFilter(
 
 @Serializable
 data class TransactionsByMerchant(val merchant: String)
+
+@Serializable
+data class TransactionsByCategories(
+    val categories: String,
+    val period: String? = null,
+    val currency: String? = null,
+    val startDateEpochDay: Long? = null,
+    val endDateEpochDay: Long? = null,
+)

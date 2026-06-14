@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.pennywiseai.tracker.presentation.categories.CategoryEditDialog
 import com.pennywiseai.tracker.ui.theme.Dimensions
 import com.pennywiseai.tracker.ui.theme.Spacing
 import com.pennywiseai.tracker.utils.CurrencyFormatter
@@ -42,6 +43,7 @@ fun SplitEditor(
     availableCategories: List<String>,
     onSplitsChanged: (List<SplitItem>) -> Unit,
     onRemoveSplits: () -> Unit,
+    onCreateCategory: ((name: String, color: String, isIncome: Boolean, icon: String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val splitsTotal = splits.sumOf { it.amount }
@@ -85,10 +87,9 @@ fun SplitEditor(
                 val isLastSplit = index == splits.size - 1
                 SplitRow(
                     split = split,
-                    availableCategories = availableCategories.filter { cat ->
-                        cat == split.category || splits.none { it.category == cat }
-                    },
-                    availableTags = availableCategories.filter { it != split.category },
+                    splitIndex = index,
+                    allSplits = splits,
+                    availableCategories = availableCategories,
                     onCategoryChanged = { newCategory ->
                         val newSplits = splits.toMutableList()
                         newSplits[index] = split.copy(category = newCategory)
@@ -97,14 +98,26 @@ fun SplitEditor(
                     onAmountChanged = { newAmount ->
                         val newSplits = splits.toMutableList()
                         newSplits[index] = split.copy(amount = newAmount)
-                        // Auto-adjust the last split when editing any non-last split
-                        if (!isLastSplit && newSplits.size >= 2) {
-                            val sumExceptLast = newSplits.dropLast(1)
-                                .fold(BigDecimal.ZERO) { acc, s -> acc + s.amount }
-                            val autoAmount = (totalAmount - sumExceptLast)
-                                .coerceAtLeast(BigDecimal.ZERO)
-                            newSplits[newSplits.size - 1] =
-                                newSplits.last().copy(amount = autoAmount)
+                        when {
+                            // Editing non-last split → auto-adjust last split
+                            !isLastSplit && newSplits.size >= 2 -> {
+                                val sumExceptLast = newSplits.dropLast(1)
+                                    .fold(BigDecimal.ZERO) { acc, s -> acc + s.amount }
+                                val autoAmount = (totalAmount - sumExceptLast)
+                                    .coerceAtLeast(BigDecimal.ZERO)
+                                newSplits[newSplits.size - 1] =
+                                    newSplits.last().copy(amount = autoAmount)
+                            }
+                            // Editing the last split → auto-adjust second-to-last
+                            isLastSplit && newSplits.size >= 2 -> {
+                                val sumExceptSecondLast = newSplits
+                                    .filterIndexed { i, _ -> i != newSplits.size - 2 }
+                                    .fold(BigDecimal.ZERO) { acc, s -> acc + s.amount }
+                                val autoAmount = (totalAmount - sumExceptSecondLast)
+                                    .coerceAtLeast(BigDecimal.ZERO)
+                                newSplits[newSplits.size - 2] =
+                                    newSplits[newSplits.size - 2].copy(amount = autoAmount)
+                            }
                         }
                         onSplitsChanged(newSplits)
                     },
@@ -127,15 +140,19 @@ fun SplitEditor(
                         }
                     },
                     canRemove = splits.size > 2,
-                    currency = currency
+                    currency = currency,
+                    onCreateCategory = onCreateCategory
                 )
             }
 
             // Add split button
             OutlinedButton(
                 onClick = {
+                    // All categories are now eligible; pick one not yet in use if possible
                     val usedCategories = splits.map { it.category }.toSet()
-                    val nextCategory = availableCategories.firstOrNull { it !in usedCategories } ?: "Others"
+                    val nextCategory = availableCategories.firstOrNull { it !in usedCategories }
+                        ?: availableCategories.firstOrNull()
+                        ?: "Others"
                     val withNew = splits + SplitItem(
                         id = 0,
                         category = nextCategory,
@@ -146,7 +163,6 @@ fun SplitEditor(
                     onSplitsChanged(withNew.dropLast(1) + withNew.last().copy(amount = lastAmt))
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = availableCategories.size > splits.size
             ) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(Dimensions.Icon.small))
                 Spacer(modifier = Modifier.width(Spacing.xs))
@@ -212,28 +228,55 @@ fun SplitEditor(
     }
 }
 
+/**
+ * Returns true when another split (excluding the one at [ownIndex]) shares the same
+ * category and has overlapping tags (or both have no tags).
+ */
+private fun hasSameCategoryConflict(
+    splits: List<SplitItem>,
+    ownIndex: Int,
+    category: String,
+    tags: List<String>
+): Boolean {
+    return splits.filterIndexed { i, _ -> i != ownIndex }
+        .any { other ->
+            other.category == category &&
+                    (tags.isEmpty() || other.tags.isEmpty() || tags.any { it in other.tags })
+        }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun SplitRow(
     split: SplitItem,
+    splitIndex: Int,
+    allSplits: List<SplitItem>,
     availableCategories: List<String>,
-    availableTags: List<String>,
     onCategoryChanged: (String) -> Unit,
     onAmountChanged: (BigDecimal) -> Unit,
     onTagsChanged: (List<String>) -> Unit,
     onRemove: () -> Unit,
     canRemove: Boolean,
     currency: String,
+    onCreateCategory: ((name: String, color: String, isIncome: Boolean, icon: String) -> Unit)?,
     modifier: Modifier = Modifier
 ) {
     var categoryExpanded by remember { mutableStateOf(false) }
     var tagExpanded by remember { mutableStateOf(false) }
+    var showCreateCategoryDialog by remember { mutableStateOf(false) }
     var amountText by remember(split.amount) {
         mutableStateOf(
             if (split.amount == BigDecimal.ZERO) ""
             else split.amount.stripTrailingZeros().toPlainString()
         )
     }
+
+    // Detect same-category conflict with another split (same category + no distinguishing tag)
+    val hasCategoryConflict = hasSameCategoryConflict(allSplits, splitIndex, split.category, split.tags)
+
+    // Tags from other splits with the same category are excluded so the user is prompted
+    // to pick a unique tag for disambiguation
+    val tagsNotYetAdded = availableCategories.filter { it !in split.tags }
 
     Column(
         modifier = modifier
@@ -274,12 +317,41 @@ private fun SplitRow(
                     expanded = categoryExpanded,
                     onDismissRequest = { categoryExpanded = false }
                 ) {
+                    // All categories are selectable — same category allowed if differentiated by tags
                     availableCategories.forEach { category ->
                         DropdownMenuItem(
                             text = { Text(category, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                             onClick = {
                                 onCategoryChanged(category)
                                 categoryExpanded = false
+                            }
+                        )
+                    }
+
+                    // Inline create-category option (only shown when callback provided)
+                    if (onCreateCategory != null) {
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        "Create new category",
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            },
+                            onClick = {
+                                categoryExpanded = false
+                                showCreateCategoryDialog = true
                             }
                         )
                     }
@@ -326,8 +398,32 @@ private fun SplitRow(
             }
         }
 
+        // Same-category conflict warning — prompt user to add a distinguishing tag
+        if (hasCategoryConflict) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f))
+                    .padding(horizontal = Spacing.sm, vertical = 4.dp)
+            ) {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = "Same category as another split — add a tag to differentiate",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+
         // Tags: existing tag chips + "+" chip to add more
-        val tagsNotYetAdded = availableTags.filter { it !in split.tags }
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
@@ -370,6 +466,19 @@ private fun SplitRow(
                 }
             }
         }
+    }
+
+    // Inline CategoryEditDialog shown when "Create new category" is tapped
+    if (showCreateCategoryDialog && onCreateCategory != null) {
+        CategoryEditDialog(
+            category = null,
+            onDismiss = { showCreateCategoryDialog = false },
+            onSave = { name, color, isIncome, icon ->
+                onCreateCategory(name, color, isIncome, icon)
+                onCategoryChanged(name)
+                showCreateCategoryDialog = false
+            }
+        )
     }
 }
 

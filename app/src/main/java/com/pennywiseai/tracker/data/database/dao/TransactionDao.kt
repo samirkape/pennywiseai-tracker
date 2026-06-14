@@ -86,6 +86,21 @@ interface TransactionDao {
     fun getAllCategories(): Flow<List<String>>
 
     @Query("""
+        SELECT COUNT(*) FROM transactions
+        WHERE is_deleted = 0
+        AND is_excluded_from_tracking = 0
+    """)
+    fun getTrackedTransactionCount(): Flow<Int>
+
+    @Query("""
+        SELECT COUNT(*) FROM transactions
+        WHERE is_deleted = 0
+        AND is_excluded_from_tracking = 0
+        AND (category IS NULL OR TRIM(category) = '' OR category = 'Others')
+    """)
+    fun getUncategorizedTransactionCount(): Flow<Int>
+
+    @Query("""
         SELECT DISTINCT category FROM transactions
         WHERE is_deleted = 0
         AND date_time BETWEEN :startDate AND :endDate
@@ -171,7 +186,21 @@ interface TransactionDao {
     
     @Update
     suspend fun updateTransaction(transaction: TransactionEntity)
-    
+
+    @Query(
+        """
+        UPDATE transactions SET description = :description, updated_at = :updatedAt
+        WHERE id = :id
+        AND is_deleted = 0
+        AND (description IS NULL OR TRIM(description) = '')
+        """
+    )
+    suspend fun updateTransactionDescriptionIfEmpty(
+        id: Long,
+        description: String,
+        updatedAt: LocalDateTime,
+    ): Int
+
     @Delete
     suspend fun deleteTransaction(transaction: TransactionEntity)
     
