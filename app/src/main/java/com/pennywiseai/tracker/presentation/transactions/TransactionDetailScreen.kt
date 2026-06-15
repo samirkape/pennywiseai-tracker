@@ -816,6 +816,7 @@ fun TransactionDetailScreen(
             prompt = prompt,
             onConfirm = { extras -> viewModel.confirmFutureParsing(extras) },
             onDismiss = { viewModel.dismissFutureParsing() },
+            onNever = { viewModel.neverFutureParsing() },
         )
     }
 

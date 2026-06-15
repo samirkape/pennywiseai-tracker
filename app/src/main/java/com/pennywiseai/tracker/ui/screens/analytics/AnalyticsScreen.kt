@@ -247,6 +247,28 @@ fun AnalyticsScreen(
                     investmentInsights = uiState.investmentInsights,
                     paymentModeBreakdown = uiState.paymentModeBreakdown,
                     currency = selectedCurrency,
+                    onTotalClick = {
+                        when (selectedOverviewTab) {
+                            AnalyticsOverviewTab.OUTFLOW -> drillDownToTransactions(transactionType = null)
+                            AnalyticsOverviewTab.SPENDING -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name)
+                            AnalyticsOverviewTab.INVESTED -> drillDownToTransactions(transactionType = TransactionTypeFilter.INVESTMENT.name)
+                        }
+                    },
+                    onMetricClick = { metricIndex ->
+                        when (selectedOverviewTab) {
+                            AnalyticsOverviewTab.OUTFLOW -> when (metricIndex) {
+                                0 -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name)
+                                1 -> drillDownToTransactions(transactionType = TransactionTypeFilter.INVESTMENT.name)
+                                2 -> drillDownToTransactions(transactionType = TransactionTypeFilter.CC_BILL_PAYMENT.name)
+                            }
+                            AnalyticsOverviewTab.SPENDING -> when (metricIndex) {
+                                0 -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name, paymentMode = "CREDIT_CARD")
+                                1 -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name, paymentMode = "BANK_ACCOUNT")
+                                2 -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name, paymentMode = "CASH")
+                            }
+                            AnalyticsOverviewTab.INVESTED -> drillDownToTransactions(transactionType = TransactionTypeFilter.INVESTMENT.name)
+                        }
+                    },
                 )
             }
         }
@@ -255,7 +277,7 @@ fun AnalyticsScreen(
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     SectionHeaderV2(
-                        title = "Balance trend",
+                        title = "Spend trend",
                         action = {
                             Box {
                                 TextButton(
@@ -332,8 +354,11 @@ fun AnalyticsScreen(
                         label = "chart_transition"
                     ) { type ->
                         when (type) {
-                            ChartType.LINE -> AnalyticsReferenceTrendCard(
+                            ChartType.LINE -> BalanceChart(
+                                primaryCurrency = selectedCurrency,
                                 balanceHistory = uiState.spendingTrend,
+                                height = 220,
+                                smooth = false
                             )
                             ChartType.BAR -> SpendingBarChart(
                                 primaryCurrency = selectedCurrency,

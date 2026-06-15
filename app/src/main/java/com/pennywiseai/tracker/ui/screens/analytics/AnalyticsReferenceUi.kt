@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.ShowChart
@@ -41,7 +42,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -243,6 +246,8 @@ fun AnalyticsReferenceHeroCard(
     investmentInsights: InvestmentInsights?,
     paymentModeBreakdown: PaymentModeBreakdown?,
     currency: String,
+    onMetricClick: ((metricIndex: Int) -> Unit)? = null,
+    onTotalClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val hero = remember(selectedTab, periodOutflow, investmentInsights, paymentModeBreakdown, currency) {
@@ -269,8 +274,8 @@ fun AnalyticsReferenceHeroCard(
                 AnalyticsHeroState(
                     label = "TOTAL SPENDING",
                     amount = CurrencyFormatter.formatCurrency(s.spending, currency),
-                    delta = s.deltaPercent?.let { formatDelta(it) },
-                    deltaIncreasing = (s.deltaPercent ?: 0f) >= 0f,
+                    delta = s.spendingDeltaPercent?.let { formatDelta(it) },
+                    deltaIncreasing = (s.spendingDeltaPercent ?: 0f) >= 0f,
                     transactionCount = "${s.spendingTransactionCount} transactions",
                     metrics = listOf(
                         AnalyticsHeroMetric("Card", CurrencyFormatter.formatCurrency(cb?.creditTotal ?: BigDecimal.ZERO, currency), "${cb?.creditCount ?: 0} txns", Icons.Default.CreditCard),
@@ -322,7 +327,9 @@ fun AnalyticsReferenceHeroCard(
 
             // Amount + delta badge on same row
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (onTotalClick != null) Modifier.clickable(onClick = onTotalClick) else Modifier),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -383,6 +390,7 @@ fun AnalyticsReferenceHeroCard(
                     HeroMetricColumn(
                         metric = metric,
                         modifier = Modifier.weight(1f),
+                        onClick = onMetricClick?.let { handler -> { handler(index) } },
                     )
                     if (index != hero.metrics.lastIndex) {
                         Box(
@@ -434,7 +442,7 @@ fun AnalyticsReferenceTrendCard(
                         .background(color, CircleShape),
                 )
                 Text(
-                    text = "Balance Trend",
+                    text = "Spend Trend",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -552,8 +560,9 @@ fun AnalyticsReferenceMerchantCard(
     onMerchantClick: (MerchantData) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var expanded by remember { mutableStateOf(false) }
     val sorted = remember(merchants) { merchants.sortedByDescending { it.amount } }
-    val visible = sorted.take(3)
+    val visible = if (expanded) sorted else sorted.take(3)
     val hiddenCount = (sorted.size - visible.size).coerceAtLeast(0)
 
     Card(
@@ -613,23 +622,24 @@ fun AnalyticsReferenceMerchantCard(
                 }
             }
 
-            if (hiddenCount > 0) {
+            if (hiddenCount > 0 || expanded) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clickable { expanded = !expanded }
                         .padding(vertical = 10.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "$hiddenCount more merchants",
+                        text = if (expanded) "Show less" else "$hiddenCount more merchants",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.width(2.dp))
                     Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
+                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -648,9 +658,10 @@ fun AnalyticsReferenceMerchantCard(
 private fun HeroMetricColumn(
     metric: AnalyticsHeroMetric,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
 ) {
     Column(
-        modifier = modifier,
+        modifier = modifier.then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {

@@ -109,7 +109,9 @@ fun TransactionItem(
                 else -> {}
             }
             if (showSplitPortion) add("Split")
-            if (transaction.isRecurring) add("Recurring")
+            if (transaction.isRecurring) {
+                if (transaction.transactionType == TransactionType.INVESTMENT) add("SIP") else add("Recurring")
+            }
             if (isEffectivelyBusiness) add("Business")
             if (transaction.isExcludedFromTracking) add("Excluded")
         }.joinToString(" \u00B7 ")

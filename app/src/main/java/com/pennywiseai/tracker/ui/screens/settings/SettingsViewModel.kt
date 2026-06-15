@@ -26,6 +26,7 @@ import com.pennywiseai.tracker.data.backup.ExportResult
 import com.pennywiseai.tracker.data.backup.ImportResult
 import com.pennywiseai.tracker.data.backup.ImportStrategy
 import com.pennywiseai.tracker.R
+import com.pennywiseai.tracker.data.manager.SmsScanManager
 import com.pennywiseai.tracker.data.repository.SalaryMonthOverrideRepository
 import com.pennywiseai.tracker.data.repository.TransactionRepository
 import com.pennywiseai.tracker.utils.CurrencyUtils
@@ -51,7 +52,8 @@ class SettingsViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val backupExporter: BackupExporter,
     private val backupImporter: BackupImporter,
-    private val salaryMonthOverrideRepository: SalaryMonthOverrideRepository
+    private val salaryMonthOverrideRepository: SalaryMonthOverrideRepository,
+    private val smsScanManager: SmsScanManager
 ) : ViewModel() {
     
     private val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
@@ -72,7 +74,10 @@ class SettingsViewModel @Inject constructor(
     // Import/Export state
     private val _importExportMessage = MutableStateFlow<String?>(null)
     val importExportMessage: StateFlow<String?> = _importExportMessage.asStateFlow()
-    
+
+    private val _postRestoreScanInfo = MutableStateFlow<PostRestoreScanInfo?>(null)
+    val postRestoreScanInfo: StateFlow<PostRestoreScanInfo?> = _postRestoreScanInfo.asStateFlow()
+
     private val _exportedBackupFile = MutableStateFlow<File?>(null)
     val exportedBackupFile: StateFlow<File?> = _exportedBackupFile.asStateFlow()
     
@@ -663,7 +668,7 @@ class SettingsViewModel @Inject constructor(
                 val result = backupImporter.importBackup(uri, strategy)
                 when (result) {
                     is ImportResult.Success -> {
-                        _importExportMessage.value = when (strategy) {
+                        val message = when (strategy) {
                             ImportStrategy.REPLACE_ALL -> context.getString(
                                 R.string.backup_restore_success_overwrite,
                                 result.importedTransactions,
@@ -676,6 +681,13 @@ class SettingsViewModel @Inject constructor(
                                 result.skippedDuplicates,
                             )
                         }
+                        val ts = result.latestTransactionTimestamp
+                        if (ts != null) {
+                            _importExportMessage.value = null
+                            _postRestoreScanInfo.value = PostRestoreScanInfo(message, ts)
+                        } else {
+                            _importExportMessage.value = message
+                        }
                     }
                     is ImportResult.Error -> {
                         _importExportMessage.value = "Import failed: ${result.message}"
@@ -687,6 +699,16 @@ class SettingsViewModel @Inject constructor(
                 Log.e("SettingsViewModel", "Import error", e)
             }
         }
+    }
+
+    fun dismissPostRestoreScanPrompt() {
+        _postRestoreScanInfo.value = null
+    }
+
+    fun triggerPostRestoreScan() {
+        val info = _postRestoreScanInfo.value ?: return
+        smsScanManager.scheduleScanFromTimestamp(info.fromTimestamp)
+        _postRestoreScanInfo.value = null
     }
     
     fun clearImportExportMessage() {
@@ -708,3 +730,8 @@ enum class DownloadState {
     FAILED,
     ERROR_INSUFFICIENT_SPACE
 }
+
+data class PostRestoreScanInfo(
+    val message: String,
+    val fromTimestamp: Long
+)

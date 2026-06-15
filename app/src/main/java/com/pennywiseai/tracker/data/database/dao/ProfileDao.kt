@@ -31,4 +31,7 @@ interface ProfileDao {
 
     @Query("DELETE FROM profiles WHERE id = :id AND id NOT IN (1, 2)")
     suspend fun deleteById(id: Long): Int
+
+    @Query("DELETE FROM profiles")
+    suspend fun deleteAllProfiles()
 }

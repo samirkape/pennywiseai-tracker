@@ -2,6 +2,7 @@ package com.pennywiseai.tracker.ui.screens.analytics
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,6 +34,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pennywiseai.tracker.presentation.common.TransactionTypeFilter
+import com.pennywiseai.tracker.ui.theme.expense_dark
+import com.pennywiseai.tracker.ui.theme.expense_light
+import com.pennywiseai.tracker.ui.theme.income_dark
+import com.pennywiseai.tracker.ui.theme.income_light
 import com.pennywiseai.tracker.utils.CurrencyFormatter
 import java.math.BigDecimal
 
@@ -108,8 +113,14 @@ fun PeriodOutflowMetricTile(
                 )
                 if (delta != null) {
                     val isUp = delta >= 0f
-                    val bg = if (!isUp) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
-                    val fg = if (!isUp) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                    val isDark = isSystemInDarkTheme()
+                    // outflow up = bad (red), outflow down = good (green)
+                    val fg = if (!isUp) {
+                        if (isDark) income_dark else income_light
+                    } else {
+                        if (isDark) expense_dark else expense_light
+                    }
+                    val bg = fg.copy(alpha = 0.15f)
                     Spacer(modifier = Modifier.width(8.dp))
                     Row(
                         modifier = Modifier.background(bg, RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 4.dp),

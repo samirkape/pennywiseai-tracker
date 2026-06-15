@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PennyWise — Homescreen Mockup v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.47.0/iconfont/tabler-icons.min.css">
+<style>
+:root{
+  /* ===== Material 3 Light Color Scheme — copied verbatim from design.md ===== */
+  --primary: #6750A4;
+  --on-primary: #FFFFFF;
+  --primary-container: #EADDFF;
+  --on-primary-container: #21005D;
+
+  --secondary: #625B71;
+  --on-secondary: #FFFFFF;
+  --secondary-container: #E8DEF8;
+  --on-secondary-container: #1D192B;
+
+  --tertiary: #7D5260;
+  --on-tertiary: #FFFFFF;
+  --tertiary-container: #FFD8E4;
+  --on-tertiary-container: #31111D;
+
+  --surface: #FFFBFE;
+  --on-surface: #1C1B1F;
+  --surface-variant: #E7E0EC;
+  --on-surface-variant: #49454F;
+
+  --background: #FFFBFE;
+  --on-background: #1C1B1F;
+
+  --error: #BA1A1A;
+  --on-error: #FFFFFF;
+  --error-container: #FFDAD6;
+  --on-error-container: #410002;
+
+  --outline: #79747E;
+  --outline-variant: #CAC4D0;
+
+  /* ===== Custom color extensions — from design.md ===== */
+  --success: #2E7D32;     /* income */
+  --warning: #F57C00;
+  --success-container: #E8F5E9;
+  --warning-container: #FFF3E0;
+  --expense: var(--error); /* expense = error per design.md */
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:'Roboto','Segoe UI',sans-serif;
+  background:#F1EEF5;
+  color:var(--on-surface);
+  padding:40px 24px;
+}
+.page{max-width:1040px;margin:0 auto}
+.page-head{margin-bottom:28px}
+.page-head h1{font-size:22px;font-weight:500;margin-bottom:6px}
+.page-head p{font-size:13px;color:var(--on-surface-variant);line-height:1.6;max-width:640px}
+
+.layout{display:flex;gap:48px;align-items:flex-start;flex-wrap:wrap}
+
+/* ---------- Phone frame ---------- */
+.phone-col{flex-shrink:0}
+.phone-label{font-size:12px;font-weight:500;color:var(--on-surface-variant);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.04em}
+.device{
+  width:320px;
+  background:var(--on-surface);
+  border-radius:36px;
+  padding:10px;
+}
+.screen{
+  background:var(--background);
+  border-radius:28px;
+  overflow:hidden;
+  height:680px;
+  overflow-y:auto;
+  scrollbar-width:none;
+}
+.screen::-webkit-scrollbar{display:none}
+.status-bar{
+  height:28px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 24px;font-size:12px;color:var(--on-surface);font-weight:500;
+}
+.status-icons{display:flex;gap:6px;align-items:center;color:var(--on-surface-variant);font-size:14px}
+
+/* ---------- Top app bar ---------- */
+.app-bar{display:flex;justify-content:space-between;align-items:center;padding:8px 16px 12px}
+.app-bar-title{font-size:18px;font-weight:500;color:var(--on-surface)}
+.search-btn{
+  width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  background:var(--surface-variant);color:var(--on-surface-variant);font-size:18px;cursor:pointer;border:none;
+}
+
+/* ---------- Hero card (Tier 1) ---------- */
+.hero{margin:0 16px 12px;border-radius:20px;background:var(--primary-container);padding:18px}
+.hero-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.hero-label{font-size:12px;color:var(--on-primary-container);opacity:0.7}
+.hero-delta{font-size:12px;font-weight:500;padding:3px 10px;border-radius:8px;background:var(--success-container);color:var(--success)}
+.hero-delta.over{background:var(--error-container);color:var(--on-error-container)}
+.hero-amount{font-size:38px;font-weight:500;color:var(--on-primary-container);line-height:1;margin-bottom:14px;letter-spacing:-0.5px}
+.progress-track{height:6px;background:rgba(33,0,93,0.12);border-radius:3px;margin-bottom:6px;position:relative}
+.progress-fill{position:absolute;left:0;top:0;height:100%;background:var(--primary);border-radius:3px;transition:width 0.4s}
+.hero-footer{display:flex;justify-content:space-between;margin-bottom:8px}
+.hero-foot-l{font-size:13px;font-weight:500;color:var(--on-primary-container)}
+.hero-foot-r{font-size:13px;color:var(--on-primary-container);opacity:0.65}
+.pace-row{display:flex;align-items:center;gap:6px}
+.pace-dot{width:8px;height:8px;border-radius:50%;background:var(--success)}
+.pace-dot.warn{background:var(--warning)}
+.pace-text{font-size:12px;color:var(--on-primary-container);opacity:0.75}
+
+/* ---------- Savings goal card ---------- */
+.goal{margin:0 16px 12px;border-radius:16px;background:var(--surface-variant);padding:14px 16px;display:flex;align-items:center;gap:12px}
+.goal-icon{font-size:20px;color:var(--success);flex-shrink:0}
+.goal-body{flex:1;min-width:0}
+.goal-title{font-size:13px;font-weight:500;color:var(--on-surface);margin-bottom:6px}
+.goal-track{height:4px;background:rgba(0,0,0,0.08);border-radius:2px;position:relative}
+.goal-fill{position:absolute;left:0;top:0;height:100%;background:var(--success);border-radius:2px}
+.goal-pct{font-size:14px;font-weight:500;color:var(--success);flex-shrink:0}
+
+/* ---------- Transaction card (Tier 2) ---------- */
+.txn-card{background:var(--surface);margin:0 16px 12px;border-radius:16px;padding:14px 16px;border:1px solid var(--outline-variant)}
+.txn-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.txn-group-label{font-size:12px;font-weight:500;color:var(--on-surface-variant);text-transform:uppercase;letter-spacing:0.04em}
+.txn-view-all{font-size:13px;color:var(--primary);font-weight:500}
+.txn-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--outline-variant)}
+.txn-row:last-child{border-bottom:none;padding-bottom:0}
+.txn-left{display:flex;align-items:center;gap:10px}
+.txn-icon{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.txn-name{font-size:14px;color:var(--on-surface)}
+.txn-cat{font-size:11px;color:var(--on-surface-variant)}
+.txn-amount{font-size:14px;color:var(--expense);font-weight:500}
+
+/* ---------- Upcoming subscription card ---------- */
+.sub-card{background:var(--surface);margin:0 16px 12px;border-radius:16px;border:1px solid var(--outline-variant);padding:12px 16px;display:flex;align-items:center;gap:12px}
+.sub-icon{width:36px;height:36px;border-radius:10px;background:var(--secondary-container);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:17px;color:var(--on-secondary-container)}
+.sub-body{flex:1;min-width:0}
+.sub-title{font-size:13px;font-weight:500;color:var(--on-surface)}
+.sub-sub{font-size:11px;color:var(--on-surface-variant);margin-top:2px}
+.sub-amount{font-size:14px;font-weight:500;color:var(--on-surface);flex-shrink:0}
+
+/* ---------- Weekly spend summary ---------- */
+.chart-card{background:var(--surface);margin:0 16px 12px;border-radius:16px;padding:14px 16px;border:1px solid var(--outline-variant)}
+.chart-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+.chart-week-total{font-size:18px;font-weight:500;color:var(--on-surface)}
+.chart-week-unit{font-size:12px;font-weight:400;color:var(--on-surface-variant)}
+.chart-week-delta{font-size:12px;font-weight:500;margin-top:3px}
+.chart-week-delta.up{color:var(--error)}
+.chart-week-delta.down{color:var(--success)}
+.chart-expand{font-size:12px;color:var(--primary);font-weight:500}
+.bars-row{display:flex;align-items:flex-end;gap:6px;height:56px;margin-bottom:6px}
+.bar{flex:1;border-radius:4px 4px 0 0;background:var(--primary-container)}
+.bar.today{background:var(--primary)}
+.bar-days{display:flex;gap:6px}
+.bar-day{flex:1;font-size:11px;color:var(--on-surface-variant);text-align:center}
+.bar-day.today{color:var(--primary);font-weight:500}
+
+/* ---------- Over-budget alert (conditional) ---------- */
+.alert-card{margin:0 16px 12px;border-radius:16px;background:var(--error-container);padding:14px 16px}
+.alert-row{display:flex;align-items:flex-start;gap:10px}
+.alert-icon{font-size:18px;color:var(--on-error-container);margin-top:1px}
+.alert-body{flex:1}
+.alert-title{font-size:13px;font-weight:500;color:var(--on-error-container);margin-bottom:6px}
+.alert-bar-track{height:4px;background:rgba(65,0,2,0.12);border-radius:2px;margin-bottom:6px;overflow:hidden}
+.alert-bar-fill{height:100%;background:var(--error);border-radius:2px;width:100%}
+.alert-sub{font-size:11px;color:var(--on-error-container);opacity:0.85}
+
+/* ---------- Nudge card (Tier 3) ---------- */
+.nudge-card{margin:0 16px 12px;border-radius:16px;background:var(--tertiary-container);padding:14px 16px}
+.nudge-row{display:flex;gap:10px;align-items:flex-start}
+.nudge-icon{font-size:18px;color:var(--on-tertiary-container)}
+.nudge-title{font-size:11px;font-weight:500;color:var(--on-tertiary-container);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;opacity:0.8}
+.nudge-body{font-size:13px;color:var(--on-tertiary-container);line-height:1.5}
+
+/* ---------- FAB + bottom nav ---------- */
+.fab-row{display:flex;justify-content:flex-end;padding:0 16px 12px}
+.fab{width:48px;height:48px;border-radius:14px;background:var(--primary-container);display:flex;align-items:center;justify-content:center;color:var(--on-primary-container);font-size:22px;border:none;cursor:pointer}
+.bottom-nav{background:var(--surface);padding:10px 8px 18px;display:flex;justify-content:space-around;align-items:center;border-top:1px solid var(--outline-variant);position:sticky;bottom:0}
+.nav-item{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;width:64px}
+.nav-pill{height:28px;width:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--on-surface-variant)}
+.nav-pill.active{background:var(--secondary-container);color:var(--on-secondary-container)}
+.nav-label{font-size:11px;color:var(--on-surface-variant)}
+.nav-label.active{color:var(--on-surface);font-weight:500}
+
+/* ---------- Annotation panel ---------- */
+.annotations{flex:1;min-width:340px}
+.toggle-head{font-size:12px;font-weight:500;color:var(--on-surface-variant);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.04em}
+.toggle-row{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap}
+.toggle-btn{font-size:13px;padding:8px 14px;border-radius:10px;border:1px solid var(--outline-variant);background:var(--surface);color:var(--on-surface-variant);cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .15s}
+.toggle-btn.on{background:var(--primary-container);color:var(--on-primary-container);border-color:transparent}
+.toggle-btn i{font-size:16px}
+
+.ann-item{display:flex;gap:14px;padding-bottom:18px;margin-bottom:18px;border-bottom:1px solid var(--outline-variant)}
+.ann-item:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+.ann-badge{font-size:11px;font-weight:500;padding:4px 10px;border-radius:8px;white-space:nowrap;flex-shrink:0;margin-top:2px;height:fit-content}
+.ann-badge.t1{background:var(--primary-container);color:var(--on-primary-container)}
+.ann-badge.t2{background:var(--surface-variant);color:var(--on-surface-variant)}
+.ann-badge.t3{background:var(--tertiary-container);color:var(--on-tertiary-container)}
+.ann-badge.removed{background:var(--error-container);color:var(--on-error-container)}
+.ann-badge.new{background:var(--success-container);color:var(--success)}
+.ann-badge.new-blue{background:var(--secondary-container);color:var(--on-secondary-container)}
+.ann-badge.updated{background:var(--warning-container);color:var(--warning)}
+.ann-head{font-size:14px;font-weight:500;color:var(--on-surface);margin-bottom:5px}
+.ann-desc{font-size:13px;color:var(--on-surface-variant);line-height:1.6}
+.ann-props{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
+.prop-pill{font-size:11px;background:var(--surface-variant);border-radius:6px;padding:3px 9px;color:var(--on-surface-variant);font-family:'Roboto Mono',monospace}
+
+/* ---------- Color reference table ---------- */
+.token-table{margin-top:32px}
+.token-table h2{font-size:16px;font-weight:500;margin-bottom:12px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+table th,table td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--outline-variant)}
+table th{color:var(--on-surface-variant);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.04em}
+.swatch{width:18px;height:18px;border-radius:4px;display:inline-block;vertical-align:middle;margin-right:8px;border:1px solid var(--outline-variant)}
+code{font-family:'Roboto Mono',monospace;font-size:12px;background:var(--surface-variant);padding:2px 6px;border-radius:4px}
+
+@media (max-width:760px){
+  .layout{flex-direction:column}
+  .device{width:100%;max-width:360px;margin:0 auto}
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="page-head">
+    <h1>PennyWise — Homescreen (v2)</h1>
+    <p>Annotated mockup using the exact Material 3 light color scheme from design.md. Every fill below maps to a <code>ColorScheme</code> role — toggle the conditional cards on the right to preview different states.</p>
+  </div>
+
+  <div class="layout">
+    <div class="phone-col">
+      <div class="phone-label">Preview</div>
+      <div class="device">
+        <div class="screen">
+          <div class="status-bar">
+            <span>9:41</span>
+            <div class="status-icons"><i class="ti ti-signal-4g"></i><i class="ti ti-wifi"></i><i class="ti ti-battery-4"></i></div>
+          </div>
+
+          <div class="app-bar">
+            <span class="app-bar-title">PennyWise</span>
+            <button class="search-btn" aria-label="Search transactions"><i class="ti ti-search"></i></button>
+          </div>
+
+          <div class="hero">
+            <div class="hero-top">
+              <span class="hero-label">This month · June</span>
+              <span class="hero-delta" id="deltaChip">−8% vs last</span>
+            </div>
+            <div class="hero-amount" id="heroAmount">₹24,580</div>
+            <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:82%"></div></div>
+            <div class="hero-footer">
+              <span class="hero-foot-l" id="budgetLeft">₹5,420 left</span>
+              <span class="hero-foot-r">of ₹30,000</span>
+            </div>
+            <div class="pace-row">
+              <div class="pace-dot" id="paceDot"></div>
+              <span class="pace-text" id="paceText">Day 18 of 30 · on track</span>
+            </div>
+          </div>
+
+          <div class="goal" id="goalZone">
+            <i class="ti ti-target goal-icon"></i>
+            <div class="goal-body">
+              <div class="goal-title">Savings goal · ₹6,200 of ₹10,000</div>
+              <div class="goal-track"><div class="goal-fill" style="width:62%"></div></div>
+            </div>
+            <span class="goal-pct">62%</span>
+          </div>
+
+          <div class="txn-card">
+            <div class="txn-header">
+              <span class="txn-group-label">Today</span>
+              <span class="txn-view-all">View all</span>
+            </div>
+            <div class="txn-row">
+              <div class="txn-left">
+                <div class="txn-icon" style="background:var(--error-container);color:var(--on-error-container)"><i class="ti ti-truck-delivery"></i></div>
+                <div><div class="txn-name">Swiggy</div><div class="txn-cat">Food &amp; Dining</div></div>
+              </div>
+              <div class="txn-amount">−₹420</div>
+            </div>
+            <div class="txn-row">
+              <div class="txn-left">
+                <div class="txn-icon" style="background:var(--warning-container);color:var(--warning)"><i class="ti ti-car"></i></div>
+                <div><div class="txn-name">Ola Cabs</div><div class="txn-cat">Transport</div></div>
+              </div>
+              <div class="txn-amount">−₹180</div>
+            </div>
+            <div class="txn-row">
+              <div class="txn-left">
+                <div class="txn-icon" style="background:var(--success-container);color:var(--success)"><i class="ti ti-building-store"></i></div>
+                <div><div class="txn-name">DMart</div><div class="txn-cat">Groceries</div></div>
+              </div>
+              <div class="txn-amount">−₹1,240</div>
+            </div>
+          </div>
+
+          <div class="sub-card" id="subZone">
+            <div class="sub-icon"><i class="ti ti-calendar-event"></i></div>
+            <div class="sub-body">
+              <div class="sub-title">Netflix renews in 3 days</div>
+              <div class="sub-sub">Auto-detected · usually charged on the 21st</div>
+            </div>
+            <span class="sub-amount">₹649</span>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-header">
+              <div>
+                <div class="chart-week-total">₹4,260 <span class="chart-week-unit">this week</span></div>
+                <div class="chart-week-delta up">+12% vs last week</div>
+              </div>
+              <span class="chart-expand">Tap to expand</span>
+            </div>
+            <div class="bars-row">
+              <div class="bar" style="height:40%"></div>
+              <div class="bar" style="height:65%"></div>
+              <div class="bar" style="height:30%"></div>
+              <div class="bar" style="height:80%"></div>
+              <div class="bar" style="height:55%"></div>
+              <div class="bar" style="height:90%"></div>
+              <div class="bar today" style="height:50%"></div>
+            </div>
+            <div class="bar-days">
+              <div class="bar-day">M</div>
+              <div class="bar-day">T</div>
+              <div class="bar-day">W</div>
+              <div class="bar-day">T</div>
+              <div class="bar-day">F</div>
+              <div class="bar-day">S</div>
+              <div class="bar-day today">S</div>
+            </div>
+          </div>
+
+          <div class="alert-card" id="alertZone">
+            <div class="alert-row">
+              <i class="ti ti-alert-triangle alert-icon"></i>
+              <div class="alert-body">
+                <div class="alert-title">Food &amp; Dining · over budget</div>
+                <div class="alert-bar-track"><div class="alert-bar-fill"></div></div>
+                <div class="alert-sub">₹8,200 spent of ₹6,000 budget</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="nudge-card" id="nudgeZone">
+            <div class="nudge-row">
+              <i class="ti ti-bulb nudge-icon"></i>
+              <div>
+                <div class="nudge-title">Spending insight</div>
+                <div class="nudge-body">Dining is 2× your weekly average this week. You have 12 days left in the month.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="fab-row"><button class="fab" aria-label="Add transaction"><i class="ti ti-plus"></i></button></div>
+
+          <div class="bottom-nav">
+            <div class="nav-item">
+              <div class="nav-pill active"><i class="ti ti-home"></i></div>
+              <span class="nav-label active">Home</span>
+            </div>
+            <div class="nav-item">
+              <div class="nav-pill"><i class="ti ti-receipt"></i></div>
+              <span class="nav-label">Transactions</span>
+            </div>
+            <div class="nav-item">
+              <div class="nav-pill"><i class="ti ti-chart-bar"></i></div>
+              <span class="nav-label">Analytics</span>
+            </div>
+            <div class="nav-item">
+              <div class="nav-pill"><i class="ti ti-settings"></i></div>
+              <span class="nav-label">Settings</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="annotations">
+      <div class="toggle-head">Toggle conditional cards</div>
+      <div class="toggle-row">
+        <button class="toggle-btn on" onclick="toggleZone(this,'goalZone')"><i class="ti ti-target"></i>Savings goal</button>
+        <button class="toggle-btn on" onclick="toggleZone(this,'subZone')"><i class="ti ti-calendar-event"></i>Subscription due</button>
+        <button class="toggle-btn on" onclick="toggleZone(this,'alertZone')"><i class="ti ti-alert-triangle"></i>Over-budget alert</button>
+        <button class="toggle-btn on" onclick="toggleZone(this,'nudgeZone')"><i class="ti ti-bulb"></i>Nudge card</button>
+        <button class="toggle-btn on" onclick="toggleOverspent(this)"><i class="ti ti-trending-up"></i>Over budget (hero)</button>
+      </div>
+
+      <div class="ann-item">
+        <div class="ann-badge t2">App bar</div>
+        <div>
+          <div class="ann-head">PennyWiseTopBar</div>
+          <div class="ann-desc">TopAppBar with a title and a single trailing search IconButton. Tapping it opens a full-screen search scoped to transactions — merchant, amount, category. One action only, matching the FAB's "one primary action" rule.</div>
+          <div class="ann-props">
+            <span class="prop-pill">TopAppBar</span>
+            <span class="prop-pill">actions = IconButton(Search)</span>
+            <span class="prop-pill">surface bg</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ann-item">
+        <div class="ann-badge removed">Removed</div>
+        <div>
+          <div class="ann-head">Category filter chip row</div>
+          <div class="ann-desc">Cut from the homescreen. It was Tier 3 content placed high "for discoverability," but it did the same job as the new search action — finding spend by category. Filtering now lives in the Transactions tab where the full list already exists. Removing it also frees the row where the savings goal card now sits, keeping above-the-fold content within Miller's 7±2 limit.</div>
+        </div>
+      </div>
+
+      <div class="ann-item">
+        <div class="ann-badge t1">Tier 1 · hero</div>
+        <div>
+          <div class="ann-head">MonthSummaryCard</div>
+          <div class="ann-desc">Unchanged — monthly total, budget progress bar, MoM delta chip, day-pace text. Still the 4 guaranteed above-the-fold data points. Background <code>primaryContainer</code>, text <code>onPrimaryContainer</code>.</div>
+          <div class="ann-props">
+            <span class="prop-pill">primaryContainer #EADDFF</span>
+            <span class="prop-pill">corner 20.dp</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ann-item">
+        <div class="ann-badge new">New · conditional</div>
+        <div>
+          <div class="ann-head">SavingsGoalCard</div>
+          <div class="ann-desc">Renders only if the user has set a monthly savings goal in Settings. One row: target label, thin progress bar, percent complete. Sits directly below the hero as a positive counterpart to "budget remaining" — saving framed as progress, not restriction. Uses <code>surfaceVariant</code> bg with the <code>success</code> custom color for the fill.</div>
+          <div class="ann-props">
+            <span class="prop-pill">if (goal != null)</span>
+            <span class="prop-pill">surfaceVariant #E7E0EC</span>
+            <span class="prop-pill">success #2E7D32</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ann-item">
+        <div class="ann-badge t2">Tier 2 · scan</div>
+        <div>
+          <div class="ann-head">RecentTransactionCard</div>
+          <div class="ann-desc">Unchanged — top 3 SMS-detected transactions grouped by date. "View all" routes to Transactions. Debit amounts use the <code>expense</code> color extension (= <code>error</code>).</div>
+        </div>
+      </div>
+
+      <div class="ann-item">
+        <div class="ann-badge new-blue">New · conditional</div>
+        <div>
+          <div class="ann-head">UpcomingSubscriptionCard</div>
+          <div class="ann-desc">Detects recurring SMS charges — same merchant, similar amount, roughly monthly cadence — and surfaces the next one if it falls within a 7-day window. Shows merchant, days until renewal, and last-known amount. Disappears once the charge actually posts and becomes a normal transaction row. Cap at one card: if several are due, show only the nearest and let "View all" list the rest.</div>
+          <div class="ann-props">
+            <span class="prop-pill">if (daysUntilRenewal <= 7)</span>
+            <span class="prop-pill">show nearest only</span>
+            <span class="prop-pill">secondaryContainer icon</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ann-item">
+        <div class="ann-badge updated">Updated</div>
+        <div>
+          <div class="ann-head">WeeklySpendSummary</div>
+          <div class="ann-desc">Previously a bare sparkline with no labels. Now leads with the weekly total and a "vs last week" delta — same red/green logic as the monthly chip (increase = <code>error</code>, decrease = <code>success</code>). The 7-day bar chart below has the day of week as its x-axis label under each bar, with today's bar in solid <code>primary</code> to anchor the read. Still non-interactive; tap routes to Analytics.</div>
+          <div class="ann-props">
+            <span class="prop-pill">x-axis = day labels</span>
+            <span class="prop-pill">header = total + delta</span>
+            <span class="prop-pill">Canvas composable</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ann-item">
+        <div class="ann-badge t3">Tier 2 · conditional</div>
+        <div>
+          <div class="ann-head">OverBudgetAlertCard</div>
+          <div class="ann-desc">Unchanged — renders only when a category exceeds its budget. <code>errorContainer</code> bg, <code>onErrorContainer</code> text, progress bar in <code>error</code>.</div>
+        </div>
+      </div>
+
+      <div class="ann-item">
+        <div class="ann-badge t3">Tier 3 · scroll-reveal</div>
+        <div>
+          <div class="ann-head">BehavioralNudgeCard</div>
+          <div class="ann-desc">Unchanged — one weekly insight, max one card, hidden when nothing's notable. <code>tertiaryContainer</code> bg.</div>
+        </div>
+      </div>
+
+      <div class="ann-item">
+        <div class="ann-badge t2">Priority rule</div>
+        <div>
+          <div class="ann-head">Conditional card cap</div>
+          <div class="ann-desc">With goal, subscription, overspend alert, and nudge all now possible, cap visible conditional cards at 2 per visit to keep cognitive load flat. Suggested priority when more are eligible: overspend alert, then subscription due, then nudge, then savings goal — the goal card is the gentlest, so it's first to drop.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="token-table">
+    <h2>Color tokens used (Material 3 light scheme)</h2>
+    <table>
+      <tr><th>Token</th><th>Hex</th><th>Used for</th></tr>
+      <tr><td><span class="swatch" style="background:#EADDFF"></span><code>primaryContainer</code></td><td>#EADDFF</td><td>Hero card background</td></tr>
+      <tr><td><span class="swatch" style="background:#21005D"></span><code>onPrimaryContainer</code></td><td>#21005D</td><td>Hero card text, FAB icon</td></tr>
+      <tr><td><span class="swatch" style="background:#E8DEF8"></span><code>secondaryContainer</code></td><td>#E8DEF8</td><td>Subscription icon chip, nav active pill</td></tr>
+      <tr><td><span class="swatch" style="background:#FFD8E4"></span><code>tertiaryContainer</code></td><td>#FFD8E4</td><td>Nudge card background</td></tr>
+      <tr><td><span class="swatch" style="background:#E7E0EC"></span><code>surfaceVariant</code></td><td>#E7E0EC</td><td>Savings goal card background</td></tr>
+      <tr><td><span class="swatch" style="background:#FFDAD6"></span><code>errorContainer</code></td><td>#FFDAD6</td><td>Over-budget alert background</td></tr>
+      <tr><td><span class="swatch" style="background:#410002"></span><code>onErrorContainer</code></td><td>#410002</td><td>Over-budget alert text, "over budget" delta chip text</td></tr>
+      <tr><td><span class="swatch" style="background:#2E7D32"></span><code>success</code> (custom)</td><td>#2E7D32</td><td>Savings goal accent, "−8%" delta chip, "vs last week" decrease</td></tr>
+      <tr><td><span class="swatch" style="background:#BA1A1A"></span><code>error</code> / <code>expense</code></td><td>#BA1A1A</td><td>Transaction debit amounts, "+12%" weekly delta, today's bar</td></tr>
+    </table>
+  </div>
+</div>
+
+<script>
+function toggleZone(btn, id){
+  btn.classList.toggle('on');
+  document.getElementById(id).style.display = btn.classList.contains('on') ? '' : 'none';
+}
+function toggleOverspent(btn){
+  btn.classList.toggle('on');
+  var over = btn.classList.contains('on');
+  document.getElementById('heroAmount').textContent = over ? '₹31,200' : '₹24,580';
+  document.getElementById('progressFill').style.width = over ? '100%' : '82%';
+  document.getElementById('budgetLeft').textContent = over ? '₹1,200 over' : '₹5,420 left';
+  var chip = document.getElementById('deltaChip');
+  chip.textContent = over ? '+14% vs last' : '−8% vs last';
+  chip.classList.toggle('over', over);
+  document.getElementById('paceDot').classList.toggle('warn', over);
+  document.getElementById('paceText').textContent = over ? 'Day 18 of 30 · 23% over pace' : 'Day 18 of 30 · on track';
+}
+</script>
+</body>
+</html>

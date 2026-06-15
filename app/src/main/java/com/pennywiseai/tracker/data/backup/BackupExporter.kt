@@ -77,6 +77,9 @@ class BackupExporter @Inject constructor(
         val bankNotifications = database.bankNotificationDao().getAllNotifications().first()
         val salaryMonthOverrides = database.salaryMonthOverrideDao().getAllOverrides().first()
         val transactionReceipts = database.transactionReceiptDao().getAllReceipts()
+        val loans = database.loanDao().getAllLoans().first()
+        val transactionGroups = database.transactionGroupDao().getAllGroups().first()
+        val profiles = database.profileDao().getAllProfiles()
 
         // Get preferences from repository
         val prefs = userPreferencesRepository.userPreferences.first()
@@ -86,7 +89,23 @@ class BackupExporter @Inject constructor(
         val lastReviewPromptTime = userPreferencesRepository.getLastReviewPromptTime().first()
         val lastScanTimestamp = userPreferencesRepository.getLastScanTimestamp().first()
         val lastScanPeriod = userPreferencesRepository.getLastScanPeriod().first()
-        
+        val smsScanAllTime = userPreferencesRepository.smsScanAllTime.first()
+        val baseCurrency = userPreferencesRepository.baseCurrency.first()
+        val unifiedCurrencyMode = userPreferencesRepository.unifiedCurrencyMode.first()
+        val displayCurrency = userPreferencesRepository.displayCurrency.first()
+        val monthlyBudgetLimit = userPreferencesRepository.monthlyBudgetLimit.first()
+        val isBalanceHidden = userPreferencesRepository.isBalanceHidden.first()
+        val analyticsChartType = userPreferencesRepository.getAnalyticsChartType().first()
+        val compactAnalyticsCards = userPreferencesRepository.compactAnalyticsCardsEnabled.first()
+        val isAppLockEnabled = userPreferencesRepository.isAppLockEnabled.first()
+        val appLockTimeoutMinutes = userPreferencesRepository.appLockTimeoutMinutes.first()
+        val monthStartDay = userPreferencesRepository.monthStartDay.first()
+        val useFinancialMonth = userPreferencesRepository.useFinancialMonth.first()
+        val useFixedBudgetPeriodEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
+        val budgetPeriodEndDay = userPreferencesRepository.budgetPeriodEndDay.first()
+        val dismissedSalarySuggestions = userPreferencesRepository.dismissedSalarySuggestions.first()
+        val selectedProfileId = userPreferencesRepository.selectedProfileId.first()
+
         // Calculate statistics
         val dateRange = if (transactions.isNotEmpty()) {
             val sorted = transactions.sortedBy { it.dateTime }
@@ -121,7 +140,9 @@ class BackupExporter @Inject constructor(
         val exportedBankNotifications = if (privacy == ExportPrivacy.FULL) bankNotifications else emptyList()
         val exportedRuleApplications = if (privacy == ExportPrivacy.FULL) ruleApplications else emptyList()
         val exportedSalaryMonthOverrides = if (privacy == ExportPrivacy.FULL) salaryMonthOverrides else emptyList()
-        
+        val exportedLoans = if (privacy == ExportPrivacy.FULL) loans else emptyList()
+        val exportedTransactionGroups = if (privacy == ExportPrivacy.FULL) transactionGroups else emptyList()
+
         return PennyWiseBackup(
             metadata = BackupMetadata(
                 exportId = UUID.randomUUID().toString(),
@@ -142,6 +163,9 @@ class BackupExporter @Inject constructor(
                     totalTransactionSplits = exportedTransactionSplits.size,
                     totalBankNotifications = exportedBankNotifications.size,
                     totalReceipts = transactionReceipts.size,
+                    totalLoans = exportedLoans.size,
+                    totalTransactionGroups = exportedTransactionGroups.size,
+                    totalProfiles = profiles.size,
                     dateRange = dateRange
                 )
             ),
@@ -163,16 +187,29 @@ class BackupExporter @Inject constructor(
                 transactionSplits = exportedTransactionSplits,
                 bankNotifications = exportedBankNotifications,
                 salaryMonthOverrides = exportedSalaryMonthOverrides,
-                transactionReceipts = transactionReceipts
+                transactionReceipts = transactionReceipts,
+                loans = exportedLoans,
+                transactionGroups = exportedTransactionGroups,
+                profiles = profiles
             ),
             preferences = PreferencesSnapshot(
                 theme = ThemePreferences(
                     isDarkThemeEnabled = prefs.isDarkThemeEnabled,
-                    isDynamicColorEnabled = prefs.isDynamicColorEnabled
+                    isDynamicColorEnabled = prefs.isDynamicColorEnabled,
+                    themeStyle = prefs.themeStyle.name,
+                    accentColor = prefs.accentColor.name,
+                    isAmoledMode = prefs.isAmoledMode,
+                    appFont = prefs.appFont.name,
+                    blurEffectsEnabled = prefs.blurEffectsEnabled,
+                    navBarStyle = prefs.navBarStyle.name,
+                    analyticsChartType = analyticsChartType,
+                    compactAnalyticsCards = compactAnalyticsCards,
+                    coverStyle = prefs.coverStyle.name
                 ),
                 sms = SmsPreferences(
                     hasSkippedSmsPermission = prefs.hasSkippedSmsPermission,
                     smsScanMonths = prefs.smsScanMonths,
+                    smsScanAllTime = smsScanAllTime,
                     lastScanTimestamp = lastScanTimestamp,
                     lastScanPeriod = lastScanPeriod
                 ),
@@ -184,7 +221,28 @@ class BackupExporter @Inject constructor(
                     hasShownScanTutorial = prefs.hasShownScanTutorial,
                     firstLaunchTime = firstLaunchTime,
                     hasShownReviewPrompt = hasShownReviewPrompt,
-                    lastReviewPromptTime = lastReviewPromptTime
+                    lastReviewPromptTime = lastReviewPromptTime,
+                    baseCurrency = baseCurrency,
+                    unifiedCurrencyMode = unifiedCurrencyMode,
+                    displayCurrency = displayCurrency,
+                    monthlyBudgetLimit = monthlyBudgetLimit?.toPlainString(),
+                    balanceHidden = isBalanceHidden,
+                    userName = prefs.userName,
+                    profileImageUri = prefs.profileImageUri,
+                    profileBackgroundColor = prefs.profileBackgroundColor,
+                    hasCompletedOnboarding = prefs.hasCompletedOnboarding,
+                    mainAccountKey = prefs.mainAccountKey,
+                    monthStartDay = monthStartDay,
+                    useFinancialMonth = useFinancialMonth,
+                    useFixedBudgetPeriodEnd = useFixedBudgetPeriodEnd,
+                    budgetPeriodEndDay = budgetPeriodEndDay,
+                    dismissedSalarySuggestions = dismissedSalarySuggestions
+                        .joinToString("|").ifEmpty { null },
+                    selectedProfileId = selectedProfileId
+                ),
+                security = SecurityPreferences(
+                    appLockEnabled = isAppLockEnabled,
+                    appLockTimeoutMinutes = appLockTimeoutMinutes
                 )
             )
         )

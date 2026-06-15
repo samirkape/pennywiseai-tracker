@@ -626,9 +626,11 @@ class TransactionsViewModel @Inject constructor(
                     }
             }
             .onEach { transactions ->
+                val currentSort = sortOption.value
+                val isDateSort = currentSort == SortOption.DATE_NEWEST || currentSort == SortOption.DATE_OLDEST
                 _uiState.value = _uiState.value.copy(
                     transactions = transactions,
-                    groupedTransactions = groupTransactionsByDate(transactions),
+                    groupedTransactions = if (isDateSort) groupTransactionsByDate(transactions) else emptyMap(),
                     isLoading = false
                 )
                 // Load splits for split-aware total calculation (when category filter is active,

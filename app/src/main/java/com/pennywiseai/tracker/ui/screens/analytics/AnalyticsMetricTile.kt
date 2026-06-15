@@ -9,6 +9,7 @@ package com.pennywiseai.tracker.ui.screens.analytics
 // .invested-badge  [📈 View investment breakdown]
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +44,10 @@ import com.pennywiseai.tracker.ui.components.PennyWiseCard
 import com.pennywiseai.tracker.ui.icons.CategoryMapping
 import com.pennywiseai.tracker.ui.theme.Dimensions
 import com.pennywiseai.tracker.ui.theme.Spacing
+import com.pennywiseai.tracker.ui.theme.expense_dark
+import com.pennywiseai.tracker.ui.theme.expense_light
+import com.pennywiseai.tracker.ui.theme.income_dark
+import com.pennywiseai.tracker.ui.theme.income_light
 
 sealed interface AnalyticsTilePill {
     data class Category(val name: String) : AnalyticsTilePill
@@ -107,9 +112,14 @@ fun AnalyticsMetricTile(
                 val delta = content.deltaPercent
                 if (delta != null) {
                     val isUp = delta >= 0f
-                    // for investments: higher = more invested = positive (green)
-                    val bg = if (isUp) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
-                    val fg = if (isUp) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                    val isDark = isSystemInDarkTheme()
+                    // for investments: higher = more invested = good (green); lower = bad (red)
+                    val fg = if (isUp) {
+                        if (isDark) income_dark else income_light
+                    } else {
+                        if (isDark) expense_dark else expense_light
+                    }
+                    val bg = fg.copy(alpha = 0.15f)
                     Spacer(modifier = Modifier.width(8.dp))
                     Row(
                         modifier = Modifier.background(bg, RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 4.dp),

@@ -75,6 +75,7 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
         const val TAG                               = "OptimizedSmsReaderWorker"
         const val WORK_NAME                         = "optimized_sms_reader_work"
         const val INPUT_FORCE_RESYNC                = "input_force_resync"
+        const val INPUT_SCAN_FROM_TIMESTAMP         = "input_scan_from_timestamp"
         const val PROGRESS_TOTAL                    = "progress_total"
         const val PROGRESS_PROCESSED                = "progress_processed"
         const val PROGRESS_PARSED                   = "progress_parsed"
@@ -297,7 +298,8 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
         Trace.beginSection("SmsWorker.doWork")
         try {
             val forceResync = inputData.getBoolean(INPUT_FORCE_RESYNC, false)
-            Log.i(TAG, "Starting SMS worker (forceResync=$forceResync)")
+            val scanFromTimestamp = inputData.getLong(INPUT_SCAN_FROM_TIMESTAMP, -1L)
+            Log.i(TAG, "Starting SMS worker (forceResync=$forceResync, scanFromTimestamp=$scanFromTimestamp)")
 
             if (forceResync) {
                 // try/finally ensures endSection even if the suspend calls throw
@@ -313,7 +315,7 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
 
             Trace.beginSection("readSmsMessages")
             val scanBatch = try {
-                readSmsMessages(forceResync)
+                readSmsMessages(forceResync, scanFromTimestamp)
             } finally {
                 Trace.endSection()
             }
@@ -806,7 +808,7 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
         }
     }
 
-    private suspend fun readSmsMessages(forceResync: Boolean = false): SmsScanBatch {
+    private suspend fun readSmsMessages(forceResync: Boolean = false, scanFromTimestamp: Long = -1L): SmsScanBatch {
         val messages = mutableListOf<SmsMessage>()
         var scanStartTime = 0L
         var needsFullScan = false
@@ -826,7 +828,11 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
             val scanAllTimeToggledOff = !scanAllTime && lastScanPeriod == -1
             needsFullScan = forceResync || lastScanTimestamp == 0L || (lastScanPeriod >= 0 && scanMonths > lastScanPeriod) || scanAllTimeToggled || scanAllTimeToggledOff
 
-            scanStartTime = if (needsFullScan) {
+            scanStartTime = if (scanFromTimestamp > 0L) {
+                // Post-restore targeted scan: start exactly from the backup's latest transaction.
+                needsFullScan = false
+                scanFromTimestamp
+            } else if (needsFullScan) {
                 java.util.Calendar.getInstance().apply {
                     if (scanAllTime) add(java.util.Calendar.YEAR, -10)
                     else             add(java.util.Calendar.MONTH, -scanMonths)

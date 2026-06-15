@@ -756,12 +756,13 @@ class AnalyticsViewModel @Inject constructor(
         if (total <= BigDecimal.ZERO) return null
 
         var previousTotal = BigDecimal.ZERO
+        var previousSpending = BigDecimal.ZERO
         for (item in previousPeriodTxs) {
             val tx = item.transaction
             if (tx.isExcludedFromTracking) continue
             val amount = convertAmount(tx.amount, tx.currency, displayCurrency, isUnified)
             when {
-                tx.matchesAnalyticsSpendingFilter() -> previousTotal += amount
+                tx.matchesAnalyticsSpendingFilter() -> { previousTotal += amount; previousSpending += amount }
                 tx.transactionType == TransactionType.INVESTMENT -> previousTotal += amount
                 tx.countsOnceTowardCcBillPaymentTotal() -> previousTotal += amount
             }
@@ -769,6 +770,10 @@ class AnalyticsViewModel @Inject constructor(
         val deltaPercent = if (previousTotal > BigDecimal.ZERO) {
             val delta = total.subtract(previousTotal)
             (delta.divide(previousTotal, 4, java.math.RoundingMode.HALF_UP) * BigDecimal(100)).toFloat()
+        } else null
+        val spendingDeltaPercent = if (previousSpending > BigDecimal.ZERO) {
+            val delta = spending.subtract(previousSpending)
+            (delta.divide(previousSpending, 4, java.math.RoundingMode.HALF_UP) * BigDecimal(100)).toFloat()
         } else null
 
         return PeriodOutflowSummary(
@@ -782,6 +787,7 @@ class AnalyticsViewModel @Inject constructor(
             ccBillPaymentTransactionCount = ccBillPaymentCount,
             currency = displayCurrency,
             deltaPercent = deltaPercent,
+            spendingDeltaPercent = spendingDeltaPercent,
         )
     }
 
@@ -1033,6 +1039,7 @@ data class PeriodOutflowSummary(
     val ccBillPaymentTransactionCount: Int = 0,
     val currency: String,
     val deltaPercent: Float? = null,
+    val spendingDeltaPercent: Float? = null,
 )
 
 data class InvestmentInsights(

@@ -608,44 +608,71 @@ fun TransactionsScreen(
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs),
                     flingBehavior = rememberOverscrollFlingBehavior { listState }
                 ) {
-                    // Iterate through date groups in order
-                    listOf(
-                        DateGroup.TODAY,
-                        DateGroup.YESTERDAY,
-                        DateGroup.THIS_WEEK,
-                        DateGroup.EARLIER
-                    ).forEach { dateGroup ->
-                        uiState.groupedTransactions[dateGroup]?.let { transactions ->
-                            // Date group header
-                            item {
-                                SectionHeaderV2(
-                                    title = dateGroup.label,
-                                    modifier = Modifier.padding(vertical = Spacing.sm)
-                                )
-                            }
-                            
-                            // Transactions in this group
-                            items(
-                                items = transactions,
-                                key = { it.id }
-                            ) { transaction ->
-                                com.pennywiseai.tracker.ui.components.cards.TransactionItem(
-                                    transaction = transaction,
-                                    showDate = dateGroup == DateGroup.EARLIER,
-                                    convertedAmount = convertedAmounts[transaction.id],
-                                    displayCurrency = if (isUnifiedMode) selectedCurrency else null,
-                                    categoryDisplayAmount = categoryDisplayAmounts[transaction.id],
-                                    profileAccountKeys = profileAccountKeys,
-                                    onClick = { onTransactionClick(transaction.id) },
-                                    onExcludeToggle = { viewModel.toggleExcludedFromTracking(transaction) },
-                                    onDelete = { viewModel.deleteTransaction(transaction) }
-                                )
-                                if (transaction != transactions.last()) {
-                                    HorizontalDivider(
-                                        modifier = Modifier.padding(horizontal = Spacing.md),
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    val isDateSort = sortOption == SortOption.DATE_NEWEST || sortOption == SortOption.DATE_OLDEST
+                    if (isDateSort) {
+                        // Iterate through date groups in order
+                        listOf(
+                            DateGroup.TODAY,
+                            DateGroup.YESTERDAY,
+                            DateGroup.THIS_WEEK,
+                            DateGroup.EARLIER
+                        ).forEach { dateGroup ->
+                            uiState.groupedTransactions[dateGroup]?.let { transactions ->
+                                // Date group header
+                                item {
+                                    SectionHeaderV2(
+                                        title = dateGroup.label,
+                                        modifier = Modifier.padding(vertical = Spacing.sm)
                                     )
                                 }
+
+                                // Transactions in this group
+                                items(
+                                    items = transactions,
+                                    key = { it.id }
+                                ) { transaction ->
+                                    com.pennywiseai.tracker.ui.components.cards.TransactionItem(
+                                        transaction = transaction,
+                                        showDate = dateGroup == DateGroup.EARLIER,
+                                        convertedAmount = convertedAmounts[transaction.id],
+                                        displayCurrency = if (isUnifiedMode) selectedCurrency else null,
+                                        categoryDisplayAmount = categoryDisplayAmounts[transaction.id],
+                                        profileAccountKeys = profileAccountKeys,
+                                        onClick = { onTransactionClick(transaction.id) },
+                                        onExcludeToggle = { viewModel.toggleExcludedFromTracking(transaction) },
+                                        onDelete = { viewModel.deleteTransaction(transaction) }
+                                    )
+                                    if (transaction != transactions.last()) {
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(horizontal = Spacing.md),
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Flat list without date headers for non-date sorts
+                        items(
+                            items = uiState.transactions,
+                            key = { it.id }
+                        ) { transaction ->
+                            com.pennywiseai.tracker.ui.components.cards.TransactionItem(
+                                transaction = transaction,
+                                showDate = true,
+                                convertedAmount = convertedAmounts[transaction.id],
+                                displayCurrency = if (isUnifiedMode) selectedCurrency else null,
+                                categoryDisplayAmount = categoryDisplayAmounts[transaction.id],
+                                profileAccountKeys = profileAccountKeys,
+                                onClick = { onTransactionClick(transaction.id) },
+                                onExcludeToggle = { viewModel.toggleExcludedFromTracking(transaction) },
+                                onDelete = { viewModel.deleteTransaction(transaction) }
+                            )
+                            if (transaction != uiState.transactions.last()) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = Spacing.md),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                )
                             }
                         }
                     }

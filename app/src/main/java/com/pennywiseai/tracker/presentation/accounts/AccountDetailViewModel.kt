@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -44,7 +45,7 @@ class AccountDetailViewModel @Inject constructor(
         loadAccountData()
         observeTransactions()
         observeBalanceHistory()
-        observeBalanceChartData()
+        observeSpendChartData()
     }
     
     private fun loadAccountData() {
@@ -160,43 +161,81 @@ class AccountDetailViewModel @Inject constructor(
         }
     }
     
-    private fun observeBalanceChartData() {
-        // Fetch balance chart data based on selected date range
+    private fun observeSpendChartData() {
         viewModelScope.launch {
-            selectedDateRange.flatMapLatest { dateRange ->
-                val (startDate, endDate) = getDateRangeValues(dateRange)
+            combine(
+                selectedDateRange,
+                transactionRepository.getTransactionsByAccount(bankName, accountLast4)
+            ) { dateRange, allTransactions ->
+                val (startDateTime, endDateTime) = getDateRangeValues(dateRange)
+                val startDate = startDateTime.toLocalDate()
+                val endDate = endDateTime.toLocalDate()
 
-                // For chart purposes, extend the range to show more context
-                val chartStartDate = when (dateRange) {
-                    DateRange.LAST_7_DAYS -> endDate.minusDays(14)  // Show 2 weeks for 7-day view
-                    DateRange.LAST_30_DAYS -> endDate.minusMonths(2)  // Show 2 months for 30-day view
-                    DateRange.LAST_3_MONTHS -> endDate.minusMonths(4)  // Show 4 months for 3-month view
-                    DateRange.LAST_6_MONTHS -> endDate.minusMonths(8)  // Show 8 months for 6-month view
-                    DateRange.LAST_YEAR -> endDate.minusMonths(15)  // Show 15 months for 1-year view
-                    DateRange.ALL_TIME -> LocalDateTime.of(2000, 1, 1, 0, 0)  // Show all available data
+                val spendTransactions = allTransactions.filter { tx ->
+                    val txDate = tx.dateTime.toLocalDate()
+                    val inRange = !txDate.isBefore(startDate) && !txDate.isAfter(endDate)
+                    val isSpend = tx.transactionType == com.pennywiseai.tracker.data.database.entity.TransactionType.EXPENSE ||
+                                  tx.transactionType == com.pennywiseai.tracker.data.database.entity.TransactionType.CREDIT
+                    inRange && isSpend
                 }
 
-                accountBalanceRepository.getBalanceHistory(
-                    bankName,
-                    accountLast4,
-                    chartStartDate,
-                    endDate
-                )
-            }.collect { balanceHistory ->
-                // Convert to BalancePoint for chart
-                val chartData = balanceHistory.map { entity ->
-                    BalancePoint(
-                        timestamp = entity.timestamp,
-                        balance = entity.balance,
-                        currency = entity.currency
-                    )
-                }
+                val currency = spendTransactions.firstOrNull()?.currency ?: _uiState.value.primaryCurrency
+                computeSpendTrend(spendTransactions, startDate, endDate, currency, dateRange)
+            }.collect { spendTrend ->
+                _uiState.update { it.copy(spendChartData = spendTrend) }
+            }
+        }
+    }
 
-                _uiState.update { state ->
-                    state.copy(balanceChartData = chartData)
+    private fun computeSpendTrend(
+        transactions: List<TransactionEntity>,
+        startDate: LocalDate,
+        endDate: LocalDate,
+        currency: String,
+        dateRange: DateRange
+    ): List<BalancePoint> {
+        val trend = mutableListOf<BalancePoint>()
+        val rangeDays = ChronoUnit.DAYS.between(startDate, endDate).toInt() + 1
+        val byDate = transactions.groupBy { it.dateTime.toLocalDate() }
+
+        when {
+            dateRange == DateRange.ALL_TIME || rangeDays > 60 -> {
+                var month = startDate.withDayOfMonth(1)
+                val lastMonth = endDate.withDayOfMonth(1)
+                while (!month.isAfter(lastMonth) && !month.isAfter(LocalDate.now().withDayOfMonth(1))) {
+                    val endOfMonth = month.withDayOfMonth(month.lengthOfMonth())
+                    val total = transactions
+                        .filter { !it.dateTime.toLocalDate().isBefore(month) && !it.dateTime.toLocalDate().isAfter(endOfMonth) }
+                        .sumOf { it.amount.toDouble() }.toBigDecimal()
+                    trend.add(BalancePoint(timestamp = month.atStartOfDay(), balance = total, currency = currency))
+                    month = month.plusMonths(1)
+                }
+            }
+            rangeDays > 14 -> {
+                val weekStart = startDate.minusDays(startDate.dayOfWeek.value.toLong() - 1)
+                var week = weekStart
+                while (!week.isAfter(endDate) && !week.isAfter(LocalDate.now())) {
+                    val weekEnd = week.plusDays(6).coerceAtMost(endDate).coerceAtMost(LocalDate.now())
+                    var d = week.coerceAtLeast(startDate)
+                    var weekTotal = BigDecimal.ZERO
+                    while (!d.isAfter(weekEnd)) {
+                        weekTotal += (byDate[d] ?: emptyList()).sumOf { it.amount.toDouble() }.toBigDecimal()
+                        d = d.plusDays(1)
+                    }
+                    trend.add(BalancePoint(timestamp = week.coerceAtLeast(startDate).atStartOfDay(), balance = weekTotal, currency = currency))
+                    week = week.plusWeeks(1)
+                }
+            }
+            else -> {
+                var day = startDate
+                while (!day.isAfter(endDate) && !day.isAfter(LocalDate.now())) {
+                    val total = (byDate[day] ?: emptyList()).sumOf { it.amount.toDouble() }.toBigDecimal()
+                    trend.add(BalancePoint(timestamp = day.atStartOfDay(), balance = total, currency = currency))
+                    day = day.plusDays(1)
                 }
             }
         }
+        return trend
     }
     
     fun selectDateRange(dateRange: DateRange) {
@@ -262,7 +301,7 @@ data class AccountDetailUiState(
     val accountLast4: String = "",
     val currentBalance: AccountBalanceEntity? = null,
     val balanceHistory: List<AccountBalanceEntity> = emptyList(),
-    val balanceChartData: List<BalancePoint> = emptyList(),
+    val spendChartData: List<BalancePoint> = emptyList(),
     val transactions: List<TransactionEntity> = emptyList(),
     val totalIncome: BigDecimal = BigDecimal.ZERO,
     val totalExpenses: BigDecimal = BigDecimal.ZERO,

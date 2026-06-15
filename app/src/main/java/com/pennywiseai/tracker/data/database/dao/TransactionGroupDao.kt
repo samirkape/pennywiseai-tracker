@@ -12,6 +12,9 @@ interface TransactionGroupDao {
     @Insert
     suspend fun insertGroup(group: TransactionGroupEntity): Long
 
+    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    suspend fun insertGroupForRestore(group: TransactionGroupEntity): Long
+
     @Update
     suspend fun updateGroup(group: TransactionGroupEntity)
 

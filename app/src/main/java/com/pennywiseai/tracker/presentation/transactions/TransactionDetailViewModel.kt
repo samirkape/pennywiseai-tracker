@@ -1037,10 +1037,16 @@ class TransactionDetailViewModel @Inject constructor(
                 val merchantChanged = originalMerchant != null &&
                     !current.merchantName.equals(originalMerchant, ignoreCase = true)
                 val typeChanged = originalType != null && current.transactionType != originalType
-                if (categoryChanged || merchantChanged || typeChanged) {
-                    val existingCount = _existingTransactionCount.value
+                val existingCount = _existingTransactionCount.value
+                if ((categoryChanged || merchantChanged || typeChanged) && existingCount > 0) {
                     val isSelf = current.transactionType == TransactionType.TRANSFER &&
                         current.transferKind == com.pennywiseai.tracker.data.database.entity.TransferKind.SELF_TRANSFER
+                    val categoryMappingExists = if (categoryChanged && !isSelf) {
+                        val mapped = withContext(Dispatchers.IO) {
+                            merchantMappingRepository.getCategoryForMerchant(current.merchantName.trim())
+                        }
+                        mapped != null && mapped.equals(current.category, ignoreCase = true)
+                    } else false
                     _preSaveBulkState.value = PreSaveBulkState(
                         existingCount = existingCount,
                         isSelfTransfer = isSelf,
@@ -1049,8 +1055,8 @@ class TransactionDetailViewModel @Inject constructor(
                         typeChanged = typeChanged,
                         merchantName = current.merchantName,
                     )
-                    _applyToPast.value = existingCount > 0
-                    _applyToFuture.value = (categoryChanged && !isSelf) || merchantChanged
+                    _applyToPast.value = true
+                    _applyToFuture.value = (categoryChanged && !isSelf && !categoryMappingExists) || merchantChanged
                     _isSaving.value = false
                     return@launch
                 }
@@ -1211,14 +1217,24 @@ class TransactionDetailViewModel @Inject constructor(
                 _errorMessage.value = "Saved, but failed to update future SMS rules: ${e.message}"
             }
 
-            pendingFutureParsingPrompt = buildFutureParsingPrompt(
-                saved = normalizedTransaction,
-                originalMerchant = snapshotOriginalMerchant,
-                originalCategoryOnEdit = snapshotOriginalCategory,
-                hadSplitLines = hadSplitLinesSnapshot,
-                appliedIncomingCategory = snapshotIncomingCategory,
-                appliedIncomingMerchant = snapshotIncomingMerchant,
-            )
+            pendingFutureParsingPrompt = if (userPreferencesRepository.isFutureParsingPromptDisabledOnce()) {
+                null
+            } else {
+                val mappedCategory = withContext(Dispatchers.IO) {
+                    merchantMappingRepository.getCategoryForMerchant(normalizedTransaction.merchantName.trim())
+                }
+                val categoryMappingAlreadyExists = mappedCategory != null &&
+                    mappedCategory.equals(normalizedTransaction.category, ignoreCase = true)
+                buildFutureParsingPrompt(
+                    saved = normalizedTransaction,
+                    originalMerchant = snapshotOriginalMerchant,
+                    originalCategoryOnEdit = snapshotOriginalCategory,
+                    hadSplitLines = hadSplitLinesSnapshot,
+                    appliedIncomingCategory = snapshotIncomingCategory,
+                    appliedIncomingMerchant = snapshotIncomingMerchant,
+                    categoryMappingAlreadyExists = categoryMappingAlreadyExists,
+                )
+            }
 
             // Scan for other transactions with a similar old merchant name to offer batch rename
             val needSimilarMerchantScan = snapshotOriginalMerchant != null &&
@@ -1361,6 +1377,14 @@ class TransactionDetailViewModel @Inject constructor(
         _saveSuccess.value = true
     }
 
+    fun neverFutureParsing() {
+        viewModelScope.launch {
+            userPreferencesRepository.disableFutureParsingPrompt()
+            _futureParsingPrompt.value = null
+            _saveSuccess.value = true
+        }
+    }
+
     private fun buildFutureParsingPrompt(
         saved: TransactionEntity,
         originalMerchant: String?,
@@ -1368,6 +1392,7 @@ class TransactionDetailViewModel @Inject constructor(
         hadSplitLines: Boolean,
         appliedIncomingCategory: Boolean,
         appliedIncomingMerchant: Boolean,
+        categoryMappingAlreadyExists: Boolean = false,
     ): FutureParsingPromptState? {
         if (hadSplitLines) return null
 
@@ -1375,7 +1400,7 @@ class TransactionDetailViewModel @Inject constructor(
             !saved.merchantName.equals(originalMerchant, ignoreCase = true)
         val categoryChanged = originalCategoryOnEdit != null && saved.category != originalCategoryOnEdit
         val promptMerchant = merchantChanged && !appliedIncomingMerchant
-        val promptCategory = categoryChanged && !appliedIncomingCategory
+        val promptCategory = categoryChanged && !appliedIncomingCategory && !categoryMappingAlreadyExists
         if (!promptMerchant && !promptCategory) return null
 
         val rawForHints = originalMerchant?.trim().orEmpty().ifEmpty { saved.merchantName }

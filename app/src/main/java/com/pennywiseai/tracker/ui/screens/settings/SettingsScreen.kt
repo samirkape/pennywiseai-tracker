@@ -97,6 +97,7 @@ fun SettingsScreen(
     val baseCurrency by settingsViewModel.baseCurrency.collectAsStateWithLifecycle(initialValue = "")
     val monthStartDay by settingsViewModel.monthStartDay.collectAsStateWithLifecycle(initialValue = 1)
     val importExportMessage by settingsViewModel.importExportMessage.collectAsStateWithLifecycle()
+    val postRestoreScanInfo by settingsViewModel.postRestoreScanInfo.collectAsStateWithLifecycle()
     val exportedBackupFile by settingsViewModel.exportedBackupFile.collectAsStateWithLifecycle()
     val unifiedCurrencyMode by settingsViewModel.unifiedCurrencyMode.collectAsStateWithLifecycle(initialValue = false)
     val compactAnalyticsCardsEnabled by settingsViewModel.compactAnalyticsCardsEnabled.collectAsStateWithLifecycle(initialValue = true)
@@ -643,6 +644,38 @@ fun SettingsScreen(
                     Text("Cancel")
                 }
             },
+        )
+    }
+
+    // Post-restore scan prompt
+    postRestoreScanInfo?.let { info ->
+        val latestDate = java.time.Instant.ofEpochMilli(info.fromTimestamp)
+            .atZone(java.time.ZoneId.systemDefault())
+            .toLocalDate()
+            .format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy"))
+        AlertDialog(
+            onDismissRequest = { settingsViewModel.dismissPostRestoreScanPrompt() },
+            title = { Text("Backup Restored") },
+            text = {
+                Column {
+                    Text(info.message)
+                    Spacer(modifier = Modifier.height(Spacing.md))
+                    Text(
+                        "Your backup has transactions up to $latestDate. Scan for newer transactions?",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { settingsViewModel.triggerPostRestoreScan() }) {
+                    Text("Scan Now")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { settingsViewModel.dismissPostRestoreScanPrompt() }) {
+                    Text("Dismiss")
+                }
+            }
         )
     }
 

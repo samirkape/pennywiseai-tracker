@@ -114,12 +114,12 @@ fun AccountDetailScreen(
                 )
             }
 
-            // Balance Chart (Expandable) - Updates based on selected timeframe
-            if (uiState.balanceChartData.isNotEmpty()) {
+            // Spend Chart (Expandable) - Updates based on selected timeframe
+            if (uiState.spendChartData.isNotEmpty()) {
                 item {
                     ExpandableBalanceChart(
                         primaryCurrency = uiState.primaryCurrency,
-                        balanceHistory = uiState.balanceChartData,
+                        balanceHistory = uiState.spendChartData,
                         selectedTimeframe = selectedDateRange.label
                     )
                 }
@@ -217,7 +217,7 @@ private fun ExpandableBalanceChart(
                             modifier = Modifier.size(Dimensions.Icon.medium)
                         )
                         Text(
-                            text = "Balance Trend",
+                            text = "Spend Trend",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold
                         )

@@ -25,6 +25,7 @@ import ir.ehsannarmani.compose_charts.models.LabelHelperProperties
 import ir.ehsannarmani.compose_charts.models.LabelProperties
 import ir.ehsannarmani.compose_charts.models.Line
 import ir.ehsannarmani.compose_charts.models.LineProperties
+import ir.ehsannarmani.compose_charts.models.PopupProperties
 import ir.ehsannarmani.compose_charts.models.StrokeStyle
 import ir.ehsannarmani.compose_charts.models.ZeroLineProperties
 import java.math.BigDecimal
@@ -43,7 +44,8 @@ fun BalanceChart(
     primaryCurrency: String,
     balanceHistory: List<BalancePoint>,
     modifier: Modifier = Modifier,
-    height: Int = 200
+    height: Int = 200,
+    smooth: Boolean = true
 ) {
     if (balanceHistory.isEmpty()) return
 
@@ -51,8 +53,8 @@ fun BalanceChart(
         balanceHistory.sortedBy { it.timestamp }
     }
 
-    val smoothedHistory = remember(sortedHistory) {
-        smoothBalanceData(sortedHistory)
+    val smoothedHistory = remember(sortedHistory, smooth) {
+        if (smooth) smoothBalanceData(sortedHistory) else sortedHistory
     }
 
     val themeColors = MaterialTheme.colorScheme
@@ -89,14 +91,32 @@ fun BalanceChart(
         }
     }
 
+    val popupProperties = remember(smoothedHistory, primaryCurrency) {
+        PopupProperties(
+            enabled = true,
+            duration = 2000L,
+            textStyle = TextStyle.Default.copy(fontSize = 11.sp),
+            contentBuilder = { popup ->
+                val point = smoothedHistory.getOrNull(popup.valueIndex)
+                val formatted = CurrencyFormatter.formatAbbreviated(abs(popup.value), primaryCurrency)
+                if (point != null) {
+                    "${point.timestamp.format(DateTimeFormatter.ofPattern("dd MMM"))}  $formatted"
+                } else {
+                    formatted
+                }
+            }
+        )
+    }
+
     LineChart(
         modifier = modifier
             .fillMaxWidth()
             .height(height.dp)
             .padding(horizontal = Spacing.sm, vertical = Spacing.md),
+        popupProperties = popupProperties,
         data = listOf(
             Line(
-                label = "Balance Trend",
+                label = "Spend Trend",
                 values = chartValues,
                 color = SolidColor(themeColors.primary),
                 firstGradientFillColor = themeColors.primary.copy(alpha = 0.3f),

@@ -338,6 +338,14 @@ interface TransactionDao {
     @Query("UPDATE transactions SET is_deleted = 1 WHERE transaction_hash = :transactionHash")
     suspend fun softDeleteByHash(transactionHash: String)
 
+    /**
+     * Returns hashes of all soft-deleted transactions.
+     * Used during MERGE restore to prevent resurrecting transactions the user
+     * intentionally deleted after the backup was made.
+     */
+    @Query("SELECT transaction_hash FROM transactions WHERE is_deleted = 1")
+    suspend fun getSoftDeletedHashes(): List<String>
+
     // Method to check if transaction exists by hash (including deleted)
     @Query("SELECT * FROM transactions WHERE transaction_hash = :transactionHash LIMIT 1")
     suspend fun getTransactionByHash(transactionHash: String): TransactionEntity?

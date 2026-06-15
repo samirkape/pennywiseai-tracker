@@ -134,6 +134,9 @@ class UserPreferencesRepository @Inject constructor(
 
         // Smart Insights
         val INSIGHTS_DATA_WINDOW_MONTHS = intPreferencesKey("insights_data_window_months")
+
+        // Future parsing prompt
+        val FUTURE_PARSING_PROMPT_DISABLED = booleanPreferencesKey("future_parsing_prompt_disabled")
     }
 
     val hasRunCcPaymentBackfill: Flow<Boolean> = context.dataStore.data
@@ -141,6 +144,19 @@ class UserPreferencesRepository @Inject constructor(
 
     suspend fun setHasRunCcPaymentBackfill(value: Boolean) {
         context.dataStore.edit { it[PreferencesKeys.HAS_RUN_CC_PAYMENT_BACKFILL] = value }
+    }
+
+    // Future parsing prompt
+    val isFutureParsingPromptDisabled: Flow<Boolean> = context.dataStore.data
+        .map { it[PreferencesKeys.FUTURE_PARSING_PROMPT_DISABLED] ?: false }
+
+    suspend fun isFutureParsingPromptDisabledOnce(): Boolean =
+        context.dataStore.data
+            .map { it[PreferencesKeys.FUTURE_PARSING_PROMPT_DISABLED] ?: false }
+            .first()
+
+    suspend fun disableFutureParsingPrompt() {
+        context.dataStore.edit { it[PreferencesKeys.FUTURE_PARSING_PROMPT_DISABLED] = true }
     }
 
     val insightsDataWindowMonths: Flow<Int> = context.dataStore.data
@@ -772,6 +788,14 @@ class UserPreferencesRepository @Inject constructor(
                 ?: mutableSetOf()
             current.add(token)
             preferences[PreferencesKeys.DISMISSED_SALARY_SUGGESTIONS] = current.joinToString("|")
+        }
+    }
+
+    /** Bulk-replace the full set of dismissed salary suggestion tokens (used during backup restore). */
+    suspend fun setDismissedSalarySuggestions(tokens: Set<String>) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.DISMISSED_SALARY_SUGGESTIONS] =
+                tokens.filter { it.isNotBlank() }.joinToString("|")
         }
     }
 

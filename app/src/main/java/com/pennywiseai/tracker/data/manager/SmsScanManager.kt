@@ -83,6 +83,33 @@ class SmsScanManager @Inject constructor(
     }
 
     /**
+     * Enqueues a scan that starts exactly at [fromTimestamp] (epoch millis).
+     * Used after a backup restore to pick up only transactions newer than the backup.
+     */
+    fun scheduleScanFromTimestamp(fromTimestamp: Long): Boolean {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
+        val inputData = workDataOf(
+            OptimizedSmsReaderWorker.INPUT_SCAN_FROM_TIMESTAMP to fromTimestamp
+        )
+        val smsReaderWork = OneTimeWorkRequestBuilder<OptimizedSmsReaderWorker>()
+            .setInputData(inputData)
+            .addTag("sms_logging")
+            .addTag("optimized_sms_processing")
+            .addTag(OptimizedSmsReaderWorker.WORK_NAME)
+            .build()
+        workManager.enqueueUniqueWork(
+            OptimizedSmsReaderWorker.WORK_NAME,
+            ExistingWorkPolicy.REPLACE,
+            smsReaderWork
+        )
+        return true
+    }
+
+    /**
      * Cancels any ongoing SMS scanning work.
      */
     fun cancelSmsScanning() {

@@ -117,14 +117,18 @@
     <string name="merchant_alias_edit_cd">Edit mapping</string>
     <string name="merchant_alias_add_cd">Add mapping</string>
 
-    <string name="future_parsing_prompt_title">Remember for future SMS?</string>
+    <string name="future_parsing_prompt_title">Save for future SMS?</string>
+    <string name="future_parsing_prompt_subtitle">Apply these changes to matching future transactions.</string>
     <string name="future_parsing_prompt_both">When SMS looks like \"%1$s\", use merchant \"%2$s\" and category \"%3$s\".</string>
     <string name="future_parsing_prompt_merchant">When the parsed merchant is \"%1$s\", use \"%2$s\" (category: %3$s). You can also remember similar wordings from this SMS below.</string>
-    <string name="future_parsing_sms_context_label">This transaction’s SMS (truncated)</string>
-    <string name="future_parsing_optional_aliases_intro">Also map these labels to the same display name when they appear as the merchant on new SMS:</string>
+    <string name="future_parsing_sms_context_label">This SMS (truncated)</string>
+    <string name="future_parsing_optional_aliases_intro">Also remember these labels as the same merchant:</string>
     <string name="future_parsing_prompt_category">For \"%1$s\", always use category \"%2$s\" on new SMS transactions.</string>
-    <string name="future_parsing_prompt_confirm">Yes, remember</string>
+    <string name="future_parsing_prompt_confirm">Yes, save</string>
     <string name="future_parsing_prompt_dismiss">Not now</string>
+    <string name="future_parsing_prompt_never">Never ask again</string>
+    <string name="future_parsing_label_category">Category</string>
+    <string name="future_parsing_label_merchant">Merchant</string>
 
     <!-- Quick keyword rules -->
     <string name="quick_keyword_rules_title">Keyword rules</string>

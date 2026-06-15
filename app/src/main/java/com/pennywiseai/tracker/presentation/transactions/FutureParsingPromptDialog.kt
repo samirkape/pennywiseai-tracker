@@ -3,12 +3,20 @@ package com.pennywiseai.tracker.presentation.transactions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BasicAlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -19,15 +27,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.pennywiseai.tracker.R
 import com.pennywiseai.tracker.domain.model.FutureParsingPromptState
 import com.pennywiseai.tracker.ui.theme.Spacing
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FutureParsingPromptDialog(
     prompt: FutureParsingPromptState,
     onConfirm: (extraBodyAliasSources: List<String>) -> Unit,
     onDismiss: () -> Unit,
+    onNever: () -> Unit,
 ) {
     val selectedExtras = remember(
         prompt.rawMerchantName,
@@ -37,103 +48,190 @@ fun FutureParsingPromptDialog(
         mutableStateListOf<String>().apply { addAll(prompt.optionalBodyAliasSources) }
     }
 
-    val message = when {
-        prompt.merchantChanged && prompt.categoryChanged ->
-            stringResource(
-                R.string.future_parsing_prompt_both,
-                prompt.rawMerchantName,
-                prompt.displayMerchantName,
-                prompt.category,
-            )
-        prompt.merchantChanged ->
-            stringResource(
-                R.string.future_parsing_prompt_merchant,
-                prompt.rawMerchantName,
-                prompt.displayMerchantName,
-                prompt.category,
-            )
-        else ->
-            stringResource(
-                R.string.future_parsing_prompt_category,
-                prompt.displayMerchantName,
-                prompt.category,
-            )
-    }
-
-    val scroll = rememberScrollState()
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = stringResource(R.string.future_parsing_prompt_title),
-                fontWeight = FontWeight.SemiBold,
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(scroll),
-                verticalArrangement = Arrangement.spacedBy(Spacing.sm),
-            ) {
+    BasicAlertDialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(Spacing.lg)) {
                 Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = stringResource(R.string.future_parsing_prompt_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
                 )
-                prompt.smsSnippet?.let { snip ->
+
+                Spacer(modifier = Modifier.height(Spacing.sm))
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                ) {
                     Text(
-                        text = stringResource(R.string.future_parsing_sms_context_label),
-                        style = MaterialTheme.typography.labelLarge,
+                        text = stringResource(R.string.future_parsing_prompt_subtitle),
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Text(
-                        text = snip,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+
+                    SaveSummaryCard(prompt)
+
+                    prompt.smsSnippet?.let { snippet ->
+                        SmsSnippetSection(snippet)
+                    }
+
+                    if (prompt.optionalBodyAliasSources.isNotEmpty()) {
+                        AliasCheckboxSection(
+                            aliases = prompt.optionalBodyAliasSources,
+                            selectedAliases = selectedExtras,
+                        )
+                    }
                 }
-                if (prompt.optionalBodyAliasSources.isNotEmpty()) {
-                    Text(
-                        text = stringResource(R.string.future_parsing_optional_aliases_intro),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    for (label in prompt.optionalBodyAliasSources) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Checkbox(
-                                checked = selectedExtras.contains(label),
-                                onCheckedChange = { checked ->
-                                    if (checked) {
-                                        if (!selectedExtras.contains(label)) selectedExtras.add(label)
-                                    } else {
-                                        selectedExtras.remove(label)
-                                    }
-                                },
-                            )
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+
+                Spacer(modifier = Modifier.height(Spacing.md))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(
+                        onClick = onNever,
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) {
+                        Text(stringResource(R.string.future_parsing_prompt_never))
+                    }
+                    Row {
+                        TextButton(onClick = onDismiss) {
+                            Text(stringResource(R.string.future_parsing_prompt_dismiss))
+                        }
+                        Spacer(modifier = Modifier.width(Spacing.xs))
+                        TextButton(onClick = { onConfirm(selectedExtras.toList()) }) {
+                            Text(stringResource(R.string.future_parsing_prompt_confirm))
                         }
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(selectedExtras.toList()) }) {
-                Text(stringResource(R.string.future_parsing_prompt_confirm))
+        }
+    }
+}
+
+@Composable
+private fun SaveSummaryCard(prompt: FutureParsingPromptState) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm + Spacing.xs)) {
+            if (prompt.categoryChanged) {
+                SaveRow(
+                    label = stringResource(R.string.future_parsing_label_category),
+                    value = prompt.category,
+                )
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.future_parsing_prompt_dismiss))
+            if (prompt.categoryChanged && prompt.merchantChanged) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = Spacing.sm),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                )
             }
-        },
-    )
+            if (prompt.merchantChanged) {
+                SaveRow(
+                    label = stringResource(R.string.future_parsing_label_merchant),
+                    value = prompt.displayMerchantName,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SmsSnippetSection(snippet: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+        Text(
+            text = stringResource(R.string.future_parsing_sms_context_label),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Medium,
+        )
+        Surface(
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text = snippet,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(Spacing.sm),
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AliasCheckboxSection(
+    aliases: List<String>,
+    selectedAliases: MutableList<String>,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.none)) {
+        Text(
+            text = stringResource(R.string.future_parsing_optional_aliases_intro),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = Spacing.xs),
+        )
+        for (alias in aliases) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    checked = alias in selectedAliases,
+                    onCheckedChange = { checked ->
+                        if (checked) selectedAliases.add(alias) else selectedAliases.remove(alias)
+                    },
+                )
+                Text(
+                    text = alias,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SaveRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(0.35f),
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(0.65f),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
