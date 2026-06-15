@@ -4,6 +4,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.google.gson.annotations.SerializedName
 import java.math.BigDecimal
 import java.time.LocalDateTime
 
@@ -34,6 +35,7 @@ data class TransactionEntity(
     @ColumnInfo(name = "date_time")
     val dateTime: LocalDateTime,
     
+    @SerializedName(value = "description", alternate = ["notes"])
     @ColumnInfo(name = "description")
     val description: String? = null,
     

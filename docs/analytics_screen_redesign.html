@@ -1,0 +1,593 @@
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); background: transparent; }
+
+  .screen {
+    width: 360px;
+    margin: 0 auto;
+    background: #0E0D0B;
+    border-radius: 28px;
+    overflow: hidden;
+    border: 0.5px solid rgba(255,255,255,0.08);
+    padding-bottom: 72px;
+    position: relative;
+  }
+
+  .status-bar {
+    padding: 12px 20px 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .status-bar span { font-size: 12px; color: rgba(255,255,255,0.5); }
+
+  .top-bar {
+    padding: 4px 20px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .top-bar .title { font-size: 22px; font-weight: 500; color: #F0EDE6; }
+  .top-bar .ai-btn {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.07);
+    border: 0.5px solid rgba(255,255,255,0.12);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .top-bar .ai-btn i { font-size: 16px; color: #C4AA7A; }
+
+  .period-scroll {
+    padding: 0 20px 12px;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+  }
+  .period-scroll::-webkit-scrollbar { display: none; }
+  .period-chip {
+    flex-shrink: 0;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 400;
+    border: 0.5px solid rgba(255,255,255,0.14);
+    color: rgba(255,255,255,0.55);
+    cursor: pointer;
+    white-space: nowrap;
+    background: transparent;
+  }
+  .period-chip.active {
+    background: #C4AA7A;
+    border-color: #C4AA7A;
+    color: #0E0D0B;
+    font-weight: 500;
+  }
+
+  .date-nav {
+    padding: 0 20px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .date-nav .nav-btn {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.05);
+    display: flex; align-items: center; justify-content: center;
+    border: 0.5px solid rgba(255,255,255,0.1);
+    cursor: pointer;
+  }
+  .date-nav .nav-btn i { font-size: 14px; color: rgba(255,255,255,0.6); }
+  .date-nav .date-label { font-size: 14px; color: rgba(255,255,255,0.75); font-weight: 400; }
+
+  .seg-control {
+    margin: 0 20px 20px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    padding: 3px;
+    display: flex;
+    gap: 2px;
+  }
+  .seg-btn {
+    flex: 1;
+    padding: 8px 0;
+    text-align: center;
+    font-size: 13px;
+    color: rgba(255,255,255,0.45);
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 400;
+    transition: none;
+  }
+  .seg-btn.active {
+    background: #1E1D1A;
+    color: #F0EDE6;
+    font-weight: 500;
+    border: 0.5px solid rgba(255,255,255,0.1);
+  }
+
+  .hero-card {
+    margin: 0 20px 16px;
+    background: #1A1916;
+    border-radius: 20px;
+    padding: 20px;
+    border: 0.5px solid rgba(255,255,255,0.08);
+  }
+  .hero-card .card-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.4);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .hero-card .amount-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .hero-card .amount {
+    font-size: 34px;
+    font-weight: 500;
+    color: #F0EDE6;
+    letter-spacing: -0.5px;
+    line-height: 1;
+  }
+  .hero-card .delta-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(61, 90, 74, 0.35);
+    border: 0.5px solid rgba(61, 90, 74, 0.6);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    color: #7DBFA0;
+    margin-bottom: 4px;
+  }
+  .hero-card .delta-badge i { font-size: 13px; }
+  .hero-card .txn-count {
+    font-size: 12px;
+    color: rgba(255,255,255,0.35);
+    margin-top: 6px;
+  }
+  .hero-card .divider {
+    height: 0.5px;
+    background: rgba(255,255,255,0.07);
+    margin: 14px 0;
+  }
+  .breakdown-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+  }
+  .breakdown-item { text-align: center; }
+  .breakdown-item + .breakdown-item {
+    border-left: 0.5px solid rgba(255,255,255,0.07);
+  }
+  .breakdown-item .b-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    margin-bottom: 4px;
+  }
+  .breakdown-item .b-label i { font-size: 12px; }
+  .breakdown-item .b-amount {
+    font-size: 14px;
+    font-weight: 500;
+    color: #F0EDE6;
+  }
+  .breakdown-item .b-txns {
+    font-size: 11px;
+    color: rgba(255,255,255,0.3);
+    margin-top: 2px;
+  }
+
+  .section-header {
+    padding: 0 20px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .section-header .s-title { font-size: 15px; font-weight: 500; color: #F0EDE6; }
+  .section-header .s-action {
+    font-size: 12px;
+    color: #C4AA7A;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+  }
+  .section-header .s-action i { font-size: 13px; }
+
+  .chart-card {
+    margin: 0 20px 20px;
+    background: #1A1916;
+    border-radius: 20px;
+    padding: 16px 16px 10px;
+    border: 0.5px solid rgba(255,255,255,0.08);
+  }
+  .chart-inner { position: relative; height: 110px; width: 100%; }
+  canvas#trend { width: 100%; height: 110px; }
+  .chart-footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    padding: 0 2px;
+  }
+  .chart-footer span { font-size: 10px; color: rgba(255,255,255,0.3); }
+
+  .categories-card {
+    margin: 0 20px 20px;
+    background: #1A1916;
+    border-radius: 20px;
+    padding: 20px;
+    border: 0.5px solid rgba(255,255,255,0.08);
+  }
+  .cat-row { margin-bottom: 14px; }
+  .cat-row:last-child { margin-bottom: 0; }
+  .cat-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .cat-name { font-size: 13px; color: rgba(255,255,255,0.7); display: flex; align-items: center; gap: 6px; }
+  .cat-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .cat-right { display: flex; align-items: center; gap: 8px; }
+  .cat-pct { font-size: 12px; color: rgba(255,255,255,0.35); }
+  .cat-amt { font-size: 13px; font-weight: 500; color: #F0EDE6; }
+  .bar-track {
+    height: 4px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .bar-fill { height: 100%; border-radius: 2px; }
+
+  .merchants-card {
+    margin: 0 20px 16px;
+    background: #1A1916;
+    border-radius: 20px;
+    overflow: hidden;
+    border: 0.5px solid rgba(255,255,255,0.08);
+  }
+  .merchant-row {
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 0.5px solid rgba(255,255,255,0.05);
+  }
+  .merchant-row:last-child { border-bottom: none; }
+  .merchant-avatar {
+    width: 38px; height: 38px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+  .merchant-info { flex: 1; }
+  .merchant-info .m-name { font-size: 13px; font-weight: 500; color: #F0EDE6; }
+  .merchant-info .m-sub { font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 2px; }
+  .merchant-amt { font-size: 14px; font-weight: 500; color: #F0EDE6; }
+
+  .bottom-nav {
+    position: absolute;
+    bottom: 0;
+    left: 0; right: 0;
+    height: 60px;
+    background: #141310;
+    border-top: 0.5px solid rgba(255,255,255,0.07);
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    padding: 0 10px;
+  }
+  .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+  }
+  .nav-item i { font-size: 20px; color: rgba(255,255,255,0.3); }
+  .nav-item span { font-size: 10px; color: rgba(255,255,255,0.3); }
+  .nav-item.active i { color: #C4AA7A; }
+  .nav-item.active span { color: #C4AA7A; }
+
+  .view-all-row {
+    padding: 12px 20px 0;
+    text-align: center;
+  }
+  .view-all-btn {
+    font-size: 13px;
+    color: #C4AA7A;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+  }
+  .view-all-btn i { font-size: 13px; }
+</style>
+
+<div style="padding: 1rem 0; display: flex; justify-content: center; background: transparent;">
+  <div class="screen">
+
+    <div class="status-bar">
+      <span>9:41</span>
+      <span>●●●</span>
+    </div>
+
+    <div class="top-bar">
+      <span class="title">Analytics</span>
+      <div class="ai-btn"><i class="ti ti-sparkles" aria-hidden="true"></i></div>
+    </div>
+
+    <div class="period-scroll">
+      <div class="period-chip active">Pay month</div>
+      <div class="period-chip">Calendar month</div>
+      <div class="period-chip">Last month</div>
+      <div class="period-chip">Custom</div>
+    </div>
+
+    <div class="date-nav">
+      <div class="nav-btn"><i class="ti ti-chevron-left" aria-hidden="true"></i></div>
+      <span class="date-label">25 May – 24 Jun</span>
+      <div class="nav-btn"><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+    </div>
+
+    <div class="seg-control">
+      <div class="seg-btn active">Outflow</div>
+      <div class="seg-btn">Spending</div>
+      <div class="seg-btn">Invested</div>
+    </div>
+
+    <div class="hero-card">
+      <div class="card-label">Total outflow</div>
+      <div class="amount-row">
+        <div class="amount">₹76,092</div>
+        <div class="delta-badge">
+          <i class="ti ti-trending-down" aria-hidden="true"></i>
+          +12% vs last
+        </div>
+      </div>
+      <div class="txn-count">43 transactions</div>
+      <div class="divider"></div>
+      <div class="breakdown-row">
+        <div class="breakdown-item">
+          <div class="b-label"><i class="ti ti-credit-card" aria-hidden="true"></i> Card</div>
+          <div class="b-amount">₹1,592</div>
+          <div class="b-txns">4 txns</div>
+        </div>
+        <div class="breakdown-item">
+          <div class="b-label"><i class="ti ti-building-bank" aria-hidden="true"></i> Bank</div>
+          <div class="b-amount">₹18,448</div>
+          <div class="b-txns">30 txns</div>
+        </div>
+        <div class="breakdown-item">
+          <div class="b-label"><i class="ti ti-wallet" aria-hidden="true"></i> Cash</div>
+          <div class="b-amount">₹3,053</div>
+          <div class="b-txns">3 txns</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-header">
+      <span class="s-title">Balance trend</span>
+      <span class="s-action">Line <i class="ti ti-chevron-down" aria-hidden="true"></i></span>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-inner">
+        <canvas id="trend"></canvas>
+      </div>
+      <div class="chart-footer">
+        <span>25 May</span>
+        <span>01 Jun</span>
+        <span>08 Jun</span>
+        <span>Today</span>
+      </div>
+    </div>
+
+    <div class="section-header">
+      <span class="s-title">Spending by category</span>
+      <span class="s-action">View all <i class="ti ti-arrow-right" aria-hidden="true"></i></span>
+    </div>
+
+    <div class="categories-card">
+      <div class="cat-row">
+        <div class="cat-meta">
+          <div class="cat-name"><div class="cat-dot" style="background:#4CAF82;"></div>Bills & utilities</div>
+          <div class="cat-right"><span class="cat-pct">43%</span><span class="cat-amt">₹10,000</span></div>
+        </div>
+        <div class="bar-track"><div class="bar-fill" style="width:100%;background:#4CAF82;"></div></div>
+      </div>
+      <div class="cat-row">
+        <div class="cat-meta">
+          <div class="cat-name"><div class="cat-dot" style="background:#E5A33A;"></div>Shopping</div>
+          <div class="cat-right"><span class="cat-pct">24%</span><span class="cat-amt">₹5,765</span></div>
+        </div>
+        <div class="bar-track"><div class="bar-fill" style="width:57%;background:#E5A33A;"></div></div>
+      </div>
+      <div class="cat-row">
+        <div class="cat-meta">
+          <div class="cat-name"><div class="cat-dot" style="background:#5E7A94;"></div>Transportation</div>
+          <div class="cat-right"><span class="cat-pct">8%</span><span class="cat-amt">₹2,000</span></div>
+        </div>
+        <div class="bar-track"><div class="bar-fill" style="width:20%;background:#5E7A94;"></div></div>
+      </div>
+      <div class="cat-row">
+        <div class="cat-meta">
+          <div class="cat-name"><div class="cat-dot" style="background:#E8714A;"></div>Food & dining</div>
+          <div class="cat-right"><span class="cat-pct">7%</span><span class="cat-amt">₹1,746</span></div>
+        </div>
+        <div class="bar-track"><div class="bar-fill" style="width:17%;background:#E8714A;"></div></div>
+      </div>
+      <div class="cat-row">
+        <div class="cat-meta">
+          <div class="cat-name"><div class="cat-dot" style="background:#4EC9C9;"></div>Healthcare</div>
+          <div class="cat-right"><span class="cat-pct">7%</span><span class="cat-amt">₹1,705</span></div>
+        </div>
+        <div class="bar-track"><div class="bar-fill" style="width:17%;background:#4EC9C9;"></div></div>
+      </div>
+      <div class="view-all-row">
+        <div class="view-all-btn">5 more categories <i class="ti ti-chevron-down"></i></div>
+      </div>
+    </div>
+
+    <div class="section-header">
+      <span class="s-title">Top merchants</span>
+      <span class="s-action">View all <i class="ti ti-arrow-right" aria-hidden="true"></i></span>
+    </div>
+
+    <div class="merchants-card">
+      <div class="merchant-row">
+        <div class="merchant-avatar" style="background:rgba(196,170,122,0.15);color:#C4AA7A;">NK</div>
+        <div class="merchant-info">
+          <div class="m-name">Nitin Deoram Kape</div>
+          <div class="m-sub">1 txn · Subscription</div>
+        </div>
+        <div class="merchant-amt">₹10,000</div>
+      </div>
+      <div class="merchant-row">
+        <div class="merchant-avatar" style="background:rgba(94,122,148,0.18);color:#8DADC8;">OG</div>
+        <div class="merchant-info">
+          <div class="m-name">OM Gurudev Petroleum</div>
+          <div class="m-sub">1 txn · Transportation</div>
+        </div>
+        <div class="merchant-amt">₹2,000</div>
+      </div>
+      <div class="merchant-row">
+        <div class="merchant-avatar" style="background:rgba(76,207,130,0.12);color:#6DCFA0;">PT</div>
+        <div class="merchant-info">
+          <div class="m-name">Payal Tai</div>
+          <div class="m-sub">1 txn · Uncategorised</div>
+        </div>
+        <div class="merchant-amt">₹1,950</div>
+      </div>
+      <div class="view-all-row" style="padding: 12px 0;">
+        <div class="view-all-btn">7 more merchants <i class="ti ti-chevron-down"></i></div>
+      </div>
+    </div>
+
+    <div class="bottom-nav">
+      <div class="nav-item">
+        <i class="ti ti-home" aria-hidden="true"></i>
+        <span>Home</span>
+      </div>
+      <div class="nav-item">
+        <i class="ti ti-credit-card" aria-hidden="true"></i>
+        <span>Wallet</span>
+      </div>
+      <div class="nav-item active">
+        <i class="ti ti-chart-bar" aria-hidden="true"></i>
+        <span>Analytics</span>
+      </div>
+      <div class="nav-item">
+        <i class="ti ti-settings" aria-hidden="true"></i>
+        <span>Settings</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('trend');
+if (canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth || 296;
+  const H = 110;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const pts = [
+    [0, 18], [0.12, 16], [0.3, 15], [0.45, 16],
+    [0.58, 38], [0.7, 60], [0.82, 80], [0.92, 95], [1.0, 100]
+  ];
+
+  const pad = { l: 6, r: 6, t: 14, b: 14 };
+  const cw = W - pad.l - pad.r;
+  const ch = H - pad.t - pad.b;
+
+  function px(t, v) {
+    return [pad.l + t * cw, pad.t + (v / 100) * ch];
+  }
+
+  ctx.beginPath();
+  let first = true;
+  for (const [t, v] of pts) {
+    const [x, y] = px(t, v);
+    if (first) { ctx.moveTo(x, y); first = false; }
+    else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = '#4EC9C9';
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  ctx.beginPath();
+  first = true;
+  for (const [t, v] of pts) {
+    const [x, y] = px(t, v);
+    if (first) { ctx.moveTo(x, y); first = false; }
+    else ctx.lineTo(x, y);
+  }
+  const [lx, ly] = px(1, 100);
+  const [fx, fy] = px(0, 18);
+  ctx.lineTo(lx, H - pad.b);
+  ctx.lineTo(fx, H - pad.b);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, pad.t, 0, H - pad.b);
+  grad.addColorStop(0, 'rgba(78,201,201,0.18)');
+  grad.addColorStop(1, 'rgba(78,201,201,0)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  const [ax, ay] = px(0.58, 38);
+  ctx.beginPath();
+  ctx.arc(ax, ay, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#4EC9C9';
+  ctx.fill();
+  ctx.strokeStyle = '#0E0D0B';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.font = '10px var(--font-sans, sans-serif)';
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.textAlign = 'center';
+  ctx.fillText('Large txn', ax, ay - 10);
+
+  const [ex, ey] = px(0, 18);
+  ctx.beginPath();
+  ctx.arc(ex, ey, 3.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#4EC9C9';
+  ctx.fill();
+  ctx.strokeStyle = '#0E0D0B';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  const [endx, endy] = px(1, 100);
+  ctx.beginPath();
+  ctx.arc(endx, endy, 3.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#4EC9C9';
+  ctx.fill();
+  ctx.strokeStyle = '#0E0D0B';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+</script>

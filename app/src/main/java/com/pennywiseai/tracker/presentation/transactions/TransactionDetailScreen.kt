@@ -2271,9 +2271,13 @@ private fun EditableExtractedInfoCard(
             availableCategories = categories.map { it.name },
             onSplitsChanged = { viewModel.updateSplits(it) },
             onRemoveSplits = { viewModel.removeSplits() },
+            onCreateCategory = { name, color, isIncome, icon ->
+                viewModel.createAndSelectSplitCategory(name, color, isIncome, icon)
+            },
             modifier = Modifier.padding(horizontal = 0.dp)
         )
     }
+
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -1,0 +1,155 @@
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  .wrap { display: flex; flex-direction: column; gap: 32px; padding: 1rem 0; align-items: center; background: transparent; }
+  .phone-frame { width: 360px; background: #0E0D0B; border-radius: 28px; border: 0.5px solid rgba(255,255,255,0.08); overflow: hidden; }
+  .phone-inner { padding: 20px 20px 24px; }
+  .seg-control { background: rgba(255,255,255,0.05); border-radius: 12px; padding: 3px; display: flex; gap: 2px; margin-bottom: 20px; }
+  .seg-btn { flex: 1; padding: 8px 0; text-align: center; font-size: 13px; color: rgba(255,255,255,0.4); border-radius: 10px; font-weight: 400; }
+  .seg-btn.active { background: #1E1D1A; color: #F0EDE6; font-weight: 500; border: 0.5px solid rgba(255,255,255,0.1); }
+
+  .tab-label { font-size: 11px; color: rgba(255,255,255,0.35); letter-spacing: 0.09em; text-transform: uppercase; font-weight: 500; margin-bottom: 6px; }
+
+  .hero-card { background: #1A1916; border-radius: 20px; padding: 20px; border: 0.5px solid rgba(255,255,255,0.08); }
+  .card-label { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; color: rgba(255,255,255,0.4); text-transform: uppercase; margin-bottom: 10px; }
+  .amount-row { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 4px; }
+  .amount { font-size: 34px; font-weight: 500; color: #F0EDE6; letter-spacing: -0.5px; line-height: 1; }
+  .txn-count { font-size: 12px; color: rgba(255,255,255,0.35); margin-top: 6px; }
+  .divider { height: 0.5px; background: rgba(255,255,255,0.07); margin: 14px 0; }
+
+  .delta-badge { display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; font-size: 12px; margin-bottom: 4px; }
+  .delta-up { background: rgba(232,113,74,0.15); border: 0.5px solid rgba(232,113,74,0.35); color: #E8AB8A; }
+  .delta-down { background: rgba(61,90,74,0.35); border: 0.5px solid rgba(61,90,74,0.6); color: #7DBFA0; }
+  .delta-badge i { font-size: 13px; }
+
+  .breakdown-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
+  .breakdown-item { text-align: center; }
+  .breakdown-item + .breakdown-item { border-left: 0.5px solid rgba(255,255,255,0.07); }
+  .b-label { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 11px; color: rgba(255,255,255,0.35); margin-bottom: 4px; }
+  .b-label i { font-size: 12px; }
+  .b-amount { font-size: 14px; font-weight: 500; color: #F0EDE6; }
+  .b-txns { font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 2px; }
+
+  .stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat-box { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 12px 14px; border: 0.5px solid rgba(255,255,255,0.06); }
+  .stat-box .s-label { font-size: 11px; color: rgba(255,255,255,0.35); margin-bottom: 6px; }
+  .stat-box .s-value { font-size: 18px; font-weight: 500; color: #F0EDE6; }
+  .stat-box .s-sub { font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 3px; }
+
+  .merchant-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 0.5px solid rgba(255,255,255,0.05); }
+  .merchant-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .m-avatar { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; flex-shrink: 0; }
+  .m-info { flex: 1; }
+  .m-name { font-size: 13px; font-weight: 500; color: #F0EDE6; }
+  .m-sub { font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 2px; }
+  .m-amt { font-size: 13px; font-weight: 500; color: #F0EDE6; }
+
+  .invested-badge { display: inline-flex; align-items: center; gap: 5px; background: rgba(61,90,74,0.3); border: 0.5px solid rgba(61,90,74,0.5); padding: 5px 12px; border-radius: 20px; font-size: 12px; color: #7DBFA0; margin-top: 10px; cursor: pointer; }
+  .invested-badge i { font-size: 13px; }
+
+  .cash-note { font-size: 11px; color: rgba(255,255,255,0.25); margin-top: 10px; display: flex; align-items: center; gap: 5px; }
+  .cash-note i { font-size: 12px; color: rgba(255,255,255,0.2); }
+
+  .section-label { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; color: rgba(255,255,255,0.3); text-transform: uppercase; margin: 16px 0 10px; }
+</style>
+
+<div class="wrap">
+
+  <div class="phone-frame">
+    <div class="phone-inner">
+      <div class="seg-control">
+        <div class="seg-btn">Outflow</div>
+        <div class="seg-btn active">Spending</div>
+        <div class="seg-btn">Invested</div>
+      </div>
+
+      <div class="hero-card">
+        <div class="card-label">Spending</div>
+        <div class="amount-row">
+          <div class="amount">₹23,092</div>
+          <div class="delta-badge delta-up">
+            <i class="ti ti-trending-up" aria-hidden="true"></i>
+            +8% vs last
+          </div>
+        </div>
+        <div class="txn-count">37 transactions</div>
+        <div class="divider"></div>
+        <div class="breakdown-row">
+          <div class="breakdown-item">
+            <div class="b-label"><i class="ti ti-credit-card" aria-hidden="true"></i> Card</div>
+            <div class="b-amount">₹1,592</div>
+            <div class="b-txns">4 txns</div>
+          </div>
+          <div class="breakdown-item">
+            <div class="b-label"><i class="ti ti-building-bank" aria-hidden="true"></i> Bank</div>
+            <div class="b-amount">₹18,448</div>
+            <div class="b-txns">30 txns</div>
+          </div>
+          <div class="breakdown-item">
+            <div class="b-label"><i class="ti ti-wallet" aria-hidden="true"></i> Cash</div>
+            <div class="b-amount">₹3,053</div>
+            <div class="b-txns">3 txns</div>
+          </div>
+        </div>
+        <div class="cash-note">
+          <i class="ti ti-info-circle" aria-hidden="true"></i>
+          Cash is 13% of spend, excluding investments
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="phone-frame">
+    <div class="phone-inner">
+      <div class="seg-control">
+        <div class="seg-btn">Outflow</div>
+        <div class="seg-btn">Spending</div>
+        <div class="seg-btn active">Invested</div>
+      </div>
+
+      <div class="hero-card">
+        <div class="card-label">Invested</div>
+        <div class="amount-row">
+          <div class="amount">₹53,000</div>
+          <div class="delta-badge delta-down">
+            <i class="ti ti-trending-up" aria-hidden="true"></i>
+            +51% vs last
+          </div>
+        </div>
+        <div class="txn-count">6 transactions · via Groww</div>
+        <div class="divider"></div>
+        <div class="stat-row">
+          <div class="stat-box">
+            <div class="s-label">Largest single</div>
+            <div class="s-value">₹20,000</div>
+            <div class="s-sub">1 transaction</div>
+          </div>
+          <div class="stat-box">
+            <div class="s-label">Average per txn</div>
+            <div class="s-value">₹8,833</div>
+            <div class="s-sub">across 6 txns</div>
+          </div>
+        </div>
+        <div class="invested-badge">
+          <i class="ti ti-chart-line" aria-hidden="true"></i>
+          View investment breakdown
+        </div>
+      </div>
+
+      <div class="section-label">Top investment merchant</div>
+      <div class="merchant-row" style="padding-top: 0;">
+        <div class="m-avatar" style="background: rgba(78,201,201,0.12); color: #4EC9C9;">
+          <i class="ti ti-chart-pie" style="font-size: 16px;" aria-hidden="true"></i>
+        </div>
+        <div class="m-info">
+          <div class="m-name">Groww</div>
+          <div class="m-sub">6 transactions · Mutual funds</div>
+        </div>
+        <div class="m-amt">₹53,000</div>
+      </div>
+
+    </div>
+  </div>
+
+</div>

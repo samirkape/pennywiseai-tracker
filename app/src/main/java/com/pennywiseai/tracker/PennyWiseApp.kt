@@ -24,6 +24,7 @@ import com.pennywiseai.tracker.ui.theme.PennyWiseTheme
 import com.pennywiseai.tracker.ui.viewmodel.AppLockViewModel
 import com.pennywiseai.tracker.ui.viewmodel.ThemeViewModel
 import com.pennywiseai.tracker.widget.RecentTransactionsWidgetUpdateWorker
+import com.pennywiseai.tracker.worker.InsightsWorker
 
 @Composable
 fun PennyWiseApp(
@@ -77,7 +78,7 @@ fun PennyWiseApp(
 
     // Set correct start destination based on loaded preferences
     val startDestination: Any = remember(themeUiState.hasCompletedOnboarding) {
-        if (themeUiState.hasCompletedOnboarding) Home else OnBoarding
+        if (themeUiState.hasCompletedOnboarding) Home() else OnBoarding
     }
 
     // Observe lock state changes and navigate to lock screen if needed
@@ -114,9 +115,11 @@ fun PennyWiseApp(
         }
     }
 
-    // Keep widgets current when app launches (covers upgrades/installs with existing widgets)
+    // Keep widgets and insights current when app launches
     LaunchedEffect(Unit) {
         RecentTransactionsWidgetUpdateWorker.enqueueOneShot(context.applicationContext)
+        InsightsWorker.enqueueOneShot(context.applicationContext)
+        InsightsWorker.enqueuePeriodic(context.applicationContext)
     }
 
     PennyWiseTheme(

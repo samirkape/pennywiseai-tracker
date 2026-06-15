@@ -6,17 +6,19 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Receipt
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -130,6 +132,8 @@ fun AnalyticsSummaryTilesRow(
                             cashAmount = cashAmount,
                             cashTxns = cashTxns,
                             footerNote = footerNote,
+                            deltaPercent = breakdown.deltaPercent,
+                            totalTransactionCount = breakdown.totalTransactionCount,
                         ),
                         onClick = onSpendingBreakdownClick,
                     ),
@@ -140,6 +144,7 @@ fun AnalyticsSummaryTilesRow(
         investmentInsights?.let { insights ->
             val delta = insights.deltaPercent
             val hasRecurring = insights.recurringCount > 0
+            val topMerchantName = insights.topMerchants.firstOrNull()?.name
             add(
                 AnalyticsSummaryTileEntry.Metric(
                     key = "investments",
@@ -148,24 +153,24 @@ fun AnalyticsSummaryTilesRow(
                         primaryValue = CurrencyFormatter.formatCurrency(insights.totalInvested, insights.currency),
                         transactionCount = insights.transactionCount,
                         countBadgeIcon = Icons.AutoMirrored.Filled.ShowChart,
-                        bottomLeftLabel = if (hasRecurring) "RECURRING" else "LARGEST",
+                        bottomLeftLabel = if (hasRecurring) "Recurring SIPs" else "Largest single",
                         bottomLeftValue = if (hasRecurring) {
                             "${insights.recurringCount} SIP${if (insights.recurringCount != 1) "s" else ""}"
                         } else {
                             CurrencyFormatter.formatCurrency(insights.largestInvestment, insights.currency)
                         },
-                        bottomRightCaption = when {
-                            delta != null -> {
-                                val sign = if (delta >= 0f) "+" else ""
-                                "$sign${delta.toInt()}% vs last period"
-                            }
-                            insights.topCategory != null && insights.topCategoryPercentage > 0 ->
-                                "${insights.topCategoryPercentage.toInt()}% of invested"
-                            else -> null
-                        },
-                        bottomRightPill = insights.topCategory?.takeIf {
-                            insights.topCategoryPercentage > 0
-                        }?.let { AnalyticsTilePill.Category(it) },
+                        bottomLeftSuffix = if (!hasRecurring) "1 transaction" else null,
+                        bottomRightCaption = "Average per txn",
+                        bottomRightPill = if (insights.transactionCount > 0) {
+                            val avg = insights.totalInvested.divide(
+                                java.math.BigDecimal(insights.transactionCount), 2, java.math.RoundingMode.HALF_UP
+                            )
+                            AnalyticsTilePill.Labeled(
+                                text = CurrencyFormatter.formatCurrency(avg, insights.currency),
+                            )
+                        } else null,
+                        deltaPercent = delta,
+                        txnCountSuffix = topMerchantName?.let { "· via $it" },
                     ),
                     onClick = onInvestmentClick,
                 ),
@@ -191,31 +196,51 @@ fun AnalyticsSummaryTilesRow(
 
     Column(modifier = modifier.fillMaxWidth()) {
         if (tiles.size > 1) {
-            LazyRow(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = Spacing.xs),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer,
             ) {
-                itemsIndexed(tiles, key = { _, item -> item.key }) { index, item ->
-                    FilterChip(
-                        selected = pagerState.currentPage == index,
-                        onClick = {
-                            if (pagerState.currentPage != index) {
-                                scope.launch { pagerState.animateScrollToPage(index) }
-                            }
-                        },
-                        label = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    tiles.forEachIndexed { index, item ->
+                        val selected = pagerState.currentPage == index
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 34.dp)
+                                .background(
+                                    color = if (selected) {
+                                        MaterialTheme.colorScheme.surfaceContainerHigh
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceContainer
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                )
+                                .clickable {
+                                    if (pagerState.currentPage != index) {
+                                        scope.launch { pagerState.animateScrollToPage(index) }
+                                    }
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
                             Text(
                                 text = item.tabLabel(),
                                 style = MaterialTheme.typography.labelMedium,
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.onSurface
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
                             )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        ),
-                    )
+                        }
+                    }
                 }
             }
         }

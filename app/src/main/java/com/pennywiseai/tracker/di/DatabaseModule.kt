@@ -26,6 +26,7 @@ import com.pennywiseai.tracker.data.database.dao.TransactionDao
 import com.pennywiseai.tracker.data.database.dao.TransactionReceiptDao
 import com.pennywiseai.tracker.data.database.dao.TransactionSplitDao
 import com.pennywiseai.tracker.data.database.dao.UnrecognizedSmsDao
+import com.pennywiseai.tracker.data.database.dao.InsightsCacheDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -300,6 +301,12 @@ object DatabaseModule {
     @Singleton
     fun provideTransactionReceiptDao(database: PennyWiseDatabase): TransactionReceiptDao {
         return database.transactionReceiptDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideInsightsCacheDao(database: PennyWiseDatabase): InsightsCacheDao {
+        return database.insightsCacheDao()
     }
 }
 

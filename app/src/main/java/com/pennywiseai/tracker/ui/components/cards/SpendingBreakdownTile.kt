@@ -1,7 +1,14 @@
 package com.pennywiseai.tracker.ui.components.cards
 
+// HTML reference: spending_invested_tiles.html  .hero-card  "Spending" tab
+// .card-label "SPENDING"
+// .amount-row : amount + delta-badge
+// .txn-count "37 transactions"
+// .divider
+// .breakdown-row  Card | Bank | Cash  (icon+label / amount / txns)
+// .cash-note  ℹ info text
+
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,24 +17,29 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.CreditCard
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Wallet
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 data class SpendingBreakdownData(
     val totalAmount: String,
@@ -39,7 +51,9 @@ data class SpendingBreakdownData(
     val bankTxns: Int,
     val cashAmount: String,
     val cashTxns: Int,
-    val footerNote: String
+    val footerNote: String,
+    val deltaPercent: Float? = null,
+    val totalTransactionCount: Int = 0,
 )
 
 @Composable
@@ -48,240 +62,150 @@ fun SpendingBreakdownTile(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(
-                color = Color(0xFF1C1C1E),
-                shape = RoundedCornerShape(20.dp)
-            )
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(onClick = onClick)
-                } else {
-                    Modifier
-                }
-            )
-            .padding(18.dp)
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
-        // Header Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+
+            // .card-label
             Text(
                 text = "SPENDING",
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF8E8E93),
-                letterSpacing = (0.08f).sp
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // .amount-row : amount + delta-badge
             Row(
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom,
             ) {
-                // Badge 1: Credit card
-                Badge(
-                    icon = Icons.Outlined.CreditCard,
-                    text = "${data.cardTxnCount} TXNS"
+                val isLong = data.totalAmount.length > 14
+                Text(
+                    text = data.totalAmount,
+                    style = if (isLong) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.displaySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
-                
-                // Badge 2: Cash
-                Badge(
+                val delta = data.deltaPercent
+                if (delta != null) {
+                    val isUp = delta >= 0f
+                    val bg = if (!isUp) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
+                    val fg = if (!isUp) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Row(
+                        modifier = Modifier.background(bg, RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Icon(
+                            imageVector = if (isUp) Icons.AutoMirrored.Filled.TrendingUp else Icons.AutoMirrored.Filled.TrendingDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(13.dp),
+                            tint = fg,
+                        )
+                        Text(
+                            text = "${if (isUp) "+" else ""}${delta.toInt()}% vs last",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = fg,
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // .txn-count
+            if (data.totalTransactionCount > 0) {
+                Text(
+                    text = "${data.totalTransactionCount} transaction${if (data.totalTransactionCount != 1) "s" else ""}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+            } else {
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            // .divider
+            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // .breakdown-row  Card | Bank | Cash
+            Row(modifier = Modifier.fillMaxWidth()) {
+                BreakdownCol(
+                    icon = Icons.Outlined.CreditCard,
+                    label = "Card",
+                    amount = data.creditCardAmount,
+                    txns = "${data.creditCardTxns} txns",
+                    modifier = Modifier.weight(1f),
+                )
+                VerticalDivider(modifier = Modifier.height(48.dp).padding(horizontal = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                BreakdownCol(
+                    icon = Icons.Outlined.AccountBalance,
+                    label = "Bank",
+                    amount = data.bankAmount,
+                    txns = "${data.bankTxns} txns",
+                    modifier = Modifier.weight(1f),
+                )
+                VerticalDivider(modifier = Modifier.height(48.dp).padding(horizontal = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                BreakdownCol(
                     icon = Icons.Outlined.Wallet,
-                    text = "${data.cashTxnCount} TXNS"
+                    label = "Cash",
+                    amount = data.cashAmount,
+                    txns = "${data.cashTxns} txns",
+                    modifier = Modifier.weight(1f),
                 )
             }
+
+            // .cash-note  ℹ
+            if (data.footerNote.isNotBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(12.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    )
+                    Text(
+                        text = data.footerNote,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
-        
-        // Total Amount
-        Text(
-            text = data.totalAmount,
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFFFFFFFF),
-            letterSpacing = (-0.5f).sp,
-            modifier = Modifier.padding(top = 12.dp, bottom = 14.dp)
-        )
-        
-        // Divider
-        Spacer(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(Color(0xFF2C2C2E))
-        )
-        
-        // Breakdown Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            // Column 1: Credit card
-            BreakdownColumn(
-                icon = Icons.Outlined.CreditCard,
-                label = "Credit card",
-                amount = data.creditCardAmount,
-                subText = "${data.creditCardTxns} txns",
-                modifier = Modifier.weight(1f)
-            )
-            
-            // Vertical Divider
-            Spacer(
-                modifier = Modifier
-                    .width(1.dp)
-                    .fillMaxHeight()
-                    .background(Color(0xFF2C2C2E))
-            )
-            
-            // Column 2: Bank account
-            BreakdownColumn(
-                icon = Icons.Outlined.AccountBalance,
-                label = "Bank account",
-                amount = data.bankAmount,
-                subText = "${data.bankTxns} txns",
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 12.dp)
-            )
-            
-            // Vertical Divider
-            Spacer(
-                modifier = Modifier
-                    .width(1.dp)
-                    .fillMaxHeight()
-                    .background(Color(0xFF2C2C2E))
-            )
-            
-            // Column 3: Cash
-            BreakdownColumn(
-                icon = Icons.Outlined.Wallet,
-                label = "Cash",
-                amount = data.cashAmount,
-                subText = "${data.cashTxns} txns",
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 12.dp)
-            )
-        }
-        
-        // Footer
-        Text(
-            text = data.footerNote,
-            fontSize = 11.sp,
-            color = Color(0xFF636366),
-            modifier = Modifier.padding(top = 12.dp)
-        )
     }
 }
 
 @Composable
-private fun Badge(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    text: String
-) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .background(
-                color = Color(0xFF2C2C2E),
-                shape = RoundedCornerShape(8.dp)
-            )
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = Color(0xFFFFFFFF).copy(alpha = 0.75f),
-            modifier = Modifier
-                .width(12.dp)
-                .height(12.dp)
-        )
-        Text(
-            text = text,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            color = Color(0xFFFFFFFF)
-        )
-    }
-}
-
-@Composable
-private fun BreakdownColumn(
+private fun BreakdownCol(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     amount: String,
-    subText: String,
-    modifier: Modifier = Modifier
+    txns: String,
+    modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        // Label row
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = Color(0xFF8E8E93).copy(alpha = 0.7f),
-                modifier = Modifier
-                    .width(11.dp)
-                    .height(11.dp)
-            )
-            Text(
-                text = label,
-                fontSize = 10.5.sp,
-                color = Color(0xFF8E8E93),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(11.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        
-        // Amount
-        Text(
-            text = amount,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFFFFFFFF),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        
-        // Sub-text
-        Text(
-            text = subText,
-            fontSize = 10.5.sp,
-            color = Color(0xFF636366),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Text(text = amount, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(text = txns, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
-@Preview(
-    backgroundColor = 0xFF000000,
-    showBackground = true
-)
-@Composable
-private fun SpendingBreakdownTilePreview() {
-    SpendingBreakdownTile(
-        data = SpendingBreakdownData(
-            totalAmount = "₹22,542.21",
-            cardTxnCount = 29,
-            cashTxnCount = 3,
-            creditCardAmount = "₹1,591.69",
-            creditCardTxns = 4,
-            bankAmount = "₹17,647.52",
-            bankTxns = 25,
-            cashAmount = "₹3,303",
-            cashTxns = 3,
-            footerNote = "Cash is 14% of spend · excl. investments"
-        )
-    )
-}

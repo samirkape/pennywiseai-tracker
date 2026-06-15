@@ -42,7 +42,7 @@ fun PennyWiseNavHost(
     navController: NavHostController,
     modifier: Modifier = Modifier,
     themeViewModel: ThemeViewModel = hiltViewModel(),
-    startDestination: Any = Home,
+    startDestination: Any = Home(),
     onEditComplete: () -> Unit = {}
 ) {
     // Use a stable start destination
@@ -67,7 +67,7 @@ fun PennyWiseNavHost(
         ) {
             com.pennywiseai.tracker.ui.screens.AppLockScreen(
                 onUnlocked = {
-                    navController.navigate(Home) {
+                    navController.navigate(Home()) {
                         launchSingleTop = true
                         popUpTo(AppLock) { inclusive = true }
                     }
@@ -82,7 +82,7 @@ fun PennyWiseNavHost(
         ) {
             com.pennywiseai.tracker.ui.screens.onboarding.OnBoardingScreen(
                 onOnboardingComplete = {
-                    navController.navigate(Home) {
+                    navController.navigate(Home()) {
                         launchSingleTop = true
                         popUpTo(OnBoarding) { inclusive = true }
                     }
@@ -94,10 +94,21 @@ fun PennyWiseNavHost(
             exitTransition = { fadeOut() },
             popEnterTransition = { fadeIn() },
             popExitTransition = { fadeOut() }
-        ) {
+        ) { backStackEntry ->
+            val homeArgs = backStackEntry.toRoute<Home>()
             CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this@composable) {
                 MainScreen(
-                    rootNavController = navController
+                    rootNavController = navController,
+                    initialCategory = homeArgs.category,
+                    initialMerchant = homeArgs.merchant,
+                    initialPeriod = homeArgs.period,
+                    initialCurrency = homeArgs.currency,
+                    initialTransactionType = homeArgs.transactionType,
+                    initialStartDateEpochDay = homeArgs.startDateEpochDay,
+                    initialEndDateEpochDay = homeArgs.endDateEpochDay,
+                    initialPaymentMode = homeArgs.paymentMode,
+                    initialBankName = homeArgs.bankName,
+                    initialAccountLast4 = homeArgs.accountLast4
                 )
             }
         }
@@ -559,6 +570,106 @@ fun PennyWiseNavHost(
                 onNavigateToSettings = {
                     navController.navigate(Settings) { launchSingleTop = true }
                 }
+            )
+        }
+
+        composable<Insights>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+        ) {
+            com.pennywiseai.tracker.ui.screens.insights.InsightsScreen(
+                onBack = { navController.safePopBackStack() },
+                onNavigateToBehavioralStats = {
+                    navController.navigate(BehavioralStats) { launchSingleTop = true }
+                },
+                onNavigateToQuickCategorize = {
+                    navController.navigate(QuickCategorize) { launchSingleTop = true }
+                },
+                onNavigateToTransactions = { category, merchant, period, currency, transactionType, startDateEpoch, endDateEpoch, paymentMode, bankName, accountLast4 ->
+                    navController.navigate(
+                        Home(
+                            category = category,
+                            merchant = merchant,
+                            period = period,
+                            currency = currency,
+                            transactionType = transactionType,
+                            startDateEpochDay = startDateEpoch,
+                            endDateEpochDay = endDateEpoch,
+                            paymentMode = paymentMode,
+                            bankName = bankName,
+                            accountLast4 = accountLast4
+                        )
+                    ) {
+                        launchSingleTop = true
+                        popUpTo(Home()) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable<BehavioralStats>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+        ) {
+            com.pennywiseai.tracker.ui.screens.behavioral.BehavioralStatsScreen(
+                onNavigateBack = { navController.safePopBackStack() },
+                onNavigateToTransaction = { transactionId ->
+                    navController.navigate(TransactionDetail(transactionId)) { launchSingleTop = true }
+                },
+                onNavigateToTransactionsMultiCategory = { categories, period, currency, startDateEpoch, endDateEpoch ->
+                    navController.navigate(
+                        TransactionsByCategories(
+                            categories = categories,
+                            period = period,
+                            currency = currency,
+                            startDateEpochDay = startDateEpoch,
+                            endDateEpochDay = endDateEpoch
+                        )
+                    ) {
+                        launchSingleTop = true
+                    }
+                },
+            )
+        }
+
+        composable<TransactionsByCategories>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+        ) { backStackEntry ->
+            val args = backStackEntry.toRoute<TransactionsByCategories>()
+            com.pennywiseai.tracker.presentation.transactions.TransactionsScreen(
+                initialCategories = args.categories,
+                initialPeriod = args.period,
+                initialCurrency = args.currency,
+                initialPeriodStartEpoch = args.startDateEpochDay,
+                initialPeriodEndEpoch = args.endDateEpochDay,
+                onNavigateBack = { navController.safePopBackStack() },
+                onTransactionClick = { transactionId ->
+                    navController.navigate(TransactionDetail(transactionId)) { launchSingleTop = true }
+                },
+                onAddTransactionClick = {
+                    navController.navigate(AddTransaction()) { launchSingleTop = true }
+                },
+                onNavigateToSettings = {
+                    navController.navigate(Settings) { launchSingleTop = true }
+                }
+            )
+        }
+
+        composable<QuickCategorize>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+        ) {
+            com.pennywiseai.tracker.ui.screens.insights.QuickCategorizeScreen(
+                onBack = { navController.safePopBackStack() }
             )
         }
 

@@ -13,6 +13,7 @@ import com.pennywiseai.tracker.data.database.entity.TransactionSplitEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionType
 import com.pennywiseai.tracker.data.database.entity.TransactionWithSplits
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -592,6 +593,17 @@ class TransactionRepository @Inject constructor(
         }
     }
 
+    fun getUncategorizedTransactionSummary(): Flow<UncategorizedTransactionSummary> =
+        combine(
+            transactionDao.getUncategorizedTransactionCount(),
+            transactionDao.getTrackedTransactionCount(),
+        ) { uncategorizedCount, totalCount ->
+            UncategorizedTransactionSummary(
+                uncategorizedCount = uncategorizedCount,
+                totalCount = totalCount,
+            )
+        }
+
     // ========== Transaction Split Methods ==========
 
     /**
@@ -736,3 +748,8 @@ class TransactionRepository @Inject constructor(
     suspend fun updateTransferKind(id: Long, transferKind: String) =
         transactionDao.updateTransferKind(id, transferKind, LocalDateTime.now())
 }
+
+data class UncategorizedTransactionSummary(
+    val uncategorizedCount: Int,
+    val totalCount: Int,
+)

@@ -217,26 +217,32 @@ private fun BreakdownMetricSection(
         }
         "spending" -> {
             val showOutflowTile = uiState.periodOutflow != null
+            val transactionCount = uiState.transactions.size
+            val averageAmount = if (transactionCount > 0) {
+                uiState.totalExpense.divide(BigDecimal(transactionCount), 2, java.math.RoundingMode.HALF_UP)
+            } else {
+                BigDecimal.ZERO
+            }
+            val topCategory = uiState.categoryBreakdown.firstOrNull()
             AnalyticsMetricTile(
                 content = AnalyticsMetricTileContent(
                     topLabel = if (showOutflowTile) "SPENDING" else "TOTAL",
-                    primaryValue = CurrencyFormatter.formatCurrency(uiState.totalSpending, uiState.currency),
-                    transactionCount = uiState.transactionCount,
+                    primaryValue = CurrencyFormatter.formatCurrency(uiState.totalExpense, uiState.currency),
+                    transactionCount = transactionCount,
                     countBadgeIcon = Icons.Default.Receipt,
                     bottomLeftLabel = "AVERAGE",
                     bottomLeftValue = CurrencyFormatter.formatCurrency(
-                        if (uiState.transactionCount > 0) uiState.averageAmount else BigDecimal.ZERO,
+                        averageAmount,
                         uiState.currency,
                     ),
                     bottomLeftSuffix = " /day",
-                    bottomRightCaption = if (uiState.topCategory != null && uiState.topCategoryPercentage > 0) {
-                        "${uiState.topCategoryPercentage.toInt()}% of total"
+                    bottomRightCaption = if (topCategory != null && topCategory.percentage > 0) {
+                        "${topCategory.percentage.toInt()}% of total"
                     } else {
                         null
                     },
-                    bottomRightPill = uiState.topCategory?.takeIf {
-                        uiState.topCategoryPercentage > 0
-                    }?.let { AnalyticsTilePill.Category(it) },
+                    bottomRightPill = topCategory?.takeIf { it.percentage > 0 }
+                        ?.let { AnalyticsTilePill.Category(it.name) },
                 ),
                 onClick = onSpendingClick,
             )

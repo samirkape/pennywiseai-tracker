@@ -718,7 +718,10 @@ fun TransactionTabContent(
                         splits = uiState.splits,
                         availableCategories = categories.map { it.name },
                         onSplitsChanged = viewModel::updateSplits,
-                        onRemoveSplits = viewModel::toggleSplit
+                        onRemoveSplits = viewModel::toggleSplit,
+                        onCreateCategory = { name, color, isIncome, icon ->
+                            viewModel.createAndSelectTransactionCategory(name, color, isIncome, icon)
+                        }
                     )
                 } else {
                     OutlinedButton(

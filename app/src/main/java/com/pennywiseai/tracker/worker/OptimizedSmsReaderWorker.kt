@@ -24,6 +24,7 @@ import com.pennywiseai.tracker.domain.repository.RuleRepository
 import com.pennywiseai.tracker.domain.service.RuleEngine
 import com.pennywiseai.tracker.utils.CurrencyFormatter
 import com.pennywiseai.tracker.utils.MerchantAliasResolver
+import com.pennywiseai.tracker.worker.InsightsWorker
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.*
@@ -438,8 +439,10 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
             }
 
             if (unrecognizedBatch.isNotEmpty()) flushUnrecognizedBatch(unrecognizedBatch)
-            if (widgetNeedsUpdate)
+            if (widgetNeedsUpdate) {
                 com.pennywiseai.tracker.widget.RecentTransactionsWidgetUpdateWorker.enqueueOneShot(applicationContext)
+                InsightsWorker.enqueueOneShot(applicationContext)
+            }
         }
 
         // Real-time UI refresh every 50ms
@@ -651,8 +654,6 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
 
     // ─── Balance update ───────────────────────────────────────────────────────
 
-// ─── Balance update ───────────────────────────────────────────────────────
-
     private suspend fun processBalanceUpdate(
         parsed: ParsedTransaction,
         entity: com.pennywiseai.tracker.data.database.entity.TransactionEntity,
@@ -759,7 +760,7 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
         batch.clear()
     }
 
-    // ─── Cleanup ──────────────────────────────────────────────────────────────
+    // ���── Cleanup ──────────────────────────────────────────────────────────────
 
     private suspend fun cleanUpAndFinalize(stats: ProcessingStats) {
         try { unrecognizedSmsRepository.cleanupOldEntries() }
@@ -770,7 +771,7 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
         }
     }
 
-    // ─── Progress ─────────────────────────────────────────────────────────────
+    // ─── Progress ────────────���────────────────────────────────────────────────
 
     private suspend fun reportProgress(stats: ProcessingStats) {
         try {
@@ -907,7 +908,7 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
         return result
     }
 
-    // ─── RCS helpers ──────────────────────────────────────────────────────────
+    // ─── RCS helpers ─────────────���────────────────────────────────────────────
 
     private fun extractRcsSender(trId: String): String? = try {
         val decoded = String(android.util.Base64.decode(trId.removePrefix("proto:"), android.util.Base64.DEFAULT))
@@ -975,7 +976,7 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
     // ─── Logging ──────────────────────────────────────────────────────────────
 
     private fun buildSummary(stats: ProcessingStats, elapsedMs: Long) = """
-        ┌─────── SMS Worker Complete ──────────────────
+        ┌─��───── SMS Worker Complete ──────────────────
         │  Total     : ${stats.total}
         │  Processed : ${stats.processed.get()}
         │  Parsed    : ${stats.parsed.get()}
