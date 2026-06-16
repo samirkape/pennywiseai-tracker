@@ -25,6 +25,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Menu
@@ -112,6 +114,7 @@ fun HomeScreen(
     onNavigateToBudgets: () -> Unit = {},
     onNavigateToLoans: () -> Unit = {},
     onLoanClick: (Long) -> Unit = {},
+    onNavigateToGoals: () -> Unit = {},
     onNavigateToAddScreen: () -> Unit = {},
     onNavigateToManageAccounts: () -> Unit = {},
     onTransactionClick: (Long) -> Unit = {},
@@ -336,7 +339,7 @@ fun HomeScreen(
                 top = paddingValues.calculateTopPadding(),
                 bottom = Dimensions.Component.bottomBarHeight + 96.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
             // 1. Hero spend (0ms)
             item {
@@ -441,6 +444,72 @@ fun HomeScreen(
                         }
                     }
                 }
+            }
+
+            // ── Section 2: This week snapshot ────────────────────────────────
+            item {
+                HomeThisWeekCard(
+                    thisWeekSpend = uiState.thisWeekSpend,
+                    lastWeekSpend = uiState.lastWeekSpend,
+                    currency = uiState.selectedCurrency,
+                    onClick = { onNavigateToTransactions(transactionsPeriod) },
+                    modifier = Modifier.padding(horizontal = Dimensions.Padding.content)
+                )
+            }
+
+            // ── Section 3: Last 7 days bar chart ─────────────────────────────
+            if (uiState.last7DaysSpend.isNotEmpty()) {
+                item {
+                    HomeLast7DaysCard(
+                        last7DaysSpend = uiState.last7DaysSpend,
+                        currency = uiState.selectedCurrency,
+                        onClick = onNavigateToAnalytics,
+                        modifier = Modifier.padding(horizontal = Dimensions.Padding.content)
+                    )
+                }
+            }
+
+            // ── Section 5: Smart Insights (after hero/chart, before goals) ──────
+            if (uiState.insights.isNotEmpty()) {
+                item {
+                    val visible = remember { mutableStateOf(hasAnimated) }
+                    LaunchedEffect(Unit) {
+                        if (!hasAnimated) { delay(10); visible.value = true }
+                    }
+                    AnimatedVisibility(
+                        visible = visible.value,
+                        enter = fadeIn(tween(300)) + slideInVertically(
+                            initialOffsetY = { slideOffsetPx },
+                            animationSpec = tween(300)
+                        )
+                    ) {
+                        SmartInsightsCard(
+                            insights = uiState.insights,
+                            onInsightAction = { insight ->
+                                when (insight.type) {
+                                    InsightType.SUBSCRIPTION_UPCOMING -> onNavigateToSubscriptions()
+                                    InsightType.GOAL_MILESTONE -> onNavigateToGoals()
+                                    else -> onNavigateToAnalytics()
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = Dimensions.Padding.content)
+                        )
+                    }
+                }
+            }
+
+            // ── Section 6: Subscriptions + Goal row ──────────────────────────
+            item {
+                HomeSubscriptionsGoalRow(
+                    activeSubscriptionCount = uiState.activeSubscriptionCount,
+                    totalSubscriptionAmount = uiState.totalSubscriptionAmount,
+                    upcomingSubscriptions = uiState.upcomingSubscriptions,
+                    currency = uiState.selectedCurrency,
+                    activeGoals = uiState.activeGoals,
+                    onNavigateToSubscriptions = onNavigateToSubscriptions,
+                    onNavigateToGoals = onNavigateToGoals,
+                    modifier = Modifier.padding(horizontal = Dimensions.Padding.content)
+                )
             }
 
             // 2. Feed header — day zone (20ms)
@@ -1482,6 +1551,84 @@ private fun CalendarBottomSheet(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun HomeGoalsSummaryCard(
+    summary: GoalsSummaryForHome,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val progress = if (summary.totalTarget > BigDecimal.ZERO)
+        (summary.totalCurrent.toFloat() / summary.totalTarget.toFloat()).coerceIn(0f, 1f)
+    else 0f
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dimensions.Padding.content, vertical = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            Icon(
+                imageVector = Icons.Default.EmojiEvents,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(Dimensions.Icon.medium)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                if (summary.activeCount == 0) {
+                    Text(
+                        text = "Financial Goals",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Set a savings goal to get started",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "${summary.activeCount} ${if (summary.activeCount == 1) "goal" else "goals"} active",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "${summary.avgProgressPercent}% saved",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp)),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                    )
+                }
+            }
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = "View goals",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

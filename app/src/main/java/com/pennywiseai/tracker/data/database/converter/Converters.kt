@@ -4,6 +4,10 @@ import androidx.room.TypeConverter
 import com.pennywiseai.tracker.data.database.entity.BudgetGroupType
 import com.pennywiseai.tracker.data.database.entity.BudgetImpactType
 import com.pennywiseai.tracker.data.database.entity.BudgetPeriodType
+import com.pennywiseai.tracker.data.database.entity.ContributionSource
+import com.pennywiseai.tracker.data.database.entity.GoalStatus
+import com.pennywiseai.tracker.data.database.entity.GoalTrackingMode
+import com.pennywiseai.tracker.data.database.entity.GoalType
 import com.pennywiseai.tracker.data.database.entity.SubscriptionState
 import com.pennywiseai.tracker.data.database.entity.LoanDirection
 import com.pennywiseai.tracker.data.database.entity.LoanStatus
@@ -137,4 +141,28 @@ class Converters {
     fun toLoanStatus(value: String): LoanStatus {
         return LoanStatus.valueOf(value)
     }
+
+    @TypeConverter
+    fun fromGoalType(value: GoalType): String = value.name
+
+    @TypeConverter
+    fun toGoalType(value: String): GoalType = GoalType.valueOf(value)
+
+    @TypeConverter
+    fun fromGoalStatus(value: GoalStatus): String = value.name
+
+    @TypeConverter
+    fun toGoalStatus(value: String): GoalStatus = GoalStatus.valueOf(value)
+
+    @TypeConverter
+    fun fromGoalTrackingMode(value: GoalTrackingMode): String = value.name
+
+    @TypeConverter
+    fun toGoalTrackingMode(value: String): GoalTrackingMode = GoalTrackingMode.valueOf(value)
+
+    @TypeConverter
+    fun fromContributionSource(value: ContributionSource): String = value.name
+
+    @TypeConverter
+    fun toContributionSource(value: String): ContributionSource = ContributionSource.valueOf(value)
 }

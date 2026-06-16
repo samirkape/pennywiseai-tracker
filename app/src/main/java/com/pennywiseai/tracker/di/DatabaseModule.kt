@@ -26,6 +26,8 @@ import com.pennywiseai.tracker.data.database.dao.TransactionDao
 import com.pennywiseai.tracker.data.database.dao.TransactionReceiptDao
 import com.pennywiseai.tracker.data.database.dao.TransactionSplitDao
 import com.pennywiseai.tracker.data.database.dao.UnrecognizedSmsDao
+import com.pennywiseai.tracker.data.database.dao.GoalContributionDao
+import com.pennywiseai.tracker.data.database.dao.GoalDao
 import com.pennywiseai.tracker.data.database.dao.InsightsCacheDao
 import dagger.Module
 import dagger.Provides
@@ -81,7 +83,8 @@ object DatabaseModule {
                 PennyWiseDatabase.MIGRATION_53_54,
                 PennyWiseDatabase.MIGRATION_54_55,
                 PennyWiseDatabase.MIGRATION_55_56,
-                PennyWiseDatabase.MIGRATION_56_57
+                PennyWiseDatabase.MIGRATION_56_57,
+                PennyWiseDatabase.MIGRATION_58_59
             )
             .fallbackToDestructiveMigrationOnDowngrade()
 
@@ -307,6 +310,18 @@ object DatabaseModule {
     @Singleton
     fun provideInsightsCacheDao(database: PennyWiseDatabase): InsightsCacheDao {
         return database.insightsCacheDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideGoalDao(database: PennyWiseDatabase): GoalDao {
+        return database.goalDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideGoalContributionDao(database: PennyWiseDatabase): GoalContributionDao {
+        return database.goalContributionDao()
     }
 }
 

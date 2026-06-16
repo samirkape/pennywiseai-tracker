@@ -36,6 +36,7 @@ class UpdateTransactionUseCase @Inject constructor(
     private val subscriptionRepository: SubscriptionRepository,
     private val accountBalanceRepository: AccountBalanceRepository,
     private val receiptManager: ReceiptManager,
+    private val processAutoGoalContributions: ProcessAutoGoalContributionsUseCase,
 ) {
     suspend fun execute(request: UpdateTransactionRequest): UpdateTransactionResult {
         val original = request.original
@@ -121,6 +122,16 @@ class UpdateTransactionUseCase @Inject constructor(
                 excludeId = updated.id,
                 notBefore = request.bulkCategoryNotBefore,
             )
+        }
+
+        // Revoke and re-evaluate auto goal contributions when category/type changes
+        val categoryOrTypeChanged = original.category != updated.category ||
+            original.transactionType != updated.transactionType
+        if (categoryOrTypeChanged) {
+            runCatching {
+                processAutoGoalContributions.revokeContribution(updated.id)
+                processAutoGoalContributions.execute(updated)
+            }
         }
 
         return UpdateTransactionResult(bulkCategoryUndoCount = bulkCategoryUndoCount)

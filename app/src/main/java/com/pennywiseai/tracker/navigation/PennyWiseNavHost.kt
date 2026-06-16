@@ -673,6 +673,52 @@ fun PennyWiseNavHost(
             )
         }
 
+        composable<Goals>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+        ) {
+            com.pennywiseai.tracker.presentation.goals.GoalsScreen(
+                onNavigateBack = { navController.safePopBackStack() },
+                onGoalClick = { goalId ->
+                    navController.navigate(GoalDetail(goalId)) { launchSingleTop = true }
+                },
+                onCreateGoal = {
+                    navController.navigate(GoalEdit()) { launchSingleTop = true }
+                }
+            )
+        }
+
+        composable<GoalDetail>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+        ) {
+            com.pennywiseai.tracker.presentation.goals.GoalDetailScreen(
+                onNavigateBack = { navController.safePopBackStack() },
+                onNavigateToEdit = { goalId ->
+                    navController.navigate(GoalEdit(goalId)) { launchSingleTop = true }
+                },
+                onNavigateToTransaction = { txId ->
+                    navController.navigate(TransactionDetail(txId)) { launchSingleTop = true }
+                }
+            )
+        }
+
+        composable<GoalEdit>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+        ) {
+            com.pennywiseai.tracker.presentation.goals.GoalEditScreen(
+                onNavigateBack = { navController.safePopBackStack() },
+                onSaved = { navController.safePopBackStack() }
+            )
+        }
+
     }
     }
     }

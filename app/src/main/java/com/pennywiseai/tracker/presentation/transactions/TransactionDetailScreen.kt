@@ -58,6 +58,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pennywiseai.tracker.data.database.entity.BudgetImpactType
 import com.pennywiseai.tracker.data.database.entity.CategoryEntity
+import com.pennywiseai.tracker.data.database.entity.GoalContributionEntity
+import com.pennywiseai.tracker.data.database.entity.GoalEntity
 import com.pennywiseai.tracker.data.database.entity.LoanDirection
 import com.pennywiseai.tracker.data.database.entity.LoanEntity
 import com.pennywiseai.tracker.data.database.entity.ProfileEntity
@@ -655,6 +657,10 @@ fun TransactionDetailScreen(
     val loan by viewModel.loan.collectAsStateWithLifecycle()
     val showMarkAsLoanSheet by viewModel.showMarkAsLoanSheet.collectAsStateWithLifecycle()
     val recentPersonNames by viewModel.recentPersonNames.collectAsStateWithLifecycle()
+
+    // Goal state
+    val showLinkGoalSheet by viewModel.showLinkGoalSheet.collectAsStateWithLifecycle()
+    val availableGoals by viewModel.availableGoals.collectAsStateWithLifecycle()
 // Account profile state
     val accountProfileId by viewModel.accountProfileId.collectAsStateWithLifecycle()
 
@@ -973,6 +979,15 @@ fun TransactionDetailScreen(
         )
     }
 
+    // Link to Goal Bottom Sheet
+    if (showLinkGoalSheet) {
+        LinkToGoalBottomSheet(
+            goals = availableGoals,
+            onDismiss = { viewModel.hideLinkGoalSheet() },
+            onConfirm = { goalId -> viewModel.linkToGoal(goalId) }
+        )
+    }
+
     // Full-screen Receipt Dialog
     fullScreenReceiptUri?.let { uri ->
         Dialog(
@@ -1139,6 +1154,7 @@ private fun TransactionReceipt(
     accountProfileId: Long? = null
 ) {
     val currentGroup by viewModel.currentGroup.collectAsStateWithLifecycle()
+    val linkedGoalContribution by viewModel.linkedGoalContribution.collectAsStateWithLifecycle()
     val isDark = isSystemInDarkTheme()
     val typeColor = when (transaction.transactionType) {
         TransactionType.INCOME -> if (isDark) income_dark else income_light
@@ -1360,6 +1376,15 @@ private fun TransactionReceipt(
                         icon = Icons.Outlined.FolderOpen,
                         label = "Add to group",
                         onClick = { viewModel.showGroupSheet() }
+                    )
+                }
+
+                // Link to goal action
+                if (linkedGoalContribution == null) {
+                    QuickActionItem(
+                        icon = Icons.Default.EmojiEvents,
+                        label = "Link to goal",
+                        onClick = { viewModel.showLinkGoalSheet() }
                     )
                 }
 
@@ -3153,6 +3178,70 @@ private fun GroupBottomSheet(
                     )
                     Spacer(modifier = Modifier.width(Spacing.xs))
                     Text("Create new group")
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LinkToGoalBottomSheet(
+    goals: List<GoalEntity>,
+    onDismiss: () -> Unit,
+    onConfirm: (Long) -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = androidx.compose.ui.Modifier
+                .fillMaxWidth()
+                .padding(horizontal = com.pennywiseai.tracker.ui.theme.Dimensions.Padding.content)
+                .padding(bottom = com.pennywiseai.tracker.ui.theme.Spacing.xl),
+        ) {
+            Text(
+                text = "Link to Goal",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                modifier = androidx.compose.ui.Modifier.padding(bottom = com.pennywiseai.tracker.ui.theme.Spacing.md)
+            )
+            if (goals.isEmpty()) {
+                Text(
+                    text = "No active goals. Create a goal first.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                goals.forEach { goal ->
+                    val progress = if (goal.targetAmount > java.math.BigDecimal.ZERO)
+                        (goal.currentAmount.toFloat() / goal.targetAmount.toFloat()).coerceIn(0f, 1f)
+                    else 0f
+                    androidx.compose.foundation.layout.Row(
+                        modifier = androidx.compose.ui.Modifier
+                            .fillMaxWidth()
+                            .clickable { onConfirm(goal.id) }
+                            .padding(vertical = com.pennywiseai.tracker.ui.theme.Spacing.sm),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = androidx.compose.ui.Modifier.weight(1f)) {
+                            Text(
+                                text = goal.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                            )
+                            Text(
+                                text = "${(progress * 100).toInt()}% · ${com.pennywiseai.tracker.utils.CurrencyFormatter.formatCurrency(goal.currentAmount, goal.currency)} / ${com.pennywiseai.tracker.utils.CurrencyFormatter.formatCurrency(goal.targetAmount, goal.currency)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            contentDescription = "Link",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    HorizontalDivider()
                 }
             }
         }

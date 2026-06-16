@@ -689,8 +689,8 @@ class AnalyticsViewModel @Inject constructor(
             else -> {
                 val rangeDays = ChronoUnit.DAYS.between(startDate, endDate).toInt() + 1
                 val transactionsByDate = transactions.groupBy { it.dateTime.toLocalDate() }
-                if (rangeDays > 14) {
-                    // Aggregate into weekly buckets when range exceeds 2 weeks
+                if (rangeDays > 90) {
+                    // Aggregate into weekly buckets when range exceeds 3 months
                     val weekStart = startDate.minusDays(startDate.dayOfWeek.value.toLong() - 1)
                     var currentWeek = weekStart
                     while (!currentWeek.isAfter(endDate) && !currentWeek.isAfter(LocalDate.now())) {

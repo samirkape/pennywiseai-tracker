@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -342,10 +343,24 @@ fun AnalyticsReferenceHeroCard(
                     modifier = Modifier.weight(1f),
                 )
                 hero.delta?.let { deltaText ->
+                    // For Outflow/Spending tabs: increasing spend = bad (red), decreasing = good (green)
+                    // For Invested tab: increasing investment = good (green), decreasing = bad (red)
+                    val deltaIsGood = when (selectedTab) {
+                        AnalyticsOverviewTab.INVESTED -> hero.deltaIncreasing
+                        else -> !hero.deltaIncreasing
+                    }
+                    val deltaBadgeColor = when {
+                        deltaIsGood -> Color(0xFF1B8A4A).copy(alpha = 0.12f)
+                        else -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f)
+                    }
+                    val deltaTextColor = when {
+                        deltaIsGood -> Color(0xFF1B8A4A)
+                        else -> MaterialTheme.colorScheme.error
+                    }
+                    val deltaIconColor = deltaTextColor
                     Surface(
                         shape = RoundedCornerShape(50),
-                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        color = deltaBadgeColor,
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
@@ -356,13 +371,13 @@ fun AnalyticsReferenceHeroCard(
                                 imageVector = if (hero.deltaIncreasing) Icons.AutoMirrored.Filled.TrendingUp else Icons.AutoMirrored.Filled.TrendingDown,
                                 contentDescription = null,
                                 modifier = Modifier.size(12.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = deltaIconColor,
                             )
                             Text(
                                 text = deltaText,
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold,
+                                color = deltaTextColor,
                             )
                         }
                     }
@@ -661,12 +676,14 @@ private fun HeroMetricColumn(
     onClick: (() -> Unit)? = null,
 ) {
     Column(
-        modifier = modifier.then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        modifier = modifier
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
@@ -686,7 +703,7 @@ private fun HeroMetricColumn(
         Text(
             text = metric.amount,
             fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
+            fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
@@ -700,6 +717,15 @@ private fun HeroMetricColumn(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+        // Subtle tap hint arrow for clickable metrics
+        if (onClick != null) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                modifier = Modifier.size(9.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+            )
+        }
     }
 }
 

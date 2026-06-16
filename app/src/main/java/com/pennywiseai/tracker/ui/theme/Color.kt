@@ -247,6 +247,30 @@ val yellow_dark = Color(0xFFF57F17)
 val grey_light = Color(0xFFECEFF1)
 val grey_dark = Color(0xFF546E7A)
 
+// ── Earthy Palette (home_v2.md design tokens) ─────────────────────────────────
+// Light
+val Earthy_Green          = Color(0xFF4A7C6F)
+val Earthy_GreenBg        = Color(0xFFE6F5F0)
+val Earthy_Amber          = Color(0xFFC97E28)
+val Earthy_AmberBg        = Color(0xFFFDF3E7)
+val Earthy_Red            = Color(0xFFB03030)
+val Earthy_RedBg          = Color(0xFFFCEBEB)
+val Earthy_Purple         = Color(0xFF6059A8)
+val Earthy_PurpleBg       = Color(0xFFEEEDFE)
+val Earthy_TextMuted      = Color(0xFF8C8B85)
+val Earthy_CardBorder     = Color(0xFFE2DED7)
+// Dark
+val Earthy_Green_Dark     = Color(0xFF6AAFA0)
+val Earthy_GreenBg_Dark   = Color(0xFF1A2E2A)
+val Earthy_Amber_Dark     = Color(0xFFE09A4A)
+val Earthy_AmberBg_Dark   = Color(0xFF2E2010)
+val Earthy_Red_Dark       = Color(0xFFCF5050)
+val Earthy_RedBg_Dark     = Color(0xFF2E1010)
+val Earthy_Purple_Dark    = Color(0xFF8B82D4)
+val Earthy_PurpleBg_Dark  = Color(0xFF1E1C2E)
+val Earthy_TextMuted_Dark = Color(0xFF9B9A96)
+val Earthy_CardBorder_Dark = Color(0xFF3A3836)
+
 // AMOLED Dark Mode Colors
 val amoled_background = Color(0xFF000000)
 val amoled_surface = Color(0xFF1A1A1A)

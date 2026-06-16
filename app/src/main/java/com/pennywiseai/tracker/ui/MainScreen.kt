@@ -236,6 +236,11 @@ fun MainScreen(
                             com.pennywiseai.tracker.navigation.LoanDetail(loanId)
                         ) { launchSingleTop = true }
                     },
+                    onNavigateToGoals = {
+                        rootNavController?.navigate(
+                            com.pennywiseai.tracker.navigation.Goals
+                        ) { launchSingleTop = true }
+                    },
                     onNavigateToManageAccounts = {
                         navController.navigate("manage_accounts") {
                             launchSingleTop = true

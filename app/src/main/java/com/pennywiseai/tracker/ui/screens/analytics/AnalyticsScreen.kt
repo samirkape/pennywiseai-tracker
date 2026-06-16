@@ -4,6 +4,8 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -18,6 +20,8 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import com.pennywiseai.tracker.ui.effects.overScrollVertical
 import com.pennywiseai.tracker.ui.effects.rememberOverscrollFlingBehavior
 import androidx.compose.foundation.shape.CircleShape
@@ -103,6 +107,22 @@ fun AnalyticsScreen(
     var showDateRangePicker by rememberSaveable { mutableStateOf(false) }
     var showChartTypeSelector by remember { mutableStateOf(false) }
     var selectedOverviewTab by rememberSaveable { mutableStateOf(AnalyticsOverviewTab.OUTFLOW) }
+
+    val tabs = AnalyticsOverviewTab.entries
+    val pagerState = rememberPagerState(
+        initialPage = tabs.indexOf(selectedOverviewTab).coerceAtLeast(0),
+        pageCount = { tabs.size },
+    )
+
+    // Keep pager and tab in sync
+    LaunchedEffect(pagerState.currentPage) {
+        val newTab = tabs.getOrNull(pagerState.currentPage) ?: return@LaunchedEffect
+        if (newTab != selectedOverviewTab) selectedOverviewTab = newTab
+    }
+    LaunchedEffect(selectedOverviewTab) {
+        val targetPage = tabs.indexOf(selectedOverviewTab).coerceAtLeast(0)
+        if (pagerState.currentPage != targetPage) pagerState.animateScrollToPage(targetPage)
+    }
 
     // Remember scroll position across navigation
     val listState = rememberSaveable(saver = LazyListState.Saver) {
@@ -241,35 +261,42 @@ fun AnalyticsScreen(
 
         if (uiState.periodOutflow != null || uiState.investmentInsights != null || uiState.paymentModeBreakdown != null) {
             item {
-                AnalyticsReferenceHeroCard(
-                    selectedTab = selectedOverviewTab,
-                    periodOutflow = uiState.periodOutflow,
-                    investmentInsights = uiState.investmentInsights,
-                    paymentModeBreakdown = uiState.paymentModeBreakdown,
-                    currency = selectedCurrency,
-                    onTotalClick = {
-                        when (selectedOverviewTab) {
-                            AnalyticsOverviewTab.OUTFLOW -> drillDownToTransactions(transactionType = null)
-                            AnalyticsOverviewTab.SPENDING -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name)
-                            AnalyticsOverviewTab.INVESTED -> drillDownToTransactions(transactionType = TransactionTypeFilter.INVESTMENT.name)
-                        }
-                    },
-                    onMetricClick = { metricIndex ->
-                        when (selectedOverviewTab) {
-                            AnalyticsOverviewTab.OUTFLOW -> when (metricIndex) {
-                                0 -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name)
-                                1 -> drillDownToTransactions(transactionType = TransactionTypeFilter.INVESTMENT.name)
-                                2 -> drillDownToTransactions(transactionType = TransactionTypeFilter.CC_BILL_PAYMENT.name)
+                HorizontalPager(
+                    state = pagerState,
+                    beyondViewportPageCount = 1,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { page ->
+                    val tab = tabs.getOrNull(page) ?: return@HorizontalPager
+                    AnalyticsReferenceHeroCard(
+                        selectedTab = tab,
+                        periodOutflow = uiState.periodOutflow,
+                        investmentInsights = uiState.investmentInsights,
+                        paymentModeBreakdown = uiState.paymentModeBreakdown,
+                        currency = selectedCurrency,
+                        onTotalClick = {
+                            when (tab) {
+                                AnalyticsOverviewTab.OUTFLOW -> drillDownToTransactions(transactionType = null)
+                                AnalyticsOverviewTab.SPENDING -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name)
+                                AnalyticsOverviewTab.INVESTED -> drillDownToTransactions(transactionType = TransactionTypeFilter.INVESTMENT.name)
                             }
-                            AnalyticsOverviewTab.SPENDING -> when (metricIndex) {
-                                0 -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name, paymentMode = "CREDIT_CARD")
-                                1 -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name, paymentMode = "BANK_ACCOUNT")
-                                2 -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name, paymentMode = "CASH")
+                        },
+                        onMetricClick = { metricIndex ->
+                            when (tab) {
+                                AnalyticsOverviewTab.OUTFLOW -> when (metricIndex) {
+                                    0 -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name)
+                                    1 -> drillDownToTransactions(transactionType = TransactionTypeFilter.INVESTMENT.name)
+                                    2 -> drillDownToTransactions(transactionType = TransactionTypeFilter.CC_BILL_PAYMENT.name)
+                                }
+                                AnalyticsOverviewTab.SPENDING -> when (metricIndex) {
+                                    0 -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name, paymentMode = "CREDIT_CARD")
+                                    1 -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name, paymentMode = "BANK_ACCOUNT")
+                                    2 -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name, paymentMode = "CASH")
+                                }
+                                AnalyticsOverviewTab.INVESTED -> drillDownToTransactions(transactionType = TransactionTypeFilter.INVESTMENT.name)
                             }
-                            AnalyticsOverviewTab.INVESTED -> drillDownToTransactions(transactionType = TransactionTypeFilter.INVESTMENT.name)
-                        }
-                    },
-                )
+                        },
+                    )
+                }
             }
         }
 
@@ -484,6 +511,12 @@ private fun AnalyticsCategoryCard(
                     (category.amount.toFloat() / maxAmount.toFloat()).coerceIn(0f, 1f)
                 else 0f
 
+                val animatedFraction by animateFloatAsState(
+                    targetValue = fraction,
+                    animationSpec = tween(durationMillis = 600, delayMillis = index * 60),
+                    label = "categoryBarFraction_$index",
+                )
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -497,7 +530,7 @@ private fun AnalyticsCategoryCard(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // Left: dot + name
+                        // Left: dot + name · txn count (single line)
                         Row(
                             modifier = Modifier.weight(1f),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -512,12 +545,20 @@ private fun AnalyticsCategoryCard(
                             Text(
                                 text = category.name,
                                 fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                                fontWeight = FontWeight.Normal,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = "· ${category.transactionCount} txn${if (category.transactionCount != 1) "s" else ""}",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
-                        // Right: % + amount
+                        // Right: % (colored) + amount
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -525,28 +566,29 @@ private fun AnalyticsCategoryCard(
                             Text(
                                 text = "${category.percentage.toInt()}%",
                                 fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                fontWeight = FontWeight.Medium,
+                                color = info.color,
                             )
                             Text(
                                 text = CurrencyFormatter.formatCurrency(category.amount, currency),
                                 fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
+                                fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
                     }
 
-                    // Progress bar
+                    // Animated progress bar
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(4.dp)
                             .clip(RoundedCornerShape(2.dp))
-                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)),
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f)),
                     ) {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth(fraction)
+                                .fillMaxWidth(animatedFraction)
                                 .fillMaxHeight()
                                 .clip(RoundedCornerShape(2.dp))
                                 .background(info.color),

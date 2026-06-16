@@ -24,6 +24,7 @@ class AddTransactionUseCase @Inject constructor(
     private val creditCardPaymentLinker: CreditCardPaymentLinker,
     private val ruleRepository: RuleRepository,
     private val ruleEngine: RuleEngine,
+    private val processAutoGoalContributions: ProcessAutoGoalContributionsUseCase,
 ) {
     suspend fun execute(
         amount: BigDecimal,
@@ -119,6 +120,13 @@ class AddTransactionUseCase @Inject constructor(
         if (transactionId != -1L) {
             runCatching {
                 creditCardPaymentLinker.linkIfApplicable(transaction.copy(id = transactionId))
+            }
+        }
+
+        // Auto-contribute to any CATEGORY_AUTO goals tracking this transaction's category
+        if (transactionId != -1L) {
+            runCatching {
+                processAutoGoalContributions.execute(transaction.copy(id = transactionId))
             }
         }
         

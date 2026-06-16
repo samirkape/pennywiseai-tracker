@@ -131,3 +131,12 @@ data class TransactionsByCategories(
     val startDateEpochDay: Long? = null,
     val endDateEpochDay: Long? = null,
 )
+
+@Serializable
+object Goals
+
+@Serializable
+data class GoalDetail(val goalId: Long)
+
+@Serializable
+data class GoalEdit(val goalId: Long = -1L)

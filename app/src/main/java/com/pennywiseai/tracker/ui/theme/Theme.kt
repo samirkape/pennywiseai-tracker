@@ -104,6 +104,37 @@ val ColorScheme.expense: Color
     @Composable
     get() = if (isSystemInDarkTheme()) expense_dark else expense_light
 
+// ── Earthy semantic extensions (home_v2.md §ColorScheme Semantic Extensions) ──
+val ColorScheme.spendGreen: Color
+    @Composable get() = if (isSystemInDarkTheme()) Earthy_Green_Dark else Earthy_Green
+
+val ColorScheme.spendGreenBg: Color
+    @Composable get() = if (isSystemInDarkTheme()) Earthy_GreenBg_Dark else Earthy_GreenBg
+
+val ColorScheme.spendAmber: Color
+    @Composable get() = if (isSystemInDarkTheme()) Earthy_Amber_Dark else Earthy_Amber
+
+val ColorScheme.spendAmberBg: Color
+    @Composable get() = if (isSystemInDarkTheme()) Earthy_AmberBg_Dark else Earthy_AmberBg
+
+val ColorScheme.spendRed: Color
+    @Composable get() = if (isSystemInDarkTheme()) Earthy_Red_Dark else Earthy_Red
+
+val ColorScheme.spendRedBg: Color
+    @Composable get() = if (isSystemInDarkTheme()) Earthy_RedBg_Dark else Earthy_RedBg
+
+val ColorScheme.spendPurple: Color
+    @Composable get() = if (isSystemInDarkTheme()) Earthy_Purple_Dark else Earthy_Purple
+
+val ColorScheme.spendPurpleBg: Color
+    @Composable get() = if (isSystemInDarkTheme()) Earthy_PurpleBg_Dark else Earthy_PurpleBg
+
+val ColorScheme.textMuted: Color
+    @Composable get() = if (isSystemInDarkTheme()) Earthy_TextMuted_Dark else Earthy_TextMuted
+
+val ColorScheme.cardBorder: Color
+    @Composable get() = if (isSystemInDarkTheme()) Earthy_CardBorder_Dark else Earthy_CardBorder
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PennyWiseTheme(

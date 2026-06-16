@@ -31,8 +31,12 @@ import com.pennywiseai.tracker.data.database.dao.TransactionDao
 import com.pennywiseai.tracker.data.database.dao.TransactionReceiptDao
 import com.pennywiseai.tracker.data.database.dao.TransactionSplitDao
 import com.pennywiseai.tracker.data.database.dao.UnrecognizedSmsDao
+import com.pennywiseai.tracker.data.database.dao.GoalContributionDao
+import com.pennywiseai.tracker.data.database.dao.GoalDao
 import com.pennywiseai.tracker.data.database.dao.InsightsCacheDao
 import com.pennywiseai.tracker.data.database.entity.AccountBalanceEntity
+import com.pennywiseai.tracker.data.database.entity.GoalContributionEntity
+import com.pennywiseai.tracker.data.database.entity.GoalEntity
 import com.pennywiseai.tracker.data.database.entity.ProfileEntity
 import com.pennywiseai.tracker.data.database.entity.BankNotificationEntity
 import com.pennywiseai.tracker.data.database.entity.BudgetCategoryEntity
@@ -68,8 +72,8 @@ import com.pennywiseai.tracker.data.database.entity.InsightsCacheEntity
  * @property autoMigrations List of automatic migrations between versions.
  */
 @Database(
-    entities = [TransactionEntity::class, SubscriptionEntity::class, ChatMessage::class, MerchantMappingEntity::class, MerchantAliasEntity::class, CategoryEntity::class, AccountBalanceEntity::class, UnrecognizedSmsEntity::class, CardEntity::class, RuleEntity::class, RuleApplicationEntity::class, ExchangeRateEntity::class, BudgetEntity::class, BudgetCategoryEntity::class, BudgetMonthSnapshotEntity::class, BudgetCategoryMonthSnapshotEntity::class, TransactionSplitEntity::class, BankNotificationEntity::class, LoanEntity::class, TransactionGroupEntity::class, ProfileEntity::class, SalaryMonthOverrideEntity::class, TransactionReceiptEntity::class, InsightsCacheEntity::class],
-    version = 58,
+    entities = [TransactionEntity::class, SubscriptionEntity::class, ChatMessage::class, MerchantMappingEntity::class, MerchantAliasEntity::class, CategoryEntity::class, AccountBalanceEntity::class, UnrecognizedSmsEntity::class, CardEntity::class, RuleEntity::class, RuleApplicationEntity::class, ExchangeRateEntity::class, BudgetEntity::class, BudgetCategoryEntity::class, BudgetMonthSnapshotEntity::class, BudgetCategoryMonthSnapshotEntity::class, TransactionSplitEntity::class, BankNotificationEntity::class, LoanEntity::class, TransactionGroupEntity::class, ProfileEntity::class, SalaryMonthOverrideEntity::class, TransactionReceiptEntity::class, InsightsCacheEntity::class, GoalEntity::class, GoalContributionEntity::class],
+    version = 59,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -112,7 +116,8 @@ import com.pennywiseai.tracker.data.database.entity.InsightsCacheEntity
         AutoMigration(from = 41, to = 42),
         AutoMigration(from = 42, to = 43),
         AutoMigration(from = 43, to = 44, spec = Migration43To44::class),
-        AutoMigration(from = 57, to = 58)
+        AutoMigration(from = 57, to = 58),
+        // 58→59 is a manual migration registered in DatabaseModule (add financial_goals + goal_contributions tables)
         // 44→45 and 45→46 are manual migrations registered in DatabaseModule (add profile_id columns)
         // 46→47 is a manual migration registered in DatabaseModule (add transaction_categories table)
         // 48→49 is a manual migration registered in DatabaseModule (add salary_month_overrides table)
@@ -150,6 +155,8 @@ abstract class PennyWiseDatabase : RoomDatabase() {
     abstract fun salaryMonthOverrideDao(): SalaryMonthOverrideDao
     abstract fun transactionReceiptDao(): TransactionReceiptDao
     abstract fun insightsCacheDao(): InsightsCacheDao
+    abstract fun goalDao(): GoalDao
+    abstract fun goalContributionDao(): GoalContributionDao
 
     companion object {
         const val DATABASE_NAME = "pennywise_database"
@@ -186,7 +193,8 @@ abstract class PennyWiseDatabase : RoomDatabase() {
                         MIGRATION_50_51,
                         MIGRATION_51_52,
                         MIGRATION_52_53,
-                        MIGRATION_53_54
+                        MIGRATION_53_54,
+                        MIGRATION_58_59
                     )
                     .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
@@ -691,6 +699,50 @@ abstract class PennyWiseDatabase : RoomDatabase() {
                 "Tax" to "account_balance_wallet",
                 "Bank Charges" to "money_off",
             )
+        }
+
+        val MIGRATION_58_59 = object : Migration(58, 59) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `financial_goals` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `description` TEXT,
+                        `goal_type` TEXT NOT NULL,
+                        `status` TEXT NOT NULL DEFAULT 'ACTIVE',
+                        `target_amount` TEXT NOT NULL,
+                        `current_amount` TEXT NOT NULL DEFAULT '0',
+                        `target_date` TEXT NOT NULL,
+                        `currency` TEXT NOT NULL DEFAULT 'INR',
+                        `color` TEXT NOT NULL DEFAULT '#4CAF50',
+                        `tracking_mode` TEXT NOT NULL DEFAULT 'MANUAL_DEPOSIT',
+                        `auto_track_categories` TEXT NOT NULL DEFAULT '',
+                        `created_at` TEXT NOT NULL,
+                        `updated_at` TEXT NOT NULL,
+                        `completed_at` TEXT
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_financial_goals_status` ON `financial_goals` (`status`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_financial_goals_goal_type` ON `financial_goals` (`goal_type`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_financial_goals_target_date` ON `financial_goals` (`target_date`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_financial_goals_created_at` ON `financial_goals` (`created_at`)")
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `goal_contributions` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `goal_id` INTEGER NOT NULL,
+                        `transaction_id` INTEGER DEFAULT NULL,
+                        `amount` TEXT NOT NULL,
+                        `note` TEXT,
+                        `contributed_at` TEXT NOT NULL,
+                        `source` TEXT NOT NULL DEFAULT 'MANUAL_DEPOSIT',
+                        FOREIGN KEY(`goal_id`) REFERENCES `financial_goals`(`id`) ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_goal_contributions_goal_id` ON `goal_contributions` (`goal_id`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_goal_contributions_transaction_id` ON `goal_contributions` (`transaction_id`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_goal_contributions_contributed_at` ON `goal_contributions` (`contributed_at`)")
+            }
         }
 
         val MIGRATION_38_39 = object : Migration(38, 39) {

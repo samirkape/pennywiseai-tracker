@@ -17,8 +17,11 @@ import com.pennywiseai.tracker.data.database.entity.TransactionType
 import com.pennywiseai.tracker.ui.components.SplitItem
 import com.pennywiseai.tracker.data.receipt.ReceiptManager
 import com.pennywiseai.tracker.data.repository.AccountBalanceRepository
+import com.pennywiseai.tracker.data.database.entity.GoalContributionEntity
+import com.pennywiseai.tracker.data.database.entity.GoalEntity
 import com.pennywiseai.tracker.data.repository.BudgetGroupRepository
 import com.pennywiseai.tracker.data.repository.CategoryRepository
+import com.pennywiseai.tracker.data.repository.GoalRepository
 import com.pennywiseai.tracker.data.repository.LoanRepository
 import com.pennywiseai.tracker.data.repository.MerchantAliasRepository
 import com.pennywiseai.tracker.data.repository.MerchantMappingRepository
@@ -84,6 +87,7 @@ class TransactionDetailViewModel @Inject constructor(
     private val categoryRepository: CategoryRepository,
     private val accountBalanceRepository: AccountBalanceRepository,
     private val loanRepository: LoanRepository,
+    private val goalRepository: GoalRepository,
     private val budgetGroupRepository: BudgetGroupRepository,
     private val transactionGroupRepository: TransactionGroupRepository,
     private val currencyConversionService: CurrencyConversionService,
@@ -391,6 +395,7 @@ class TransactionDetailViewModel @Inject constructor(
                 _budgetImpactType.value = it.budgetImpactType
                 _budgetCategory.value = it.budgetCategory
                 loadAccountProfileId(it)
+                loadLinkedGoal(transactionId)
             }
         }
     }
@@ -1630,6 +1635,51 @@ class TransactionDetailViewModel @Inject constructor(
                 _loan.value = null
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to unlink loan: ${e.message}"
+            }
+        }
+    }
+
+    // ========== Goal Management ==========
+
+    val availableGoals: StateFlow<List<GoalEntity>> = goalRepository.getActiveGoals()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _linkedGoalContribution = MutableStateFlow<GoalContributionEntity?>(null)
+    val linkedGoalContribution: StateFlow<GoalContributionEntity?> = _linkedGoalContribution.asStateFlow()
+
+    private val _showLinkGoalSheet = MutableStateFlow(false)
+    val showLinkGoalSheet: StateFlow<Boolean> = _showLinkGoalSheet.asStateFlow()
+
+    fun showLinkGoalSheet() { _showLinkGoalSheet.value = true }
+    fun hideLinkGoalSheet() { _showLinkGoalSheet.value = false }
+
+    private fun loadLinkedGoal(transactionId: Long) {
+        viewModelScope.launch {
+            _linkedGoalContribution.value = goalRepository.getLinkedGoalForTransaction(transactionId)
+        }
+    }
+
+    fun linkToGoal(goalId: Long) {
+        val txn = _transaction.value ?: return
+        viewModelScope.launch {
+            try {
+                goalRepository.linkTransaction(goalId, txn.id, txn.amount, null)
+                _linkedGoalContribution.value = goalRepository.getLinkedGoalForTransaction(txn.id)
+                _showLinkGoalSheet.value = false
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to link goal: ${e.message}"
+            }
+        }
+    }
+
+    fun unlinkFromGoal() {
+        val contribution = _linkedGoalContribution.value ?: return
+        viewModelScope.launch {
+            try {
+                goalRepository.unlinkTransaction(contribution.id)
+                _linkedGoalContribution.value = null
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to unlink goal: ${e.message}"
             }
         }
     }
