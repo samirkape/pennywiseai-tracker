@@ -105,13 +105,11 @@ fun TransactionItem(
                 isCcBillPayment -> add("CC Payment")
                 transaction.transactionType == TransactionType.CREDIT -> add("Card")
                 transaction.transactionType == TransactionType.TRANSFER -> add("Transfer")
-                transaction.transactionType == TransactionType.INVESTMENT -> add("Investment")
+                transaction.transactionType == TransactionType.INVESTMENT -> add("SIP")
                 else -> {}
             }
             if (showSplitPortion) add("Split")
-            if (transaction.isRecurring) {
-                if (transaction.transactionType == TransactionType.INVESTMENT) add("SIP") else add("Recurring")
-            }
+            if (transaction.isRecurring && transaction.transactionType != TransactionType.INVESTMENT) add("Recurring")
             if (isEffectivelyBusiness) add("Business")
             if (transaction.isExcludedFromTracking) add("Excluded")
         }.joinToString(" \u00B7 ")
