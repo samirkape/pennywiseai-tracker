@@ -36,11 +36,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.net.Uri
 import com.pennywiseai.tracker.R
 import com.pennywiseai.tracker.data.backup.ImportStrategy
+import com.pennywiseai.tracker.data.backup.RestoreOptions
 import com.pennywiseai.tracker.utils.DateRangeUtils
 import com.pennywiseai.tracker.ui.components.CustomTitleTopAppBar
 import com.pennywiseai.tracker.ui.components.cards.SectionHeaderV2
 import com.pennywiseai.tracker.ui.theme.Dimensions
 import com.pennywiseai.tracker.ui.theme.Spacing
+import com.pennywiseai.tracker.ui.utils.LocalWindowSizeInfo
 import com.pennywiseai.tracker.ui.theme.amber_light
 import com.pennywiseai.tracker.ui.theme.amber_dark
 import com.pennywiseai.tracker.ui.theme.orange_light
@@ -104,8 +106,10 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
     val availableCurrencies by settingsViewModel.availableCurrencies.collectAsStateWithLifecycle()
     var showSmsScanDialog by remember { mutableStateOf(false) }
     var showImportStrategyDialog by remember { mutableStateOf(false) }
+    var showRestoreOptionsDialog by remember { mutableStateOf(false) }
     var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
     var selectedImportStrategy by remember { mutableStateOf(ImportStrategy.MERGE) }
+    var selectedRestoreOptions by remember { mutableStateOf(RestoreOptions()) }
     var showExportOptionsDialog by remember { mutableStateOf(false) }
     var showTimeoutDialog by remember { mutableStateOf(false) }
     var showDisplayCurrencyDialog by remember { mutableStateOf(false) }
@@ -161,6 +165,7 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
             )
         }
     ) { paddingValues ->
+        val windowSizeInfo = LocalWindowSizeInfo.current
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -170,7 +175,7 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                 .verticalScroll(rememberScrollState())
                 .padding(paddingValues)
                 .padding(Dimensions.Padding.content)
-                .padding(bottom = Dimensions.Component.bottomBarHeight + Spacing.md),
+                .padding(bottom = windowSizeInfo.bottomNavBarPadding + Spacing.md),
             verticalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
             // ── Appearance ──
@@ -608,16 +613,29 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                         selected = selectedImportStrategy == ImportStrategy.REPLACE_ALL,
                         onSelect = { selectedImportStrategy = ImportStrategy.REPLACE_ALL },
                     )
+                    ImportStrategyOption(
+                        title = stringResource(R.string.backup_restore_selective_title),
+                        subtitle = stringResource(R.string.backup_restore_selective_hint),
+                        selected = selectedImportStrategy == ImportStrategy.SELECTIVE,
+                        onSelect = { selectedImportStrategy = ImportStrategy.SELECTIVE },
+                    )
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        pendingImportUri?.let { uri ->
-                            settingsViewModel.importBackup(uri, selectedImportStrategy)
+                        if (selectedImportStrategy == ImportStrategy.SELECTIVE) {
+                            // Open the selective restore dialog instead
+                            selectedRestoreOptions = RestoreOptions()
+                            showImportStrategyDialog = false
+                            showRestoreOptionsDialog = true
+                        } else {
+                            pendingImportUri?.let { uri ->
+                                settingsViewModel.importBackup(uri, selectedImportStrategy)
+                            }
+                            showImportStrategyDialog = false
+                            pendingImportUri = null
                         }
-                        showImportStrategyDialog = false
-                        pendingImportUri = null
                     },
                 ) {
                     Text(stringResource(R.string.backup_restore_confirm))
@@ -627,6 +645,123 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                 TextButton(
                     onClick = {
                         showImportStrategyDialog = false
+                        pendingImportUri = null
+                    },
+                ) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    // Selective restore checkbox dialog
+    if (showRestoreOptionsDialog && pendingImportUri != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showRestoreOptionsDialog = false
+                pendingImportUri = null
+            },
+            title = { Text(stringResource(R.string.backup_restore_selective_title)) },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    Text(
+                        text = stringResource(R.string.backup_restore_selective_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.height(Spacing.sm))
+                    RestoreCheckboxRow(
+                        label = stringResource(R.string.backup_restore_select_transactions),
+                        checked = selectedRestoreOptions.transactions,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(transactions = it) }
+                    )
+                    RestoreCheckboxRow(
+                        label = stringResource(R.string.backup_restore_select_categories),
+                        checked = selectedRestoreOptions.categories,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(categories = it) }
+                    )
+                    RestoreCheckboxRow(
+                        label = stringResource(R.string.backup_restore_select_cards),
+                        checked = selectedRestoreOptions.cards,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(cards = it) }
+                    )
+                    RestoreCheckboxRow(
+                        label = stringResource(R.string.backup_restore_select_subscriptions),
+                        checked = selectedRestoreOptions.subscriptions,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(subscriptions = it) }
+                    )
+                    RestoreCheckboxRow(
+                        label = stringResource(R.string.backup_restore_select_budgets),
+                        checked = selectedRestoreOptions.budgets,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(budgets = it) }
+                    )
+                    RestoreCheckboxRow(
+                        label = stringResource(R.string.backup_restore_select_rules),
+                        checked = selectedRestoreOptions.rules,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(rules = it) }
+                    )
+                    RestoreCheckboxRow(
+                        label = stringResource(R.string.backup_restore_select_loans),
+                        checked = selectedRestoreOptions.loans,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(loans = it) }
+                    )
+                    RestoreCheckboxRow(
+                        label = stringResource(R.string.backup_restore_select_groups),
+                        checked = selectedRestoreOptions.transactionGroups,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(transactionGroups = it) }
+                    )
+                    RestoreCheckboxRow(
+                        label = stringResource(R.string.backup_restore_select_exchange_rates),
+                        checked = selectedRestoreOptions.exchangeRates,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(exchangeRates = it) }
+                    )
+                    RestoreCheckboxRow(
+                        label = stringResource(R.string.backup_restore_select_preferences),
+                        checked = selectedRestoreOptions.preferences,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(preferences = it) }
+                    )
+                    RestoreCheckboxRow(
+                        label = stringResource(R.string.backup_restore_select_merchant_mappings),
+                        checked = selectedRestoreOptions.merchantMappings,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(merchantMappings = it) }
+                    )
+                    RestoreCheckboxRow(
+                        label = stringResource(R.string.backup_restore_select_chat_messages),
+                        checked = selectedRestoreOptions.chatMessages,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(chatMessages = it) }
+                    )
+                    RestoreCheckboxRow(
+                        label = stringResource(R.string.backup_restore_select_bank_notifications),
+                        checked = selectedRestoreOptions.bankNotifications,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(bankNotifications = it) }
+                    )
+                    RestoreCheckboxRow(
+                        label = stringResource(R.string.backup_restore_select_profiles),
+                        checked = selectedRestoreOptions.profiles,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(profiles = it) }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingImportUri?.let { uri ->
+                            settingsViewModel.importBackup(uri, selectedRestoreOptions)
+                        }
+                        showRestoreOptionsDialog = false
+                        pendingImportUri = null
+                    },
+                ) {
+                    Text(stringResource(R.string.backup_restore_select_restore))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showRestoreOptionsDialog = false
                         pendingImportUri = null
                     },
                 ) {
@@ -1096,5 +1231,30 @@ private fun ImportStrategyOption(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+@Composable
+private fun RestoreCheckboxRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(vertical = Spacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+        )
+        Spacer(modifier = Modifier.width(Spacing.sm))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }

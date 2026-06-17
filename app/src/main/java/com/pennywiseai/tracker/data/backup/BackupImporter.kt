@@ -33,7 +33,7 @@ class BackupImporter @Inject constructor(
         .registerTypeAdapter(java.math.BigDecimal::class.java, BigDecimalTypeAdapter())
         .create()
 
-    // ── Public entry point ────────────────────────────────────────────────────
+    // ── Public entry points ───────────────────────────────────────────────────
 
     suspend fun importBackup(
         uri: Uri,
@@ -51,6 +51,26 @@ class BackupImporter @Inject constructor(
             }
         } catch (e: Exception) {
             Log.e("BackupImporter", "Import failed", e)
+            ImportResult.Error("Import failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Selective restore — only imports the data categories specified in [options].
+     * Uses merge semantics for each selected category.
+     */
+    suspend fun importBackup(
+        uri: Uri,
+        options: RestoreOptions
+    ): ImportResult = withContext(Dispatchers.IO) {
+        try {
+            val backup = readBackupFile(uri)
+            if (!isCompatibleVersion(backup)) {
+                return@withContext ImportResult.Error("Incompatible backup version")
+            }
+            selectiveRestore(backup, options)
+        } catch (e: Exception) {
+            Log.e("BackupImporter", "Selective import failed", e)
             ImportResult.Error("Import failed: ${e.message}")
         }
     }
@@ -165,6 +185,7 @@ class BackupImporter @Inject constructor(
         if (!app.has("use_fixed_budget_period_end"))  app.addProperty("use_fixed_budget_period_end", false)
         if (!app.has("budget_period_end_day"))        app.addProperty("budget_period_end_day", 31)
         if (!app.has("profile_background_color"))     app.addProperty("profile_background_color", 0)
+        if (!app.has("insights_data_window_months"))  app.addProperty("insights_data_window_months", 3)
 
         // security (added in a later version)
         if (!prefs.has("security") || prefs.get("security").isJsonNull) {
@@ -210,91 +231,92 @@ class BackupImporter @Inject constructor(
         var importedTransactions = 0
         var importedCategories = 0
 
-        return database.withTransaction {
-            try {
-                clearAllDataForRestore()
+        // Database operations run inside the transaction; preferences are written
+        // outside so DataStore's dispatcher doesn't interfere with the Room
+        // transaction context and all writes are guaranteed to complete.
+        database.withTransaction {
+            clearAllDataForRestore()
 
-                // Loans, groups, and profiles BEFORE transactions so FK
-                // references in TransactionEntity resolve correctly.
-                backup.database.loans.forEach { loan ->
-                    database.loanDao().insertLoanForRestore(loan)
-                }
-                backup.database.transactionGroups.forEach { group ->
-                    database.transactionGroupDao().insertGroupForRestore(group)
-                }
-                backup.database.profiles.forEach { profile ->
-                    database.profileDao().insert(profile)
-                }
+            // Loans, groups, and profiles BEFORE transactions so FK
+            // references in TransactionEntity resolve correctly.
+            backup.database.loans.forEach { loan ->
+                database.loanDao().insertLoanForRestore(loan)
+            }
+            backup.database.transactionGroups.forEach { group ->
+                database.transactionGroupDao().insertGroupForRestore(group)
+            }
+            backup.database.profiles.forEach { profile ->
+                database.profileDao().insert(profile)
+            }
 
-                backup.database.categories.forEach { category ->
-                    database.categoryDao().insertCategoryForRestore(category)
-                    importedCategories++
-                }
+            backup.database.categories.forEach { category ->
+                database.categoryDao().insertCategoryForRestore(category)
+                importedCategories++
+            }
 
-                importTransactionsForRestore(backup.database.transactions)
-                importedTransactions = backup.database.transactions.size
+            importTransactionsForRestore(backup.database.transactions)
+            importedTransactions = backup.database.transactions.size
 
-                // Receipts reference transaction IDs — restore after transactions.
-                database.transactionReceiptDao().insertReceipts(backup.database.transactionReceipts)
+            // Receipts reference transaction IDs — restore after transactions.
+            database.transactionReceiptDao().insertReceipts(backup.database.transactionReceipts)
 
-                backup.database.cards.forEach { card ->
-                    database.cardDao().insertCard(card)
-                }
-                backup.database.accountBalances.forEach { balance ->
-                    database.accountBalanceDao().insertBalance(balance)
-                }
-                backup.database.subscriptions.forEach { subscription ->
-                    database.subscriptionDao().insertSubscription(subscription)
-                }
-                backup.database.merchantMappings.forEach { mapping ->
-                    database.merchantMappingDao().insertMapping(mapping)
-                }
-                backup.database.merchantAliases.forEach { alias ->
-                    database.merchantAliasDao().insertAlias(alias)
-                }
-                backup.database.unrecognizedSms.forEach { sms ->
-                    database.unrecognizedSmsDao().insert(sms)
-                }
-                backup.database.chatMessages.forEach { message ->
-                    database.chatDao().insertMessage(message)
-                }
-                backup.database.rules.forEach { rule ->
-                    database.ruleDao().insertRule(rule)
-                }
-                backup.database.ruleApplications.forEach { application ->
-                    database.ruleApplicationDao().insertApplication(application)
-                }
-                backup.database.exchangeRates.forEach { rate ->
-                    database.exchangeRateDao().insertExchangeRate(rate)
-                }
-                backup.database.budgets.forEach { budget ->
-                    database.budgetDao().insertBudget(budget)
-                }
-                backup.database.budgetCategories.forEach { category ->
-                    database.budgetDao().insertBudgetCategory(category)
-                }
-                backup.database.transactionSplits.forEach { split ->
-                    database.transactionSplitDao().insertSplit(split)
-                }
-                backup.database.bankNotifications.forEach { notification ->
-                    database.bankNotificationDao().insertOrReplace(notification)
-                }
-                backup.database.salaryMonthOverrides.forEach { override ->
-                    database.salaryMonthOverrideDao().upsert(override)
-                }
-
-                importPreferences(backup.preferences)
-
-                ImportResult.Success(
-                    importedTransactions = importedTransactions,
-                    importedCategories = importedCategories,
-                    skippedDuplicates = 0,
-                    latestTransactionTimestamp = latestTransactionTimestampMillis(backup.database.transactions)
-                )
-            } catch (e: Exception) {
-                throw e
+            backup.database.cards.forEach { card ->
+                database.cardDao().insertCard(card)
+            }
+            backup.database.accountBalances.forEach { balance ->
+                database.accountBalanceDao().insertBalance(balance)
+            }
+            backup.database.subscriptions.forEach { subscription ->
+                database.subscriptionDao().insertSubscription(subscription)
+            }
+            backup.database.merchantMappings.forEach { mapping ->
+                database.merchantMappingDao().insertMapping(mapping)
+            }
+            backup.database.merchantAliases.forEach { alias ->
+                database.merchantAliasDao().insertAlias(alias)
+            }
+            backup.database.unrecognizedSms.forEach { sms ->
+                database.unrecognizedSmsDao().insert(sms)
+            }
+            backup.database.chatMessages.forEach { message ->
+                database.chatDao().insertMessage(message)
+            }
+            backup.database.rules.forEach { rule ->
+                database.ruleDao().insertRule(rule)
+            }
+            backup.database.ruleApplications.forEach { application ->
+                database.ruleApplicationDao().insertApplication(application)
+            }
+            backup.database.exchangeRates.forEach { rate ->
+                database.exchangeRateDao().insertExchangeRate(rate)
+            }
+            backup.database.budgets.forEach { budget ->
+                database.budgetDao().insertBudget(budget)
+            }
+            backup.database.budgetCategories.forEach { category ->
+                database.budgetDao().insertBudgetCategory(category)
+            }
+            backup.database.transactionSplits.forEach { split ->
+                database.transactionSplitDao().insertSplit(split)
+            }
+            backup.database.bankNotifications.forEach { notification ->
+                database.bankNotificationDao().insertOrReplace(notification)
+            }
+            backup.database.salaryMonthOverrides.forEach { override ->
+                database.salaryMonthOverrideDao().upsert(override)
             }
         }
+
+        // Preferences are written after the DB transaction commits successfully.
+        // If withTransaction threw, this line is never reached.
+        importPreferences(backup.preferences)
+
+        return ImportResult.Success(
+            importedTransactions = importedTransactions,
+            importedCategories = importedCategories,
+            skippedDuplicates = 0,
+            latestTransactionTimestamp = latestTransactionTimestampMillis(backup.database.transactions)
+        )
     }
 
     /**
@@ -377,9 +399,8 @@ class BackupImporter @Inject constructor(
         var importedCategories = 0
         var skippedDuplicates = 0
 
-        return database.withTransaction {
-            try {
-                // Collect existing state ────────────────────────────────────
+        database.withTransaction {
+            // Collect existing state ────────────────────────────────────
                 val existingTransactions = database.transactionDao()
                     .getAllTransactions().first()  // only is_deleted=0 rows
                 val existingTransactionHashes = existingTransactions
@@ -518,18 +539,187 @@ class BackupImporter @Inject constructor(
                     database.salaryMonthOverrideDao().upsert(override)
                 }
 
-                importPreferences(backup.preferences)
+        }
 
-                ImportResult.Success(
-                    importedTransactions = importedTransactions,
-                    importedCategories = importedCategories,
-                    skippedDuplicates = skippedDuplicates,
-                    latestTransactionTimestamp = latestTransactionTimestampMillis(backup.database.transactions)
-                )
-            } catch (e: Exception) {
-                throw e
+        // Preferences are written after the DB transaction commits successfully.
+        // If withTransaction threw, this line is never reached.
+        importPreferences(backup.preferences)
+
+        return ImportResult.Success(
+            importedTransactions = importedTransactions,
+            importedCategories = importedCategories,
+            skippedDuplicates = skippedDuplicates,
+            latestTransactionTimestamp = latestTransactionTimestampMillis(backup.database.transactions)
+        )
+    }
+
+    // ── SELECTIVE RESTORE ─────────────────────────────────────────────────────
+
+    /**
+     * Selective restore — only imports data categories specified in [options].
+     * Uses merge semantics for each selected category.
+     */
+    private suspend fun selectiveRestore(backup: PennyWiseBackup, options: RestoreOptions): ImportResult {
+        var importedTransactions = 0
+        var importedCategories = 0
+        var skippedDuplicates = 0
+
+        database.withTransaction {
+            // Collect existing state (only if we need it)
+            val existingTransactionHashes = if (options.transactions) {
+                database.transactionDao().getAllTransactions().first()
+                    .map { it.transactionHash }.toSet()
+            } else emptySet()
+            val softDeletedHashes = if (options.transactions) {
+                database.transactionDao().getSoftDeletedHashes().toSet()
+            } else emptySet()
+            val existingCategories = if (options.categories) {
+                database.categoryDao().getAllCategories().first()
+                    .map { it.name }.toSet()
+            } else emptySet()
+
+            // FK dependency maps
+            val oldToNewLoanIdMap = if (options.transactions) {
+                importLoansWithMerge(if (options.loans) backup.database.loans else emptyList())
+            } else if (options.loans) {
+                importLoansWithMerge(backup.database.loans)
+            } else emptyMap()
+
+            val oldToNewGroupIdMap = if (options.transactions || options.transactionGroups) {
+                if (options.transactionGroups) {
+                    importGroupsWithMerge(backup.database.transactionGroups)
+                } else {
+                    importGroupsWithMerge(emptyList())
+                }
+            } else if (options.transactionGroups) {
+                importGroupsWithMerge(backup.database.transactionGroups)
+            } else emptyMap()
+
+            if (options.profiles) {
+                importProfilesWithMerge(backup.database.profiles)
+            }
+
+            // Categories
+            if (options.categories) {
+                backup.database.categories.forEach { category ->
+                    if (!existingCategories.contains(category.name)) {
+                        database.categoryDao().insertCategory(category.copy(id = 0))
+                        importedCategories++
+                    }
+                }
+            }
+
+            // Transactions
+            val oldToNewTransactionIdMap = mutableMapOf<Long, Long>()
+            if (options.transactions) {
+                backup.database.transactions.forEach { transaction ->
+                    val hash = transaction.transactionHash
+                    if (softDeletedHashes.contains(hash)) {
+                        skippedDuplicates++
+                        return@forEach
+                    }
+                    if (!existingTransactionHashes.contains(hash)) {
+                        val oldId = transaction.id
+                        val remapped = transaction.copy(
+                            id = 0,
+                            loanId  = transaction.loanId?.let  { oldToNewLoanIdMap[it]  ?: it },
+                            groupId = transaction.groupId?.let { oldToNewGroupIdMap[it] ?: it }
+                        )
+                        val newId = database.transactionDao().insertTransaction(remapped)
+                        if (oldId != 0L) oldToNewTransactionIdMap[oldId] = newId
+                        importedTransactions++
+                    } else {
+                        skippedDuplicates++
+                    }
+                }
+
+                // Receipts
+                importReceiptsWithMerge(backup.database.transactionReceipts, oldToNewTransactionIdMap)
+
+                // Transaction splits
+                val existingSplits = database.transactionSplitDao().getAllSplits().first()
+                val existingSplitKeys = existingSplits
+                    .map { "${it.transactionId}|${it.category}|${it.amount}" }.toSet()
+                backup.database.transactionSplits.forEach { split ->
+                    val mappedTxId = oldToNewTransactionIdMap[split.transactionId] ?: split.transactionId
+                    val key = "${mappedTxId}|${split.category}|${split.amount}"
+                    if (!existingSplitKeys.contains(key)) {
+                        database.transactionSplitDao().insertSplit(
+                            split.copy(id = 0, transactionId = mappedTxId)
+                        )
+                    }
+                }
+            }
+
+            // Other entities (conditionally imported via merge helpers)
+            if (options.cards) {
+                importCardsWithMerge(backup.database.cards)
+                importAccountBalancesWithMerge(backup.database.accountBalances)
+            }
+            if (options.subscriptions) {
+                importSubscriptionsWithMerge(backup.database.subscriptions)
+            }
+            if (options.merchantMappings) {
+                importMerchantMappingsWithMerge(backup.database.merchantMappings)
+                importMerchantAliasesWithMerge(backup.database.merchantAliases)
+            }
+            if (options.rules) {
+                importRulesWithMerge(backup.database.rules)
+                // Rule applications
+                val existingRuleAppIds = database.ruleApplicationDao()
+                    .getAllApplications().first().map { it.id }.toSet()
+                backup.database.ruleApplications.forEach { application ->
+                    if (!existingRuleAppIds.contains(application.id)) {
+                        val mappedTxId = application.transactionId.toLongOrNull()?.let { oldId ->
+                            oldToNewTransactionIdMap[oldId]?.toString() ?: application.transactionId
+                        } ?: application.transactionId
+                        database.ruleApplicationDao().insertApplication(
+                            application.copy(transactionId = mappedTxId)
+                        )
+                    }
+                }
+            }
+            if (options.exchangeRates) {
+                val existingRates = database.exchangeRateDao().getAllRatesFlow().first()
+                backup.database.exchangeRates.forEach { rate ->
+                    val exists = existingRates.any {
+                        it.fromCurrency == rate.fromCurrency && it.toCurrency == rate.toCurrency
+                    }
+                    if (!exists) database.exchangeRateDao().insertExchangeRate(rate)
+                }
+            }
+            if (options.budgets) {
+                importBudgetsWithMerge(backup.database.budgets, backup.database.budgetCategories)
+            }
+            if (options.bankNotifications) {
+                backup.database.bankNotifications.forEach { notification ->
+                    database.bankNotificationDao().insertOrReplace(notification)
+                }
+            }
+            if (options.salaryOverrides) {
+                backup.database.salaryMonthOverrides.forEach { override ->
+                    database.salaryMonthOverrideDao().upsert(override)
+                }
+            }
+            if (options.chatMessages) {
+                backup.database.chatMessages.forEach { message ->
+                    database.chatDao().insertMessage(message)
+                }
             }
         }
+
+        // Preferences are written after the DB transaction commits successfully.
+        if (options.preferences) {
+            importPreferences(backup.preferences)
+        }
+
+        return ImportResult.Success(
+            importedTransactions = importedTransactions,
+            importedCategories = importedCategories,
+            skippedDuplicates = skippedDuplicates,
+            latestTransactionTimestamp = if (importedTransactions > 0)
+                latestTransactionTimestampMillis(backup.database.transactions) else null
+        )
     }
 
     // ── Merge helpers ─────────────────────────────────────────────────────────
@@ -755,6 +945,7 @@ class BackupImporter @Inject constructor(
         preferences.app.selectedProfileId?.let {
             userPreferencesRepository.updateSelectedProfileId(it)
         }
+        userPreferencesRepository.updateInsightsDataWindowMonths(preferences.app.insightsDataWindowMonths)
 
         // Security
         userPreferencesRepository.setAppLockEnabled(preferences.security.appLockEnabled)

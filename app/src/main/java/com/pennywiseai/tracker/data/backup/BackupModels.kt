@@ -333,7 +333,10 @@ data class AppPreferences(
     val dismissedSalarySuggestions: String? = null,
 
     @SerializedName("selected_profile_id")
-    val selectedProfileId: Long? = null
+    val selectedProfileId: Long? = null,
+
+    @SerializedName("insights_data_window_months")
+    val insightsDataWindowMonths: Int = 3
 )
 
 /**
@@ -377,6 +380,36 @@ enum class ImportStrategy {
     REPLACE_ALL,    // Replace all existing data
     MERGE,          // Merge with existing data (skip duplicates)
     SELECTIVE       // User selects what to import
+}
+
+/**
+ * Selective restore options — controls which data categories are restored
+ * from a backup file. All flags default to `true` (restore everything).
+ */
+data class RestoreOptions(
+    val transactions: Boolean = true,
+    val categories: Boolean = true,
+    val cards: Boolean = true,
+    val subscriptions: Boolean = true,
+    val budgets: Boolean = true,
+    val rules: Boolean = true,
+    val loans: Boolean = true,
+    val transactionGroups: Boolean = true,
+    val merchantMappings: Boolean = true,
+    val exchangeRates: Boolean = true,
+    val chatMessages: Boolean = true,
+    val bankNotifications: Boolean = true,
+    val unrecognizedSms: Boolean = true,
+    val salaryOverrides: Boolean = true,
+    val profiles: Boolean = true,
+    val preferences: Boolean = true,
+) {
+    /** Returns `true` when every category is selected — the fast path. */
+    val isAllSelected: Boolean
+        get() = transactions && categories && cards && subscriptions && budgets &&
+            rules && loans && transactionGroups && merchantMappings && exchangeRates &&
+            chatMessages && bankNotifications && unrecognizedSms && salaryOverrides &&
+            profiles && preferences
 }
 
 /**

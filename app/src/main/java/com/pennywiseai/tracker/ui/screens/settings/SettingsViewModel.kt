@@ -25,6 +25,7 @@ import com.pennywiseai.tracker.data.backup.BackupImporter
 import com.pennywiseai.tracker.data.backup.ExportResult
 import com.pennywiseai.tracker.data.backup.ImportResult
 import com.pennywiseai.tracker.data.backup.ImportStrategy
+import com.pennywiseai.tracker.data.backup.RestoreOptions
 import com.pennywiseai.tracker.R
 import com.pennywiseai.tracker.data.manager.SmsScanManager
 import com.pennywiseai.tracker.data.repository.SalaryMonthOverrideRepository
@@ -681,6 +682,42 @@ class SettingsViewModel @Inject constructor(
                                 result.skippedDuplicates,
                             )
                         }
+                        val ts = result.latestTransactionTimestamp
+                        if (ts != null) {
+                            _importExportMessage.value = null
+                            _postRestoreScanInfo.value = PostRestoreScanInfo(message, ts)
+                        } else {
+                            _importExportMessage.value = message
+                        }
+                    }
+                    is ImportResult.Error -> {
+                        _importExportMessage.value = "Import failed: ${result.message}"
+                        Log.e("SettingsViewModel", "Import failed: ${result.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                _importExportMessage.value = "Import error: ${e.message}"
+                Log.e("SettingsViewModel", "Import error", e)
+            }
+        }
+    }
+
+    /**
+     * Selective restore — only imports the data categories specified in [options].
+     */
+    fun importBackup(uri: android.net.Uri, options: RestoreOptions) {
+        viewModelScope.launch {
+            try {
+                _importExportMessage.value = context.getString(R.string.backup_restore_importing)
+                val result = backupImporter.importBackup(uri, options)
+                when (result) {
+                    is ImportResult.Success -> {
+                        val message = context.getString(
+                            R.string.backup_restore_success_merge,
+                            result.importedTransactions,
+                            result.importedCategories,
+                            result.skippedDuplicates,
+                        )
                         val ts = result.latestTransactionTimestamp
                         if (ts != null) {
                             _importExportMessage.value = null
