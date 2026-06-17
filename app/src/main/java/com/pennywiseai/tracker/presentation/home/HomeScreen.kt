@@ -83,6 +83,7 @@ import com.pennywiseai.tracker.ui.components.CustomTitleTopAppBar
 import com.pennywiseai.tracker.ui.effects.overScrollVertical
 import com.pennywiseai.tracker.ui.effects.rememberOverscrollFlingBehavior
 import com.pennywiseai.tracker.ui.theme.*
+import com.pennywiseai.tracker.ui.utils.LocalWindowSizeInfo
 import com.pennywiseai.tracker.utils.CurrencyFormatter
 import dev.chrisbanes.haze.HazeDefaults
 import dev.chrisbanes.haze.HazeEffectScope
@@ -326,6 +327,7 @@ fun HomeScreen(
             )
         }
     ) { paddingValues ->
+    val windowSizeInfo = LocalWindowSizeInfo.current
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         LazyColumn(
             state = lazyListState,
@@ -337,7 +339,7 @@ fun HomeScreen(
             contentPadding = PaddingValues(
                 // Must match full top inset: pulling this up clips the in-list brand title under status bar / clip.
                 top = paddingValues.calculateTopPadding(),
-                bottom = Dimensions.Component.bottomBarHeight + 96.dp
+                bottom = windowSizeInfo.bottomNavBarPadding + 96.dp
             ),
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
@@ -362,9 +364,9 @@ fun HomeScreen(
                     ) {
                         Text(
                             text = stringResource(R.string.brand_display_name),
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Normal,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         if (!uiState.isBalanceReady) {
                             com.pennywiseai.tracker.ui.components.skeleton.BalanceCardSkeleton(
@@ -669,7 +671,7 @@ fun HomeScreen(
                 .align(Alignment.BottomEnd)
                 .padding(
                     end = Dimensions.Padding.content,
-                    bottom = 96.dp,
+                    bottom = if (windowSizeInfo.useNavigationRail) Dimensions.Padding.content else 96.dp,
                 )
                 .combinedClickable(
                     role = Role.Button,

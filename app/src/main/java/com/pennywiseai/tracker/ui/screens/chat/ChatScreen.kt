@@ -283,7 +283,7 @@ fun ChatScreen(
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(Dimensions.Component.bottomBarHeight))
+                    Spacer(modifier = Modifier.height(Spacing.xl))
                 }
             }
 
@@ -512,7 +512,7 @@ fun ChatScreen(
                                 }
                             }
                         }
-                        Spacer(modifier = Modifier.height(Dimensions.Component.bottomBarHeight))
+                        Spacer(modifier = Modifier.height(Spacing.xl))
                     }
                 }
             }

@@ -800,6 +800,7 @@ fun TransactionDetailScreen(
                 loan = loan,
                 onNavigateToLoanDetail = onNavigateToLoanDetail,
                 onFindSimilar = onFindSimilar,
+                onNavigateToTransactionDetail = onNavigateToTransactionDetail,
                 accountProfileId = accountProfileId,
                 hazeState = hazeState,
                 modifier = Modifier.padding(paddingValues)
@@ -1039,6 +1040,7 @@ private fun TransactionDetailContent(
     loan: LoanEntity?,
     onNavigateToLoanDetail: (Long) -> Unit,
     onFindSimilar: (String) -> Unit,
+    onNavigateToTransactionDetail: (Long) -> Unit,
     accountProfileId: Long?,
     hazeState: HazeState,
     modifier: Modifier = Modifier
@@ -1093,6 +1095,7 @@ private fun TransactionDetailContent(
                     loan = loan,
                     onNavigateToLoanDetail = onNavigateToLoanDetail,
                     onFindSimilar = onFindSimilar,
+                    onNavigateToTransactionDetail = onNavigateToTransactionDetail,
                     accountProfileId = accountProfileId
                 )
             }
@@ -1151,6 +1154,7 @@ private fun TransactionReceipt(
     loan: LoanEntity?,
     onNavigateToLoanDetail: (Long) -> Unit,
     onFindSimilar: (String) -> Unit = {},
+    onNavigateToTransactionDetail: (Long) -> Unit = {},
     accountProfileId: Long? = null
 ) {
     val currentGroup by viewModel.currentGroup.collectAsStateWithLifecycle()
@@ -1394,6 +1398,83 @@ private fun TransactionReceipt(
                     label = "Find similar",
                     onClick = { onFindSimilar(transaction.merchantName) }
                 )
+            }
+        }
+
+        // ── Similar Transactions Section ──
+        val similarTransactions by viewModel.similarTransactions.collectAsStateWithLifecycle()
+        if (similarTransactions.isNotEmpty()) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                tonalElevation = 1.dp
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(Spacing.md)) {
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    ) {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(Dimensions.Icon.medium),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Similar Items",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(Spacing.sm))
+                    // Similar transactions list
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(similarTransactions) { similarTxn ->
+                            Surface(
+                                modifier = Modifier
+                                    .width(160.dp)
+                                    .clickable { onNavigateToTransactionDetail(similarTxn.id) },
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                tonalElevation = 2.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(Spacing.sm),
+                                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                                ) {
+                                    Text(
+                                        text = similarTxn.merchantName,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = CurrencyFormatter.formatCurrency(similarTxn.amount.abs(), similarTxn.currency),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = similarTxn.dateTime.format(
+                                            DateTimeFormatter.ofPattern("MMM d")
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

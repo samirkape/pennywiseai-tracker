@@ -396,6 +396,7 @@ class TransactionDetailViewModel @Inject constructor(
                 _budgetCategory.value = it.budgetCategory
                 loadAccountProfileId(it)
                 loadLinkedGoal(transactionId)
+                loadSimilarTransactions(it.merchantName)
             }
         }
     }
@@ -1680,6 +1681,27 @@ class TransactionDetailViewModel @Inject constructor(
                 _linkedGoalContribution.value = null
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to unlink goal: ${e.message}"
+            }
+        }
+    }
+
+    // ========== Similar Transactions ==========
+
+    private val _similarTransactions = MutableStateFlow<List<TransactionEntity>>(emptyList())
+    val similarTransactions: StateFlow<List<TransactionEntity>> = _similarTransactions.asStateFlow()
+
+    private fun loadSimilarTransactions(merchantName: String) {
+        viewModelScope.launch {
+            try {
+                val similar = withContext(Dispatchers.IO) {
+                    transactionRepository.getSimilarTransactionsForMerchant(
+                        merchantName,
+                        excludeTransactionId = _transaction.value?.id ?: -1L
+                    )
+                }.take(5)  // Limit to 5 similar transactions for display
+                _similarTransactions.value = similar
+            } catch (e: Exception) {
+                _similarTransactions.value = emptyList()
             }
         }
     }

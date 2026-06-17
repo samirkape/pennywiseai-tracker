@@ -344,6 +344,17 @@ class TransactionRepository @Inject constructor(
         )
     }
 
+    suspend fun getSimilarTransactionsForMerchant(
+        merchantName: String,
+        excludeTransactionId: Long,
+    ): List<TransactionEntity> {
+        return transactionDao.getActiveTransactionsForMerchant(
+            merchantName.trim(),
+            excludeTransactionId,
+        )
+    }
+
+
     suspend fun findSimilarTransactionsForRename(
         originalMerchant: String,
         newMerchantName: String,

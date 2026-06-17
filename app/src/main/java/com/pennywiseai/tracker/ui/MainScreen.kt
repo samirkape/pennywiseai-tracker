@@ -4,6 +4,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.background
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
@@ -30,11 +33,14 @@ import com.pennywiseai.tracker.presentation.home.HomeScreen
 import com.pennywiseai.tracker.presentation.subscriptions.SubscriptionsScreen
 import com.pennywiseai.tracker.presentation.transactions.TransactionsScreen
 import com.pennywiseai.tracker.ui.components.PennyWiseBottomNavigation
+import com.pennywiseai.tracker.ui.components.PennyWiseNavigationRail
 import com.pennywiseai.tracker.ui.components.SpotlightTutorial
 import com.pennywiseai.tracker.ui.components.WhatsNewDialog
 import com.pennywiseai.tracker.ui.screens.settings.AppearanceScreen
 import com.pennywiseai.tracker.ui.screens.chat.ChatScreen
 import com.pennywiseai.tracker.ui.screens.settings.SettingsScreen
+import com.pennywiseai.tracker.ui.utils.LocalWindowSizeInfo
+import com.pennywiseai.tracker.ui.utils.rememberWindowSizeInfo
 import com.pennywiseai.tracker.ui.viewmodel.MainViewModel
 import com.pennywiseai.tracker.ui.viewmodel.ThemeViewModel
 import com.pennywiseai.tracker.ui.viewmodel.SpotlightViewModel
@@ -143,10 +149,26 @@ fun MainScreen(
         }
     }
 
-    Box(modifier = Modifier
+    val windowSizeInfo = rememberWindowSizeInfo()
+    val useNavigationRail = windowSizeInfo.useNavigationRail
+
+    CompositionLocalProvider(LocalWindowSizeInfo provides windowSizeInfo) {
+    Row(modifier = Modifier
         .fillMaxSize()
         .background(MaterialTheme.colorScheme.background)
     ) {
+        // NavigationRail for medium / expanded screens (tablets, landscape)
+        if (useNavigationRail) {
+            PennyWiseNavigationRail(
+                navController = navController,
+                currentDestination = navBackStackEntry?.destination,
+            )
+        }
+
+        Box(modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight()
+        ) {
         // What's New Dialog
         whatsNewVersion?.let { version ->
             WhatsNewDialog(
@@ -761,8 +783,8 @@ fun MainScreen(
             }
         }
 
-        // Bottom navigation OVERLAID on content
-        if (baseRoute in listOf(
+        // Bottom navigation — only on compact screens (medium/expanded use NavigationRail)
+        if (!useNavigationRail && baseRoute in listOf(
                 Constants.Routes.HOME,
                 Constants.Routes.BUDGETS,
                 Constants.Routes.ANALYTICS,
@@ -796,5 +818,7 @@ fun MainScreen(
                 }
             )
         }
-    }
+        } // end inner Box
+    } // end Row
+    } // end CompositionLocalProvider
 }

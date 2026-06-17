@@ -46,6 +46,7 @@ import com.pennywiseai.tracker.ui.components.CustomTitleTopAppBar
 import com.pennywiseai.tracker.ui.components.cards.PennyWiseCardV2
 import com.pennywiseai.tracker.ui.icons.CategoryMapping
 import com.pennywiseai.tracker.ui.theme.*
+import com.pennywiseai.tracker.ui.utils.LocalWindowSizeInfo
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import androidx.compose.ui.graphics.SolidColor
@@ -238,6 +239,7 @@ private fun BudgetGroupsContent(
     }
 
     val lazyListState = rememberLazyListState()
+    val windowSizeInfo = LocalWindowSizeInfo.current
     LazyColumn(
         state = lazyListState,
         modifier = modifier.fillMaxSize().overScrollVertical(),
@@ -245,7 +247,7 @@ private fun BudgetGroupsContent(
             start = Dimensions.Padding.content,
             end = Dimensions.Padding.content,
             top = Dimensions.Padding.content + topPadding,
-            bottom = Dimensions.Component.bottomBarHeight + Spacing.md
+            bottom = windowSizeInfo.bottomNavBarPadding + Spacing.md
         ),
         verticalArrangement = Arrangement.spacedBy(Spacing.md),
         flingBehavior = rememberOverscrollFlingBehavior { lazyListState }

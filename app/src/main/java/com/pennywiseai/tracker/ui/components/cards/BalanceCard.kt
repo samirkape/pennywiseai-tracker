@@ -176,7 +176,7 @@ fun HeroSpendCard(
 
     // "Left" = income minus both expenses AND investments — true available cash
     val trueRemaining = (currentMonthTotal - currentMonthInvestment).coerceAtLeast(BigDecimal.ZERO)
-    val remainingFormatted = CurrencyFormatter.formatCurrency(trueRemaining, currency)
+    val remainingFormatted = CurrencyFormatter.formatCurrency(trueRemaining.setScale(0, RoundingMode.HALF_UP), currency)
 
     PennyWiseCardV2(
         contentPadding = Spacing.sm,
@@ -273,11 +273,11 @@ fun HeroSpendCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = stringResource(R.string.home_spent_so_far),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     )
                     AnimatedCurrencyText(
-                        text = CurrencyFormatter.formatCurrency(currentMonthExpenses, currency),
+                        text = CurrencyFormatter.formatCurrency(currentMonthExpenses.setScale(0, RoundingMode.HALF_UP), currency),
                         style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.ExtraBold,
                         brush = null,
@@ -345,24 +345,13 @@ fun HeroSpendCard(
                                 )
                             }
                         }
-                        // Right: "₹X left →"
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.home_remaining, remainingFormatted),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                        // Right: "₹X left"
+                        Text(
+                            text = stringResource(R.string.home_remaining, remainingFormatted),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                 }
             }

@@ -105,6 +105,7 @@ class BackupExporter @Inject constructor(
         val budgetPeriodEndDay = userPreferencesRepository.budgetPeriodEndDay.first()
         val dismissedSalarySuggestions = userPreferencesRepository.dismissedSalarySuggestions.first()
         val selectedProfileId = userPreferencesRepository.selectedProfileId.first()
+        val insightsDataWindowMonths = userPreferencesRepository.insightsDataWindowMonths.first()
 
         // Calculate statistics
         val dateRange = if (transactions.isNotEmpty()) {
@@ -238,7 +239,8 @@ class BackupExporter @Inject constructor(
                     budgetPeriodEndDay = budgetPeriodEndDay,
                     dismissedSalarySuggestions = dismissedSalarySuggestions
                         .joinToString("|").ifEmpty { null },
-                    selectedProfileId = selectedProfileId
+                    selectedProfileId = selectedProfileId,
+                    insightsDataWindowMonths = insightsDataWindowMonths
                 ),
                 security = SecurityPreferences(
                     appLockEnabled = isAppLockEnabled,
