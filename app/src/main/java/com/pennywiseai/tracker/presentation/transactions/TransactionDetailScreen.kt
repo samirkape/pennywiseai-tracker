@@ -1143,6 +1143,7 @@ private fun TransactionDetailContent(
 
 // ==================== Clean detail read-only view ====================
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TransactionReceipt(
     transaction: TransactionEntity,
@@ -1343,133 +1344,157 @@ private fun TransactionReceipt(
             }
         }
 
-        // Quick Actions Row
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            tonalElevation = 1.dp
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(Spacing.sm),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                val isDarkTheme = isSystemInDarkTheme()
-                val loanColor = if (isDarkTheme) loan_dark else loan_light
-                val groupColor = MaterialTheme.colorScheme.tertiary
-
-                // Track as loan action
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val compactScreen = maxWidth < 420.dp
+            val similarTransactions by viewModel.similarTransactions.collectAsStateWithLifecycle()
+            val quickActions = buildList {
                 if (loan == null) {
-                    val trackAsLabel = if (transaction.transactionType == TransactionType.INCOME) {
-                        "Track as borrowed"
-                    } else {
-                        "Track as lent"
-                    }
-                    QuickActionItem(
-                        icon = Icons.Default.SwapHoriz,
-                        label = trackAsLabel,
-                        onClick = { viewModel.showMarkAsLoanSheet() }
+                    add(
+                        TransactionQuickAction(
+                            icon = Icons.Default.SwapHoriz,
+                            label = if (transaction.transactionType == TransactionType.INCOME) {
+                                "Track as borrowed"
+                            } else {
+                                "Track as lent"
+                            },
+                            compactLabel = if (transaction.transactionType == TransactionType.INCOME) {
+                                "Borrow"
+                            } else {
+                                "Lend"
+                            },
+                            onClick = { viewModel.showMarkAsLoanSheet() }
+                        )
                     )
                 }
-
-                // Add to group action
                 if (currentGroup == null) {
-                    QuickActionItem(
-                        icon = Icons.Outlined.FolderOpen,
-                        label = "Add to group",
-                        onClick = { viewModel.showGroupSheet() }
+                    add(
+                        TransactionQuickAction(
+                            icon = Icons.Outlined.FolderOpen,
+                            label = "Add to group",
+                            compactLabel = "Group",
+                            onClick = { viewModel.showGroupSheet() }
+                        )
                     )
                 }
-
-                // Link to goal action
                 if (linkedGoalContribution == null) {
-                    QuickActionItem(
-                        icon = Icons.Default.EmojiEvents,
-                        label = "Link to goal",
-                        onClick = { viewModel.showLinkGoalSheet() }
+                    add(
+                        TransactionQuickAction(
+                            icon = Icons.Default.EmojiEvents,
+                            label = "Link to goal",
+                            compactLabel = "Goal",
+                            onClick = { viewModel.showLinkGoalSheet() }
+                        )
                     )
                 }
-
-                // Find similar action
-                QuickActionItem(
-                    icon = Icons.Default.Search,
-                    label = "Find similar",
-                    onClick = { onFindSimilar(transaction.merchantName) }
+                add(
+                    TransactionQuickAction(
+                        icon = Icons.Default.Search,
+                        label = "Find similar",
+                        compactLabel = "Similar",
+                        onClick = { onFindSimilar(transaction.merchantName) }
+                    )
                 )
             }
-        }
 
-        // ── Similar Transactions Section ──
-        val similarTransactions by viewModel.similarTransactions.collectAsStateWithLifecycle()
-        if (similarTransactions.isNotEmpty()) {
-            Surface(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                tonalElevation = 1.dp
+                verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
-                Column(modifier = Modifier.fillMaxWidth().padding(Spacing.md)) {
-                    // Header
+                // Quick Actions Row
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    tonalElevation = 1.dp
+                ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Spacing.sm, vertical = Spacing.xs),
+                        horizontalArrangement = Arrangement.Start
                     ) {
-                        Icon(
-                            Icons.Default.Search,
-                            contentDescription = null,
-                            modifier = Modifier.size(Dimensions.Icon.medium),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "Similar Items",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        quickActions.forEach { action ->
+                            QuickActionItem(
+                                icon = action.icon,
+                                label = if (compactScreen) action.compactLabel else action.label,
+                                onClick = action.onClick,
+                                compact = compactScreen,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.height(Spacing.sm))
-                    // Similar transactions list
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                        modifier = Modifier.fillMaxWidth()
+                }
+
+                // ── Similar Transactions Section ──
+                if (similarTransactions.isNotEmpty()) {
+                    val similarCardWidth = if (compactScreen) 136.dp else 160.dp
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        tonalElevation = 1.dp
                     ) {
-                        items(similarTransactions) { similarTxn ->
-                            Surface(
-                                modifier = Modifier
-                                    .width(160.dp)
-                                    .clickable { onNavigateToTransactionDetail(similarTxn.id) },
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                tonalElevation = 2.dp
+                        Column(modifier = Modifier.fillMaxWidth().padding(Spacing.md)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                             ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(Spacing.sm),
-                                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
-                                ) {
-                                    Text(
-                                        text = similarTxn.merchantName,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = CurrencyFormatter.formatCurrency(similarTxn.amount.abs(), similarTxn.currency),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = similarTxn.dateTime.format(
-                                            DateTimeFormatter.ofPattern("MMM d")
-                                        ),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                Icon(
+                                    Icons.Default.Search,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(Dimensions.Icon.medium),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "Similar Items",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(Spacing.sm))
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                                contentPadding = PaddingValues(end = Spacing.xs),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(similarTransactions) { similarTxn ->
+                                    Surface(
+                                        modifier = Modifier
+                                            .width(similarCardWidth)
+                                            .clickable { onNavigateToTransactionDetail(similarTxn.id) },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        tonalElevation = 2.dp
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(Spacing.sm),
+                                            verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                                        ) {
+                                            Text(
+                                                text = similarTxn.merchantName,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Medium,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = CurrencyFormatter.formatCurrency(similarTxn.amount.abs(), similarTxn.currency),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = similarTxn.dateTime.format(
+                                                    DateTimeFormatter.ofPattern("MMM d")
+                                                ),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1777,30 +1802,48 @@ private fun QuickActionItem(
     icon: ImageVector,
     label: String,
     onClick: () -> Unit,
+    compact: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .fillMaxWidth()
+            .heightIn(min = if (compact) 52.dp else 58.dp)
+            .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+            .padding(vertical = if (compact) 3.dp else Spacing.xs),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+        verticalArrangement = Arrangement.Center
     ) {
         Icon(
             icon,
             contentDescription = label,
-            modifier = Modifier.size(Dimensions.Icon.medium),
+            modifier = Modifier.size(if (compact) 14.dp else 18.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Spacer(modifier = Modifier.height(if (compact) 2.dp else 4.dp))
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.fillMaxWidth(),
+            style = if (compact) {
+                MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp)
+            } else {
+                MaterialTheme.typography.labelSmall
+            },
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center
         )
     }
 }
+
+private data class TransactionQuickAction(
+    val icon: ImageVector,
+    val label: String,
+    val compactLabel: String,
+    val onClick: () -> Unit
+)
 
 @Composable
 private fun DetailInfoRow(

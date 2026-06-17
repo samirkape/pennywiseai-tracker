@@ -313,7 +313,7 @@ fun AnalyticsReferenceHeroCard(
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
         ) {
             // Label
             Text(
@@ -324,7 +324,7 @@ fun AnalyticsReferenceHeroCard(
                 letterSpacing = 0.1.sp,
             )
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
 
             // Amount + delta badge on same row
             Row(
@@ -336,7 +336,7 @@ fun AnalyticsReferenceHeroCard(
             ) {
                 Text(
                     text = hero.amount,
-                    fontSize = 32.sp,
+                    fontSize = 26.sp,
                     fontWeight = FontWeight.Medium,
                     letterSpacing = (-0.5).sp,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -392,9 +392,9 @@ fun AnalyticsReferenceHeroCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             )
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(8.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(8.dp))
 
             // Breakdown row
             Row(
@@ -411,7 +411,7 @@ fun AnalyticsReferenceHeroCard(
                         Box(
                             modifier = Modifier
                                 .width(0.5.dp)
-                                .height(52.dp)
+                                .height(36.dp)
                                 .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
                         )
                     }
@@ -677,10 +677,9 @@ private fun HeroMetricColumn(
 ) {
     Column(
         modifier = modifier
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(vertical = 4.dp),
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -717,15 +716,6 @@ private fun HeroMetricColumn(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        // Subtle tap hint arrow for clickable metrics
-        if (onClick != null) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                contentDescription = null,
-                modifier = Modifier.size(9.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
-            )
-        }
     }
 }
 

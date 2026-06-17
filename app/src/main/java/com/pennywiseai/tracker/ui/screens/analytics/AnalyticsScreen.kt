@@ -115,14 +115,15 @@ fun AnalyticsScreen(
         pageCount = { tabs.size },
     )
 
-    // Keep pager and tab in sync
-    LaunchedEffect(pagerState.currentPage) {
-        val newTab = tabs.getOrNull(pagerState.currentPage) ?: return@LaunchedEffect
+    // Keep pager and tab in sync — use settledPage so intermediate animation pages
+    // don't trigger a feedback loop when jumping non-adjacent tabs (e.g. Outflow → Invested).
+    LaunchedEffect(pagerState.settledPage) {
+        val newTab = tabs.getOrNull(pagerState.settledPage) ?: return@LaunchedEffect
         if (newTab != selectedOverviewTab) selectedOverviewTab = newTab
     }
     LaunchedEffect(selectedOverviewTab) {
         val targetPage = tabs.indexOf(selectedOverviewTab).coerceAtLeast(0)
-        if (pagerState.currentPage != targetPage) pagerState.animateScrollToPage(targetPage)
+        if (pagerState.settledPage != targetPage) pagerState.animateScrollToPage(targetPage)
     }
 
     // Remember scroll position across navigation
@@ -386,13 +387,13 @@ fun AnalyticsScreen(
                             ChartType.LINE -> BalanceChart(
                                 primaryCurrency = selectedCurrency,
                                 balanceHistory = uiState.spendingTrend,
-                                height = 220,
+                                height = 180,
                                 smooth = false
                             )
                             ChartType.BAR -> SpendingBarChart(
                                 primaryCurrency = selectedCurrency,
                                 data = uiState.spendingTrend,
-                                height = 220
+                                height = 180
                             )
                             ChartType.HEATMAP -> SpendingHeatmap(
                                 data = uiState.spendingTrend

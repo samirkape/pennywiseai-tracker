@@ -23,6 +23,7 @@ data class GoalsUiState(
     val archivedGoals: List<GoalProgress> = emptyList(),
     val totalTargetAmount: BigDecimal = BigDecimal.ZERO,
     val totalCurrentAmount: BigDecimal = BigDecimal.ZERO,
+    val totalDailySavingsNeeded: BigDecimal = BigDecimal.ZERO,
     val isLoading: Boolean = true,
     val showArchived: Boolean = false,
     val currency: String = "INR"
@@ -57,6 +58,7 @@ class GoalsViewModel @Inject constructor(
                         archivedGoals = archivedProgress,
                         totalTargetAmount = active.fold(BigDecimal.ZERO) { acc, g -> acc + g.targetAmount },
                         totalCurrentAmount = active.fold(BigDecimal.ZERO) { acc, g -> acc + g.currentAmount },
+                        totalDailySavingsNeeded = activeProgress.fold(BigDecimal.ZERO) { acc, gp -> acc + gp.dailySavingsNeeded },
                         isLoading = false,
                         showArchived = _uiState.value.showArchived,
                         currency = currency

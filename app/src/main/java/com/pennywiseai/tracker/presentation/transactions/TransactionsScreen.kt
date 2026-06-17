@@ -336,32 +336,36 @@ fun TransactionsScreen(
                 .background(MaterialTheme.colorScheme.background)
                 .padding(top = paddingValues.calculateTopPadding())
         ) {
-        // Search Bar + Sort Button
+        // Search Bar - full width
+        TransactionSearchBar(
+            query = searchQuery,
+            onQueryChange = viewModel::updateSearchQuery,
+            categoryFilter = categoryFilter,
+            focusRequester = searchFocusRequester,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dimensions.Padding.content)
+                .padding(top = Dimensions.Padding.content)
+        )
+
+        // Filter + Sort row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = Dimensions.Padding.content)
-                .padding(top = Dimensions.Padding.content),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(top = Spacing.xs),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
-            TransactionSearchBar(
-                query = searchQuery,
-                onQueryChange = viewModel::updateSearchQuery,
-                categoryFilter = categoryFilter,
-                focusRequester = searchFocusRequester,
-                modifier = Modifier.weight(1f)
-            )
-
-            AssistChip(
+            val filtersSelected = activeFilterCount > 0
+            FilterChip(
+                modifier = Modifier.weight(1f),
+                selected = filtersSelected,
                 onClick = { showFilterSheet = true },
                 label = {
                     Text(
-                        if (activeFilterCount > 0) {
-                            "Filters ($activeFilterCount)"
-                        } else {
-                            "Filters"
-                        }
+                        text = if (filtersSelected) "Filters · $activeFilterCount" else "Filters",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                 },
                 leadingIcon = {
@@ -371,44 +375,62 @@ fun TransactionsScreen(
                         modifier = Modifier.size(Dimensions.Icon.small)
                     )
                 },
-                colors = AssistChipDefaults.assistChipColors(
-                    containerColor = if (activeFilterCount > 0) {
-                        MaterialTheme.colorScheme.secondaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    },
-                    labelColor = if (activeFilterCount > 0) {
-                        MaterialTheme.colorScheme.onSecondaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
+                colors = FilterChipDefaults.filterChipColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                border = FilterChipDefaults.filterChipBorder(
+                    borderWidth = 0.dp,
+                    selected = filtersSelected,
+                    enabled = true,
+                ),
             )
-            
-            // Sort button
-            Box {
-                IconButton(
+
+            val sortSelected = sortOption != SortOption.DATE_NEWEST
+            Box(modifier = Modifier.weight(1f)) {
+                FilterChip(
+                    modifier = Modifier.fillMaxWidth(),
+                    selected = sortSelected,
                     onClick = { showSortMenu = true },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(MaterialTheme.shapes.medium)
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Sort,
-                        contentDescription = "Sort",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                
+                    label = {
+                        Text(
+                            text = sortOption.label,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Sort,
+                            contentDescription = null,
+                            modifier = Modifier.size(Dimensions.Icon.small)
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        borderWidth = 0.dp,
+                        selected = sortSelected,
+                        enabled = true,
+                    ),
+                )
                 DropdownMenu(
                     expanded = showSortMenu,
                     onDismissRequest = { showSortMenu = false }
                 ) {
                     SortOption.values().forEach { option ->
                         DropdownMenuItem(
-                            text = { 
+                            text = {
                                 Row(
                                     horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                                     verticalAlignment = Alignment.CenterVertically

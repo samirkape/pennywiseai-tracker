@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -102,6 +103,7 @@ fun GoalsScreen(
                             activeCount = uiState.activeGoals.size,
                             totalTarget = uiState.totalTargetAmount,
                             totalCurrent = uiState.totalCurrentAmount,
+                            totalDailySavingsNeeded = uiState.totalDailySavingsNeeded,
                             currency = uiState.currency
                         )
                     }
@@ -156,6 +158,7 @@ private fun GoalsSummaryCard(
     activeCount: Int,
     totalTarget: java.math.BigDecimal,
     totalCurrent: java.math.BigDecimal,
+    totalDailySavingsNeeded: java.math.BigDecimal,
     currency: String
 ) {
     val progress = if (totalTarget > java.math.BigDecimal.ZERO)
@@ -206,6 +209,30 @@ private fun GoalsSummaryCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                 )
+            }
+            if (totalDailySavingsNeeded > java.math.BigDecimal.ZERO) {
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f)
+                )
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Save daily to stay on track",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text = "${CurrencyFormatter.formatCurrency(totalDailySavingsNeeded, currency)}/day",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
         }
     }
@@ -264,24 +291,27 @@ fun GoalCard(
                 trackColor = parseGoalColor(goal.color).copy(alpha = 0.2f)
             )
             Spacer(modifier = Modifier.height(Spacing.xs))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            Row(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = CurrencyFormatter.formatCurrency(goal.currentAmount, goal.currency),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Start
                 )
                 Text(
                     text = "${goalProgress.progressPercent.toInt()}% · ${daysLabel(goalProgress.daysRemaining)}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center
                 )
                 Text(
                     text = CurrencyFormatter.formatCurrency(goal.targetAmount, goal.currency),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.End
                 )
             }
         }

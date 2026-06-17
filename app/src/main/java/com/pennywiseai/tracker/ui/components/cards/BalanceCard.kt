@@ -210,7 +210,7 @@ fun HeroSpendCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = Spacing.sm),
+                .padding(bottom = Spacing.xs),
             horizontalAlignment = Alignment.Start,
         ) {
             Row(
@@ -247,7 +247,7 @@ fun HeroSpendCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(Spacing.sm))
+            Spacer(modifier = Modifier.height(Spacing.xs))
 
             Row(
                 modifier = Modifier
@@ -278,7 +278,7 @@ fun HeroSpendCard(
                     )
                     AnimatedCurrencyText(
                         text = CurrencyFormatter.formatCurrency(currentMonthExpenses.setScale(0, RoundingMode.HALF_UP), currency),
-                        style = MaterialTheme.typography.displaySmall,
+                        style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.ExtraBold,
                         brush = null,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -297,7 +297,7 @@ fun HeroSpendCard(
             }
 
 
-            Spacer(modifier = Modifier.height(Spacing.sm))
+            Spacer(modifier = Modifier.height(Spacing.xs))
 
             Surface(
                 onClick = {

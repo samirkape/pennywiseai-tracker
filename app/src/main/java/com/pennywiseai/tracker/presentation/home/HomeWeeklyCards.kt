@@ -102,7 +102,7 @@ fun HomeThisWeekCard(
         ) {
             Text(
                 text = CurrencyFormatter.formatCurrency(thisWeekSpend, currency),
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -261,7 +261,7 @@ private fun SpendingBarChart(
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(110.dp)
+                .height(88.dp)
         ) {
             val chartWidth = maxWidth
             val tooltipW = 72.dp
