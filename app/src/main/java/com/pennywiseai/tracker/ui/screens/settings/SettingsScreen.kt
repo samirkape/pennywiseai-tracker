@@ -110,6 +110,8 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
     var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
     var selectedImportStrategy by remember { mutableStateOf(ImportStrategy.MERGE) }
     var selectedRestoreOptions by remember { mutableStateOf(RestoreOptions()) }
+    // Grouped labels for the consolidated selective restore UI
+    
     var showExportOptionsDialog by remember { mutableStateOf(false) }
     var showTimeoutDialog by remember { mutableStateOf(false) }
     var showDisplayCurrencyDialog by remember { mutableStateOf(false) }
@@ -675,18 +677,13 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                     Spacer(modifier = Modifier.height(Spacing.sm))
                     RestoreCheckboxRow(
                         label = stringResource(R.string.backup_restore_select_transactions),
-                        checked = selectedRestoreOptions.transactions,
-                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(transactions = it) }
+                        checked = selectedRestoreOptions.transactionsAndCategories,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(transactionsAndCategories = it) }
                     )
                     RestoreCheckboxRow(
-                        label = stringResource(R.string.backup_restore_select_categories),
-                        checked = selectedRestoreOptions.categories,
-                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(categories = it) }
-                    )
-                    RestoreCheckboxRow(
-                        label = stringResource(R.string.backup_restore_select_cards),
-                        checked = selectedRestoreOptions.cards,
-                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(cards = it) }
+                        label = stringResource(R.string.backup_restore_select_accounts),
+                        checked = selectedRestoreOptions.accountsAndCards,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(accountsAndCards = it) }
                     )
                     RestoreCheckboxRow(
                         label = stringResource(R.string.backup_restore_select_subscriptions),
@@ -709,9 +706,9 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                         onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(loans = it) }
                     )
                     RestoreCheckboxRow(
-                        label = stringResource(R.string.backup_restore_select_groups),
-                        checked = selectedRestoreOptions.transactionGroups,
-                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(transactionGroups = it) }
+                        label = stringResource(R.string.backup_restore_select_goals),
+                        checked = selectedRestoreOptions.goals,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(goals = it) }
                     )
                     RestoreCheckboxRow(
                         label = stringResource(R.string.backup_restore_select_exchange_rates),
@@ -719,29 +716,14 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                         onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(exchangeRates = it) }
                     )
                     RestoreCheckboxRow(
-                        label = stringResource(R.string.backup_restore_select_preferences),
-                        checked = selectedRestoreOptions.preferences,
-                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(preferences = it) }
+                        label = stringResource(R.string.backup_restore_select_settings),
+                        checked = selectedRestoreOptions.settingsAndPreferences,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(settingsAndPreferences = it) }
                     )
                     RestoreCheckboxRow(
-                        label = stringResource(R.string.backup_restore_select_merchant_mappings),
-                        checked = selectedRestoreOptions.merchantMappings,
-                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(merchantMappings = it) }
-                    )
-                    RestoreCheckboxRow(
-                        label = stringResource(R.string.backup_restore_select_chat_messages),
-                        checked = selectedRestoreOptions.chatMessages,
-                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(chatMessages = it) }
-                    )
-                    RestoreCheckboxRow(
-                        label = stringResource(R.string.backup_restore_select_bank_notifications),
-                        checked = selectedRestoreOptions.bankNotifications,
-                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(bankNotifications = it) }
-                    )
-                    RestoreCheckboxRow(
-                        label = stringResource(R.string.backup_restore_select_profiles),
-                        checked = selectedRestoreOptions.profiles,
-                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(profiles = it) }
+                        label = stringResource(R.string.backup_restore_select_other),
+                        checked = selectedRestoreOptions.otherData,
+                        onCheckedChange = { selectedRestoreOptions = selectedRestoreOptions.copy(otherData = it) }
                     )
                 }
             },

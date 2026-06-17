@@ -299,21 +299,16 @@
     <string name="backup_restore_selective_title">Select data to restore</string>
     <string name="backup_restore_selective_hint">Choose which data categories to restore from the backup.</string>
     <string name="backup_restore_select_restore">Restore Selected</string>
-    <string name="backup_restore_select_all">Select All</string>
-    <string name="backup_restore_select_transactions">Transactions</string>
-    <string name="backup_restore_select_categories">Categories</string>
-    <string name="backup_restore_select_cards">Accounts &amp; Cards</string>
+    <string name="backup_restore_select_transactions">Transactions &amp; Categories</string>
+    <string name="backup_restore_select_accounts">Accounts &amp; Cards</string>
     <string name="backup_restore_select_subscriptions">Subscriptions</string>
     <string name="backup_restore_select_budgets">Budgets</string>
     <string name="backup_restore_select_rules">Smart Rules</string>
     <string name="backup_restore_select_loans">Lent &amp; Borrowed</string>
-    <string name="backup_restore_select_groups">Transaction Groups</string>
+    <string name="backup_restore_select_goals">Goals</string>
     <string name="backup_restore_select_exchange_rates">Exchange Rates</string>
-    <string name="backup_restore_select_preferences">Settings &amp; Preferences</string>
-    <string name="backup_restore_select_merchant_mappings">Merchant Mappings</string>
-    <string name="backup_restore_select_chat_messages">Chat Messages</string>
-    <string name="backup_restore_select_bank_notifications">Bank Notifications</string>
-    <string name="backup_restore_select_profiles">Profiles</string>
+    <string name="backup_restore_select_settings">Settings &amp; Preferences</string>
+    <string name="backup_restore_select_other">Other Data</string>
 
     <!-- Home hero & summary -->
     <string name="home_spent_so_far">Spent so far</string>

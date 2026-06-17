@@ -79,6 +79,11 @@ class BackupExporter @Inject constructor(
         val transactionReceipts = database.transactionReceiptDao().getAllReceipts()
         val loans = database.loanDao().getAllLoans().first()
         val transactionGroups = database.transactionGroupDao().getAllGroups().first()
+        val goals = database.goalDao().getAllGoals().first()
+        val goalContributions = mutableListOf<GoalContributionEntity>()
+        goals.forEach { goal ->
+            goalContributions.addAll(database.goalContributionDao().getContributionsForGoalSync(goal.id))
+        }
         val profiles = database.profileDao().getAllProfiles()
 
         // Get preferences from repository
@@ -167,6 +172,8 @@ class BackupExporter @Inject constructor(
                     totalLoans = exportedLoans.size,
                     totalTransactionGroups = exportedTransactionGroups.size,
                     totalProfiles = profiles.size,
+                    totalGoals = goals.size,
+                    totalGoalContributions = goalContributions.size,
                     dateRange = dateRange
                 )
             ),
@@ -191,7 +198,9 @@ class BackupExporter @Inject constructor(
                 transactionReceipts = transactionReceipts,
                 loans = exportedLoans,
                 transactionGroups = exportedTransactionGroups,
-                profiles = profiles
+                profiles = profiles,
+                goals = goals,
+                goalContributions = goalContributions
             ),
             preferences = PreferencesSnapshot(
                 theme = ThemePreferences(

@@ -99,6 +99,12 @@ data class BackupStatistics(
     @SerializedName("total_profiles")
     val totalProfiles: Int = 0,
 
+    @SerializedName("total_goals")
+    val totalGoals: Int = 0,
+
+    @SerializedName("total_goal_contributions")
+    val totalGoalContributions: Int = 0,
+
     @SerializedName("date_range")
     val dateRange: DateRange?
 )
@@ -179,7 +185,13 @@ data class DatabaseSnapshot(
     val transactionGroups: List<TransactionGroupEntity> = emptyList(),
 
     @SerializedName("profiles")
-    val profiles: List<ProfileEntity> = emptyList()
+    val profiles: List<ProfileEntity> = emptyList(),
+
+    @SerializedName("goals")
+    val goals: List<GoalEntity> = emptyList(),
+
+    @SerializedName("goal_contributions")
+    val goalContributions: List<GoalContributionEntity> = emptyList()
 )
 
 /**
@@ -386,7 +398,11 @@ enum class ImportStrategy {
  * Selective restore options — controls which data categories are restored
  * from a backup file. All flags default to `true` (restore everything).
  */
-data class RestoreOptions(
+/**
+ * Atomic internal flags used by the importer. Not exposed in the UI directly.
+ * Grouped into [RestoreOptions] for user-facing checkboxes.
+ */
+data class RestoreFlags(
     val transactions: Boolean = true,
     val categories: Boolean = true,
     val cards: Boolean = true,
@@ -403,13 +419,63 @@ data class RestoreOptions(
     val salaryOverrides: Boolean = true,
     val profiles: Boolean = true,
     val preferences: Boolean = true,
+    val goals: Boolean = true,
+    val goalContributions: Boolean = true,
+)
+
+/**
+ * User-facing restore options with grouped checkboxes.
+ * Each flag maps to one or more atomic [RestoreFlags].
+ */
+data class RestoreOptions(
+    /** Transactions, categories, transaction groups, splits, and receipts */
+    val transactionsAndCategories: Boolean = true,
+    /** Cards, account balances, merchant mappings, and aliases */
+    val accountsAndCards: Boolean = true,
+    /** Subscription tracking */
+    val subscriptions: Boolean = true,
+    /** Budgets (monthly limits and budget categories) */
+    val budgets: Boolean = true,
+    /** Smart rules and rule applications */
+    val rules: Boolean = true,
+    /** Lent & borrowed records */
+    val loans: Boolean = true,
+    /** Financial goals and contributions */
+    val goals: Boolean = true,
+    /** Exchange rates */
+    val exchangeRates: Boolean = true,
+    /** App settings, preferences, profiles, and salary overrides */
+    val settingsAndPreferences: Boolean = true,
+    /** Chat messages, bank notifications, and unrecognized SMS */
+    val otherData: Boolean = true,
 ) {
     /** Returns `true` when every category is selected — the fast path. */
     val isAllSelected: Boolean
-        get() = transactions && categories && cards && subscriptions && budgets &&
-            rules && loans && transactionGroups && merchantMappings && exchangeRates &&
-            chatMessages && bankNotifications && unrecognizedSms && salaryOverrides &&
-            profiles && preferences
+        get() = transactionsAndCategories && accountsAndCards && subscriptions &&
+            budgets && rules && loans && goals && exchangeRates &&
+            settingsAndPreferences && otherData
+
+    /** Converts user-facing options into atomic flags for the importer. */
+    fun toFlags(): RestoreFlags = RestoreFlags(
+        transactions = transactionsAndCategories,
+        categories = transactionsAndCategories,
+        transactionGroups = transactionsAndCategories,
+        cards = accountsAndCards,
+        merchantMappings = accountsAndCards,
+        subscriptions = subscriptions,
+        budgets = budgets,
+        rules = rules,
+        loans = loans,
+        goals = goals,
+        goalContributions = goals,
+        exchangeRates = exchangeRates,
+        preferences = settingsAndPreferences,
+        profiles = settingsAndPreferences,
+        salaryOverrides = settingsAndPreferences,
+        chatMessages = otherData,
+        bankNotifications = otherData,
+        unrecognizedSms = otherData,
+    )
 }
 
 /**

@@ -112,7 +112,7 @@ class BackupImporter @Inject constructor(
             "merchant_aliases", "rules", "rule_applications", "exchange_rates",
             "budgets", "budget_categories", "transaction_splits", "bank_notifications",
             "salary_month_overrides", "transaction_receipts", "loans",
-            "transaction_groups", "profiles"
+            "transaction_groups", "profiles", "goals", "goal_contributions"
         )) {
             if (!db.has(key) || db.get(key).isJsonNull) {
                 db.add(key, com.google.gson.JsonArray())
@@ -305,6 +305,14 @@ class BackupImporter @Inject constructor(
             backup.database.salaryMonthOverrides.forEach { override ->
                 database.salaryMonthOverrideDao().upsert(override)
             }
+
+            // Goals
+            backup.database.goals.forEach { goal ->
+                database.goalDao().insertGoal(goal)
+            }
+            backup.database.goalContributions.forEach { contribution ->
+                database.goalContributionDao().insertContribution(contribution)
+            }
         }
 
         // Preferences are written after the DB transaction commits successfully.
@@ -348,6 +356,8 @@ class BackupImporter @Inject constructor(
         database.loanDao().deleteAllLoans()
         database.transactionGroupDao().deleteAllGroups()
         database.profileDao().deleteAllProfiles()
+        database.goalContributionDao().deleteAllContributions()
+        database.goalDao().deleteAllGoals()
     }
 
     /**
@@ -539,6 +549,9 @@ class BackupImporter @Inject constructor(
                     database.salaryMonthOverrideDao().upsert(override)
                 }
 
+                // Goals (merge by name)
+                importGoalsWithMerge(backup.database.goals, backup.database.goalContributions)
+
         }
 
         // Preferences are written after the DB transaction commits successfully.
@@ -560,47 +573,44 @@ class BackupImporter @Inject constructor(
      * Uses merge semantics for each selected category.
      */
     private suspend fun selectiveRestore(backup: PennyWiseBackup, options: RestoreOptions): ImportResult {
+        val f = options.toFlags() // atomic flags from user-friendly grouped options
         var importedTransactions = 0
         var importedCategories = 0
         var skippedDuplicates = 0
 
         database.withTransaction {
             // Collect existing state (only if we need it)
-            val existingTransactionHashes = if (options.transactions) {
+            val existingTransactionHashes = if (f.transactions) {
                 database.transactionDao().getAllTransactions().first()
                     .map { it.transactionHash }.toSet()
             } else emptySet()
-            val softDeletedHashes = if (options.transactions) {
+            val softDeletedHashes = if (f.transactions) {
                 database.transactionDao().getSoftDeletedHashes().toSet()
             } else emptySet()
-            val existingCategories = if (options.categories) {
+            val existingCategories = if (f.categories) {
                 database.categoryDao().getAllCategories().first()
                     .map { it.name }.toSet()
             } else emptySet()
 
             // FK dependency maps
-            val oldToNewLoanIdMap = if (options.transactions) {
-                importLoansWithMerge(if (options.loans) backup.database.loans else emptyList())
-            } else if (options.loans) {
+            val oldToNewLoanIdMap = if (f.transactions) {
+                importLoansWithMerge(if (f.loans) backup.database.loans else emptyList())
+            } else if (f.loans) {
                 importLoansWithMerge(backup.database.loans)
             } else emptyMap()
 
-            val oldToNewGroupIdMap = if (options.transactions || options.transactionGroups) {
-                if (options.transactionGroups) {
-                    importGroupsWithMerge(backup.database.transactionGroups)
-                } else {
-                    importGroupsWithMerge(emptyList())
-                }
-            } else if (options.transactionGroups) {
+            val oldToNewGroupIdMap = if (f.transactions) {
+                importGroupsWithMerge(if (f.transactionGroups) backup.database.transactionGroups else emptyList())
+            } else if (f.transactionGroups) {
                 importGroupsWithMerge(backup.database.transactionGroups)
             } else emptyMap()
 
-            if (options.profiles) {
+            if (f.profiles) {
                 importProfilesWithMerge(backup.database.profiles)
             }
 
             // Categories
-            if (options.categories) {
+            if (f.categories) {
                 backup.database.categories.forEach { category ->
                     if (!existingCategories.contains(category.name)) {
                         database.categoryDao().insertCategory(category.copy(id = 0))
@@ -611,7 +621,7 @@ class BackupImporter @Inject constructor(
 
             // Transactions
             val oldToNewTransactionIdMap = mutableMapOf<Long, Long>()
-            if (options.transactions) {
+            if (f.transactions) {
                 backup.database.transactions.forEach { transaction ->
                     val hash = transaction.transactionHash
                     if (softDeletedHashes.contains(hash)) {
@@ -652,18 +662,18 @@ class BackupImporter @Inject constructor(
             }
 
             // Other entities (conditionally imported via merge helpers)
-            if (options.cards) {
+            if (f.cards) {
                 importCardsWithMerge(backup.database.cards)
                 importAccountBalancesWithMerge(backup.database.accountBalances)
             }
-            if (options.subscriptions) {
+            if (f.subscriptions) {
                 importSubscriptionsWithMerge(backup.database.subscriptions)
             }
-            if (options.merchantMappings) {
+            if (f.merchantMappings) {
                 importMerchantMappingsWithMerge(backup.database.merchantMappings)
                 importMerchantAliasesWithMerge(backup.database.merchantAliases)
             }
-            if (options.rules) {
+            if (f.rules) {
                 importRulesWithMerge(backup.database.rules)
                 // Rule applications
                 val existingRuleAppIds = database.ruleApplicationDao()
@@ -679,7 +689,7 @@ class BackupImporter @Inject constructor(
                     }
                 }
             }
-            if (options.exchangeRates) {
+            if (f.exchangeRates) {
                 val existingRates = database.exchangeRateDao().getAllRatesFlow().first()
                 backup.database.exchangeRates.forEach { rate ->
                     val exists = existingRates.any {
@@ -688,28 +698,33 @@ class BackupImporter @Inject constructor(
                     if (!exists) database.exchangeRateDao().insertExchangeRate(rate)
                 }
             }
-            if (options.budgets) {
+            if (f.budgets) {
                 importBudgetsWithMerge(backup.database.budgets, backup.database.budgetCategories)
             }
-            if (options.bankNotifications) {
+            if (f.bankNotifications) {
                 backup.database.bankNotifications.forEach { notification ->
                     database.bankNotificationDao().insertOrReplace(notification)
                 }
             }
-            if (options.salaryOverrides) {
+            if (f.salaryOverrides) {
                 backup.database.salaryMonthOverrides.forEach { override ->
                     database.salaryMonthOverrideDao().upsert(override)
                 }
             }
-            if (options.chatMessages) {
+            if (f.chatMessages) {
                 backup.database.chatMessages.forEach { message ->
                     database.chatDao().insertMessage(message)
                 }
             }
+
+            // Goals (conditionally imported via merge)
+            if (f.goals) {
+                importGoalsWithMerge(backup.database.goals, backup.database.goalContributions)
+            }
         }
 
         // Preferences are written after the DB transaction commits successfully.
-        if (options.preferences) {
+        if (f.preferences) {
             importPreferences(backup.preferences)
         }
 
@@ -720,6 +735,29 @@ class BackupImporter @Inject constructor(
             latestTransactionTimestamp = if (importedTransactions > 0)
                 latestTransactionTimestampMillis(backup.database.transactions) else null
         )
+    }
+
+    /**
+     * Import goals with merge semantics.
+     * Merges by goal name — if a goal with the same name exists locally it is skipped,
+     * otherwise inserted together with its contributions.
+     */
+    private suspend fun importGoalsWithMerge(
+        goals: List<GoalEntity>,
+        contributions: List<GoalContributionEntity>
+    ) {
+        val existingNames = database.goalDao().getAllGoals().first()
+            .map { it.name.lowercase() }.toSet()
+        goals.forEach { goal ->
+            if (!existingNames.contains(goal.name.lowercase())) {
+                val newGoalId = database.goalDao().insertGoal(goal.copy(id = 0))
+                contributions.filter { it.goalId == goal.id }.forEach { contribution ->
+                    database.goalContributionDao().insertContribution(
+                        contribution.copy(id = 0, goalId = newGoalId)
+                    )
+                }
+            }
+        }
     }
 
     // ── Merge helpers ─────────────────────────────────────────────────────────
