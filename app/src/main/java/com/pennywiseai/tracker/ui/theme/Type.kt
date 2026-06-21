@@ -9,6 +9,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.pennywiseai.tracker.R
 
+val PlayfairDisplayFontFamily = FontFamily(
+    Font(R.font.playfair_display, FontWeight.SemiBold),
+)
+
 val SNProFontFamily = FontFamily(
     Font(R.font.sn_pro_regular, FontWeight.Normal),
     Font(R.font.sn_pro_italic, FontWeight.Normal, FontStyle.Italic),

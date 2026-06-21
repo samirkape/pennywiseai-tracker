@@ -12,6 +12,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -80,6 +81,7 @@ fun CustomTitleTopAppBar(
     userName: String = "",
     profileImageUri: String? = null,
     profileBackgroundColor: Int = 0,
+    onAvatarClick: () -> Unit = {},
     hazeState: HazeState = HazeState(),
     blurEffects: Boolean = LocalBlurEffects.current
 ) {
@@ -114,6 +116,7 @@ fun CustomTitleTopAppBar(
         userName = userName,
         profileImageUri = profileImageUri,
         profileBackgroundColor = profileBackgroundColor,
+        onAvatarClick = onAvatarClick,
         collapsedFraction = if (scrollBehaviorLarge != scrollBehaviorSmall) collapsedFraction else 1f,
         modifier = modifier,
         hazeState = hazeState,
@@ -211,7 +214,6 @@ private fun LargerTopAppBar(
                 actionContent()
             }
         },
-        // Home hides the large title in content below; keep this strip short so status bar → hero is tight.
         collapsedHeight = if (isHomeScreen) 52.dp else TopAppBarDefaults.LargeAppBarCollapsedHeight,
         expandedHeight = if (isHomeScreen) 52.dp else 110.dp,
         windowInsets = WindowInsets(0.dp),
@@ -263,20 +265,32 @@ private fun TitleForLargeTopAppBar(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        BlurredAnimatedVisibility(
-            visible = !isHomeScreen,
-            enter = fadeIn() + scaleIn(),
-            exit = fadeOut() + scaleOut()
-        ) {
+        if (isHomeScreen) {
             Text(
                 text = title,
-                fontSize = 28.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Start,
                 modifier = modifier
                     .fillMaxWidth()
                     .padding(start = 10.dp)
             )
+        } else {
+            BlurredAnimatedVisibility(
+                visible = true,
+                enter = fadeIn() + scaleIn(),
+                exit = fadeOut() + scaleOut()
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Start,
+                    modifier = modifier
+                        .fillMaxWidth()
+                        .padding(start = 10.dp)
+                )
+            }
         }
         extraInfoCard()
     }
@@ -296,6 +310,7 @@ private fun RegularTopAppBar(
     userName: String = "",
     profileImageUri: String? = null,
     profileBackgroundColor: Int = 0,
+    onAvatarClick: () -> Unit = {},
     collapsedFraction: Float,
     hazeState: HazeState,
     blurEffects: Boolean = true
@@ -319,7 +334,8 @@ private fun RegularTopAppBar(
                                 .background(
                                     if (profileBackgroundColor != 0) Color(profileBackgroundColor)
                                     else MaterialTheme.colorScheme.primaryContainer
-                                ),
+                                )
+                                .clickable(onClick = onAvatarClick),
                             contentAlignment = Alignment.Center
                         ) {
                             val avatarResId = profileImageUri?.let { AvatarHelper.resolveAvatarDrawable(it) }
@@ -330,7 +346,7 @@ private fun RegularTopAppBar(
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Crop
                                 )
-                            } else if (profileImageUri != null) {
+                            } else if (profileImageUri != null && !profileImageUri.startsWith("avatar://")) {
                                 AsyncImage(
                                     model = profileImageUri,
                                     contentDescription = null,

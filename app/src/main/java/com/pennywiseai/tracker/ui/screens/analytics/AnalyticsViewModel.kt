@@ -70,6 +70,18 @@ class AnalyticsViewModel @Inject constructor(
     val compactAnalyticsCards: StateFlow<Boolean> = userPreferencesRepository.compactAnalyticsCardsEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    private val navMonthStartDay: StateFlow<Int> = userPreferencesRepository.monthStartDay
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 1)
+
+    private val navUseFixedBudgetPeriodEnd: StateFlow<Boolean> = userPreferencesRepository.useFixedBudgetPeriodEnd
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private val navBudgetPeriodEndDay: StateFlow<Int> = userPreferencesRepository.budgetPeriodEndDay
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 31)
+
+    private val navOverridesMap: StateFlow<Map<String, Int>> = salaryMonthOverrideRepository.overridesMap
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
     private val _selectedChartType = MutableStateFlow(ChartType.LINE)
     val selectedChartType: StateFlow<ChartType> = _selectedChartType.asStateFlow()
 
@@ -612,31 +624,25 @@ class AnalyticsViewModel @Inject constructor(
      * Steps to an adjacent pay-month or calendar-month anchor ([yearMonth] key).
      */
     fun navigateToMonth(yearMonth: YearMonth) {
-        viewModelScope.launch {
-            val monthStartDay = userPreferencesRepository.monthStartDay.first()
-            val payPeriodEnabled = userPreferencesRepository.useFinancialMonth.first()
-            val useFixedEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
-            val endDom = userPreferencesRepository.budgetPeriodEndDay.first()
-            val overrides = salaryMonthOverrideRepository.overridesMap.first()
-            val usesCalendar = resolveUsesCalendarMonthNavigation()
-            when {
-                yearMonth == YearMonth.now() && usesCalendar ->
-                    selectPeriod(TimePeriod.CALENDAR_MONTH)
-                yearMonth == YearMonth.now() && !usesCalendar && payPeriodEnabled ->
-                    selectPeriod(TimePeriod.THIS_MONTH)
-                yearMonth == YearMonth.now() && !usesCalendar && !payPeriodEnabled ->
-                    selectPeriod(TimePeriod.CALENDAR_MONTH)
-                else -> {
-                    val range = getDateRangeForYearMonthNavigation(
-                        yearMonth = yearMonth,
-                        useCalendarMonth = usesCalendar,
-                        monthStartDay = monthStartDay,
-                        monthStartOverrides = overrides,
-                        useFixedBudgetPeriodEnd = useFixedEnd,
-                        budgetPeriodEndDay = endDom,
-                    )
-                    setCustomDateRange(range.first, range.second, anchorMonth = yearMonth)
-                }
+        val payPeriodEnabled = useFinancialMonth.value
+        val usesCalendar = resolveUsesCalendarMonthNavigation()
+        when {
+            yearMonth == YearMonth.now() && usesCalendar ->
+                selectPeriod(TimePeriod.CALENDAR_MONTH)
+            yearMonth == YearMonth.now() && !usesCalendar && payPeriodEnabled ->
+                selectPeriod(TimePeriod.THIS_MONTH)
+            yearMonth == YearMonth.now() && !usesCalendar && !payPeriodEnabled ->
+                selectPeriod(TimePeriod.CALENDAR_MONTH)
+            else -> {
+                val range = getDateRangeForYearMonthNavigation(
+                    yearMonth = yearMonth,
+                    useCalendarMonth = usesCalendar,
+                    monthStartDay = navMonthStartDay.value,
+                    monthStartOverrides = navOverridesMap.value,
+                    useFixedBudgetPeriodEnd = navUseFixedBudgetPeriodEnd.value,
+                    budgetPeriodEndDay = navBudgetPeriodEndDay.value,
+                )
+                setCustomDateRange(range.first, range.second, anchorMonth = yearMonth)
             }
         }
     }

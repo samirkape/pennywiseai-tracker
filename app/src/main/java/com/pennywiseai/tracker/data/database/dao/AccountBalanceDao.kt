@@ -41,7 +41,9 @@ interface AccountBalanceDao {
             ab1.is_credit_card,
             ab1.sms_source,
             ab1.source_type,
+            ab1.account_type,
             ab1.currency,
+            ab1.statement_day,
             ab1.profile_id
         FROM account_balances ab1
         INNER JOIN (
@@ -75,7 +77,9 @@ interface AccountBalanceDao {
             ab1.is_credit_card,
             ab1.sms_source,
             ab1.source_type,
+            ab1.account_type,
             ab1.currency,
+            ab1.statement_day,
             ab1.profile_id
         FROM account_balances ab1
         INNER JOIN (

@@ -92,6 +92,7 @@ fun AnalyticsScreen(
     onNavigateToBehavioralStats: () -> Unit = {},
     onNavigateToBreakdown: (tileKey: String) -> Unit = {},
     onNavigateToInsights: () -> Unit = {},
+    onNavigateToCreditCardAnalytics: (startEpoch: Long, endEpoch: Long, currency: String) -> Unit = { _, _, _ -> },
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val selectedPeriod by viewModel.selectedPeriod.collectAsStateWithLifecycle()
@@ -291,7 +292,14 @@ fun AnalyticsScreen(
                                     2 -> drillDownToTransactions(transactionType = TransactionTypeFilter.CC_BILL_PAYMENT.name)
                                 }
                                 AnalyticsOverviewTab.SPENDING -> when (metricIndex) {
-                                    0 -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name, paymentMode = "CREDIT_CARD")
+                                    0 -> {
+                                        val (start, end) = drillDownPeriodEpochs
+                                        if (start != null && end != null) {
+                                            onNavigateToCreditCardAnalytics(start, end, selectedCurrency)
+                                        } else {
+                                            drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name, paymentMode = "CREDIT_CARD")
+                                        }
+                                    }
                                     1 -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name, paymentMode = "BANK_ACCOUNT")
                                     2 -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name, paymentMode = "CASH")
                                 }

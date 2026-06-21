@@ -185,8 +185,8 @@ class TransactionDetailViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _merchantRenameReview = MutableStateFlow<MerchantRenameReviewState?>(null)
-    val merchantRenameReview: StateFlow<MerchantRenameReviewState?> = _merchantRenameReview.asStateFlow()
+    private val _merchantRenameGrouped = MutableStateFlow<MerchantRenameGroupedState?>(null)
+    val merchantRenameGrouped: StateFlow<MerchantRenameGroupedState?> = _merchantRenameGrouped.asStateFlow()
 
     private val _futureParsingPrompt = MutableStateFlow<FutureParsingPromptState?>(null)
     val futureParsingPrompt: StateFlow<FutureParsingPromptState?> = _futureParsingPrompt.asStateFlow()
@@ -606,7 +606,7 @@ class TransactionDetailViewModel @Inject constructor(
         _originalCategoryOnEdit.value = null
         _allKnownMerchants.value = emptyList()
         _suggestedMerchantRenames.value = emptyList()
-        _merchantRenameReview.value = null
+        _merchantRenameGrouped.value = null
         pendingFutureParsingPrompt = null
         _futureParsingPrompt.value = null
 
@@ -818,7 +818,25 @@ class TransactionDetailViewModel @Inject constructor(
             _merchantMappingCategoryHint.value = null
         }
     }
-    
+
+    fun createCategoryAndSelect(name: String, color: String, isIncome: Boolean, icon: String) {
+        viewModelScope.launch {
+            try {
+                if (!categoryRepository.categoryExists(name)) {
+                    categoryRepository.createCategory(
+                        name = name,
+                        color = color,
+                        isIncome = isIncome,
+                        icon = icon,
+                    )
+                }
+                updateCategory(name)
+            } catch (e: Exception) {
+                // Silently fall through; category list will reflect actual state
+            }
+        }
+    }
+
     fun updateDateTime(dateTime: LocalDateTime) {
         _editableTransaction.update { current ->
             current?.copy(dateTime = dateTime)
@@ -1033,40 +1051,6 @@ class TransactionDetailViewModel @Inject constructor(
 
             _isSaving.value = true
             try {
-            // Intercept on first save attempt: if category or merchant changed and there are
-            // past/future transactions, show the pre-save bulk options sheet.
-            if (!skipPreSaveSheet) {
-                val originalMerchant = _originalMerchantNameOnEdit.value
-                val originalCategory = _originalCategoryOnEdit.value
-                val originalType = _originalTypeOnEdit.value
-                val categoryChanged = originalCategory != null && current.category != originalCategory
-                val merchantChanged = originalMerchant != null &&
-                    !current.merchantName.equals(originalMerchant, ignoreCase = true)
-                val typeChanged = originalType != null && current.transactionType != originalType
-                val existingCount = _existingTransactionCount.value
-                if ((categoryChanged || merchantChanged || typeChanged) && existingCount > 0) {
-                    val isSelf = current.transactionType == TransactionType.TRANSFER &&
-                        current.transferKind == com.pennywiseai.tracker.data.database.entity.TransferKind.SELF_TRANSFER
-                    val categoryMappingExists = if (categoryChanged && !isSelf) {
-                        val mapped = withContext(Dispatchers.IO) {
-                            merchantMappingRepository.getCategoryForMerchant(current.merchantName.trim())
-                        }
-                        mapped != null && mapped.equals(current.category, ignoreCase = true)
-                    } else false
-                    _preSaveBulkState.value = PreSaveBulkState(
-                        existingCount = existingCount,
-                        isSelfTransfer = isSelf,
-                        categoryChanged = categoryChanged,
-                        merchantChanged = merchantChanged,
-                        typeChanged = typeChanged,
-                        merchantName = current.merchantName,
-                    )
-                    _applyToPast.value = true
-                    _applyToFuture.value = (categoryChanged && !isSelf && !categoryMappingExists) || merchantChanged
-                    _isSaving.value = false
-                    return@launch
-                }
-            }
 
             val wantsPastBulk =
                 _bulkPastCategory.value || _bulkPastMerchant.value || _bulkPastType.value
@@ -1256,9 +1240,9 @@ class TransactionDetailViewModel @Inject constructor(
                         )
                     }
                     if (similar.isNotEmpty()) {
-                        _merchantRenameReview.value = MerchantRenameReviewState(
+                        _merchantRenameGrouped.value = MerchantRenameGroupedState.from(
                             newMerchantName = normalizedTransaction.merchantName,
-                            transactions = similar,
+                            candidates = similar,
                         )
                     } else {
                         finishSaveFlow()
@@ -1286,67 +1270,70 @@ class TransactionDetailViewModel @Inject constructor(
         _saveSuccess.value = false
     }
 
-    fun approveCurrentRenameCandidate() {
-        advanceRenameReview(approved = true)
-    }
-
-    fun skipCurrentRenameCandidate() {
-        advanceRenameReview(approved = false)
-    }
-
-    fun applyAllRenameCandidates() {
-        val state = _merchantRenameReview.value ?: return
-        val remainingIds = state.transactions
-            .drop(state.currentIndex)
-            .map { it.transactionId }
-        finishMerchantRenameReview(state.approvedTransactionIds + remainingIds)
-    }
-
-    fun dismissMerchantRenameReview() {
-        _merchantRenameReview.value = null
-        finishSaveFlow()
-    }
-
-    private fun advanceRenameReview(approved: Boolean) {
-        val state = _merchantRenameReview.value ?: return
-        val current = state.currentTransaction ?: return
-        val updated = state.copy(
-            currentIndex = state.currentIndex + 1,
-            approvedTransactionIds = if (approved) {
-                state.approvedTransactionIds + current.transactionId
-            } else {
-                state.approvedTransactionIds
-            },
-        )
-        if (updated.isComplete) {
-            finishMerchantRenameReview(updated.approvedTransactionIds)
-        } else {
-            _merchantRenameReview.value = updated
-        }
-    }
-
-    private fun finishMerchantRenameReview(approvedTransactionIds: List<Long>) {
-        val state = _merchantRenameReview.value ?: return
-        if (approvedTransactionIds.isEmpty()) {
-            _merchantRenameReview.value = null
-            finishSaveFlow()
-            return
-        }
+    fun applyGroupTier(tier: com.pennywiseai.tracker.domain.model.ConfidenceTier) {
+        val state = _merchantRenameGrouped.value ?: return
+        val group = state.groups.firstOrNull { it.tier == tier } ?: return
         viewModelScope.launch {
-            _merchantRenameReview.value = state.copy(isApplying = true)
+            _merchantRenameGrouped.update { s ->
+                s?.copy(groups = s.groups.map { if (it.tier == tier) it.copy(isApplying = true) else it })
+            }
             try {
-                val idToMerchant = state.transactions.associate { it.transactionId to it.currentMerchantName }
-                for (id in approvedTransactionIds.distinct()) {
-                    val oldName = idToMerchant[id] ?: continue
-                    transactionRepository.updateMerchantNameForTransaction(id, state.newMerchantName)
-                    merchantAliasRepository.setAlias(oldName, state.newMerchantName)
+                for (txn in group.transactions) {
+                    transactionRepository.updateMerchantNameForTransaction(txn.transactionId, state.newMerchantName)
+                    merchantAliasRepository.setAlias(txn.currentMerchantName, state.newMerchantName)
+                }
+                _merchantRenameGrouped.update { s ->
+                    s?.copy(groups = s.groups.map {
+                        if (it.tier == tier) it.copy(approved = true, isApplying = false) else it
+                    })
                 }
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to rename some transactions: ${e.message}"
-            } finally {
-                _merchantRenameReview.value = null
-                finishSaveFlow()
+                _merchantRenameGrouped.update { s ->
+                    s?.copy(groups = s.groups.map { if (it.tier == tier) it.copy(isApplying = false) else it })
+                }
             }
+            checkAndFinishGroupedRename()
+        }
+    }
+
+    fun skipGroupTier(tier: com.pennywiseai.tracker.domain.model.ConfidenceTier) {
+        _merchantRenameGrouped.update { s ->
+            s?.copy(groups = s.groups.map { if (it.tier == tier) it.copy(skipped = true) else it })
+        }
+        checkAndFinishGroupedRename()
+    }
+
+    fun approveCurrentFuzzyCandidate() {
+        val state = _merchantRenameGrouped.value ?: return
+        val tx = state.currentFuzzyTransaction ?: return
+        viewModelScope.launch {
+            try {
+                transactionRepository.updateMerchantNameForTransaction(tx.transactionId, state.newMerchantName)
+                merchantAliasRepository.setAlias(tx.currentMerchantName, state.newMerchantName)
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to rename: ${e.message}"
+            }
+            _merchantRenameGrouped.update { s -> s?.copy(fuzzyReviewIndex = s.fuzzyReviewIndex + 1) }
+            checkAndFinishGroupedRename()
+        }
+    }
+
+    fun skipCurrentFuzzyCandidate() {
+        _merchantRenameGrouped.update { s -> s?.copy(fuzzyReviewIndex = s.fuzzyReviewIndex + 1) }
+        checkAndFinishGroupedRename()
+    }
+
+    fun dismissMerchantRenameGrouped() {
+        _merchantRenameGrouped.value = null
+        finishSaveFlow()
+    }
+
+    private fun checkAndFinishGroupedRename() {
+        val state = _merchantRenameGrouped.value ?: return
+        if (state.isComplete) {
+            _merchantRenameGrouped.value = null
+            finishSaveFlow()
         }
     }
 
@@ -1720,20 +1707,59 @@ data class CategorySuggestionsState(
     val merchantName: String = ""
 )
 
-data class MerchantRenameReviewState(
-    val newMerchantName: String,
+data class RenameGroup(
+    val tier: com.pennywiseai.tracker.domain.model.ConfidenceTier,
     val transactions: List<TransactionRenameCandidate>,
-    val currentIndex: Int = 0,
-    val approvedTransactionIds: List<Long> = emptyList(),
+    val approved: Boolean = false,
+    val skipped: Boolean = false,
     val isApplying: Boolean = false,
 ) {
-    val currentTransaction: TransactionRenameCandidate?
-        get() = transactions.getOrNull(currentIndex)
+    val count: Int get() = transactions.size
+    val decided: Boolean get() = approved || skipped
+    /** Up to 3 unique source merchant names for display in the sheet. */
+    val uniqueMerchantSamples: List<String>
+        get() = transactions.map { it.currentMerchantName }.distinct().take(3)
+}
 
+data class MerchantRenameGroupedState(
+    val newMerchantName: String,
+    val groups: List<RenameGroup>,
+    val fuzzyReviewIndex: Int = 0,
+) {
+    val exactGroup: RenameGroup? get() = groups.firstOrNull { it.tier == com.pennywiseai.tracker.domain.model.ConfidenceTier.EXACT }
+    val closeGroup: RenameGroup? get() = groups.firstOrNull { it.tier == com.pennywiseai.tracker.domain.model.ConfidenceTier.CLOSE }
+    val fuzzyGroup: RenameGroup? get() = groups.firstOrNull { it.tier == com.pennywiseai.tracker.domain.model.ConfidenceTier.FUZZY }
+    val totalCount: Int get() = groups.sumOf { it.count }
+
+    val currentFuzzyTransaction: TransactionRenameCandidate?
+        get() = fuzzyGroup?.transactions?.getOrNull(fuzzyReviewIndex)
+
+    val isFuzzyReviewComplete: Boolean
+        get() {
+            val fg = fuzzyGroup
+            return fg == null || fuzzyReviewIndex >= fg.count
+        }
+
+    /** Sheet should auto-dismiss when all bulk tiers are decided and fuzzy review is complete. */
     val isComplete: Boolean
-        get() = currentIndex >= transactions.size
+        get() {
+            val bulkDone = groups
+                .filter { it.tier != com.pennywiseai.tracker.domain.model.ConfidenceTier.FUZZY }
+                .all { it.decided }
+            return bulkDone && isFuzzyReviewComplete
+        }
 
-    val totalCount: Int
-        get() = transactions.size
+    companion object {
+        fun from(newMerchantName: String, candidates: List<TransactionRenameCandidate>): MerchantRenameGroupedState {
+            val groups = com.pennywiseai.tracker.domain.model.ConfidenceTier.entries
+                .mapNotNull { tier ->
+                    val txns = candidates.filter {
+                        com.pennywiseai.tracker.domain.model.ConfidenceTier.from(it.similarityScore) == tier
+                    }
+                    if (txns.isEmpty()) null else RenameGroup(tier = tier, transactions = txns)
+                }
+            return MerchantRenameGroupedState(newMerchantName = newMerchantName, groups = groups)
+        }
+    }
 }
 

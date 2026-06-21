@@ -161,7 +161,7 @@ fun HomeLast7DaysCard(
     val redColor = MaterialTheme.colorScheme.spendRed
     val greenBgColor = MaterialTheme.colorScheme.spendGreenBg
     val redBgColor = MaterialTheme.colorScheme.spendRedBg
-    val avgLineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)
+    val avgLineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
     val mutedColor = MaterialTheme.colorScheme.textMuted
     val tooltipBg = MaterialTheme.colorScheme.inverseSurface
     val tooltipFg = MaterialTheme.colorScheme.inverseOnSurface

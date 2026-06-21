@@ -567,6 +567,18 @@ interface TransactionDao {
         updatedAt: LocalDateTime,
     ): Int
 
+    @Query(
+        """
+        UPDATE transactions SET category = :newCategory, updated_at = :updatedAt
+        WHERE category = :oldCategory AND is_deleted = 0
+        """
+    )
+    suspend fun updateAllTransactionsByCategory(
+        oldCategory: String,
+        newCategory: String,
+        updatedAt: LocalDateTime,
+    )
+
     @Query("""
         SELECT * FROM transactions
         WHERE is_deleted = 0

@@ -984,6 +984,16 @@ class BackupImporter @Inject constructor(
             userPreferencesRepository.updateSelectedProfileId(it)
         }
         userPreferencesRepository.updateInsightsDataWindowMonths(preferences.app.insightsDataWindowMonths)
+        userPreferencesRepository.updateCreditCardBillingCycleDay(preferences.app.creditCardBillingCycleDay)
+        preferences.app.creditCardBillingCyclePerCard?.let { raw ->
+            raw.split(";").forEach { entry ->
+                val idx = entry.lastIndexOf('=')
+                if (idx < 1) return@forEach
+                val cardKey = entry.substring(0, idx)
+                val day = entry.substring(idx + 1).toIntOrNull() ?: return@forEach
+                userPreferencesRepository.updateCreditCardBillingCycleForCard(cardKey, day)
+            }
+        }
 
         // Security
         userPreferencesRepository.setAppLockEnabled(preferences.security.appLockEnabled)

@@ -104,7 +104,7 @@ fun GreetingCard(
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
-            } else if (profileImageUri != null) {
+            } else if (profileImageUri != null && !profileImageUri.startsWith("avatar://")) {
                 AsyncImage(
                     model = profileImageUri,
                     contentDescription = userName,

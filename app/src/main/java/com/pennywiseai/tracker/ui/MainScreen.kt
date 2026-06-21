@@ -511,6 +511,11 @@ fun MainScreen(
                             com.pennywiseai.tracker.navigation.Insights
                         ) { launchSingleTop = true }
                     },
+                    onNavigateToCreditCardAnalytics = { startEpoch, endEpoch, currency ->
+                        navController.navigate("${Constants.Routes.CREDIT_CARD_ANALYTICS}/$startEpoch/$endEpoch/$currency") {
+                            launchSingleTop = true
+                        }
+                    },
                 )
             }
 
@@ -557,6 +562,29 @@ fun MainScreen(
                             }
                         }
                         navController.navigate(route) { launchSingleTop = true }
+                    },
+                    onNavigateToCreditCardAnalytics = { startEpoch, endEpoch, currency ->
+                        navController.navigate("${Constants.Routes.CREDIT_CARD_ANALYTICS}/$startEpoch/$endEpoch/$currency") {
+                            launchSingleTop = true
+                        }
+                    },
+                )
+            }
+
+            composable(
+                route = "${Constants.Routes.CREDIT_CARD_ANALYTICS}/{startEpoch}/{endEpoch}/{currency}",
+                arguments = listOf(
+                    navArgument("startEpoch") { type = NavType.LongType },
+                    navArgument("endEpoch") { type = NavType.LongType },
+                    navArgument("currency") { type = NavType.StringType },
+                ),
+            ) {
+                com.pennywiseai.tracker.ui.screens.analytics.CreditCardAnalyticsScreen(
+                    onNavigateBack = { navController.safePopBackStack() },
+                    onNavigateToTransaction = { txnId ->
+                        rootNavController?.navigate(
+                            com.pennywiseai.tracker.navigation.TransactionDetail(txnId)
+                        )
                     },
                 )
             }
@@ -809,7 +837,7 @@ fun MainScreen(
             SpotlightTutorial(
                 isVisible = true,
                 targetPosition = spotlightState.fabPosition,
-                message = "Tap here to scan your SMS messages for transactions",
+                message = "Long-press here to scan your SMS messages for transactions",
                 onDismiss = {
                     spotlightViewModel.dismissTutorial()
                 },

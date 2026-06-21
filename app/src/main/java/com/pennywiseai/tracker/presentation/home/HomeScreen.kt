@@ -139,9 +139,9 @@ fun HomeScreen(
     var showActionsSheet by remember { mutableStateOf(false) }
     var showHomeHelpDialog by remember { mutableStateOf(false) }
     var showSpendTimelineSheet by remember { mutableStateOf(false) }
+    var showAvatarPicker by remember { mutableStateOf(false) }
 
-    // Profile filter dropdown state
-    var showProfileFilterMenu by remember { mutableStateOf(false) }
+    // Profile filter dropdown state - kept for potential future use
     val context = LocalContext.current
 
     // Haptic feedback
@@ -154,9 +154,9 @@ fun HomeScreen(
         }
     }
 
-    // Scroll behaviors for collapsible TopAppBar
-    val scrollBehaviorSmall = TopAppBarDefaults.pinnedScrollBehavior()
-    val scrollBehaviorLarge = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    // Enter-always scroll behavior — top bar hides when scrolling down, reappears on scroll up
+    val scrollBehaviorSmall = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    val scrollBehaviorLarge = scrollBehaviorSmall
 
     // Haze state for TopAppBar blur
     val hazeState = remember { HazeState() }
@@ -257,71 +257,36 @@ fun HomeScreen(
                 userName = uiState.userName,
                 profileImageUri = uiState.profileImageUri,
                 profileBackgroundColor = uiState.profileBackgroundColor,
+                onAvatarClick = { showAvatarPicker = true },
                 hazeState = hazeState,
                 blurEffects = blurEffects,
                 actionContent = {
                     val containerColor = MaterialTheme.colorScheme.surfaceContainer
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(end = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 16.dp)
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(
+                                color = if (blurEffects) containerColor.copy(0.5f) else containerColor,
+                                shape = CircleShape,
+                            )
+                            .clickable(
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                    onNavigateToTransactionsWithSearch(transactionsPeriod)
+                                },
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Box {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        color = if (blurEffects) containerColor.copy(0.5f) else containerColor,
-                                        shape = CircleShape,
-                                    )
-                                    .clickable(
-                                        onClick = { showProfileFilterMenu = true },
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null,
-                                    ),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    imageVector = profileFilterIcon(uiState.profiles, uiState.selectedProfileId),
-                                    contentDescription = "Profile filter",
-                                    tint = MaterialTheme.colorScheme.inverseSurface,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
-                            ProfileFilterDropdown(
-                                expanded = showProfileFilterMenu,
-                                profiles = uiState.profiles,
-                                selectedProfileId = uiState.selectedProfileId,
-                                onProfileSelected = { viewModel.updateSelectedProfile(it) },
-                                onDismiss = { showProfileFilterMenu = false },
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    color = if (blurEffects) containerColor.copy(0.5f) else containerColor,
-                                    shape = CircleShape,
-                                )
-                                .clickable(
-                                    onClick = {
-                                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                                        onNavigateToTransactionsWithSearch(transactionsPeriod)
-                                    },
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = stringResource(R.string.home_search),
-                                tint = MaterialTheme.colorScheme.inverseSurface,
-                                modifier = Modifier.size(Dimensions.Icon.medium),
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = stringResource(R.string.home_search),
+                            tint = MaterialTheme.colorScheme.inverseSurface,
+                            modifier = Modifier.size(Dimensions.Icon.medium),
+                        )
                     }
                 }
             )
@@ -362,12 +327,6 @@ fun HomeScreen(
                             .padding(horizontal = Dimensions.Padding.content),
                         verticalArrangement = Arrangement.spacedBy(Spacing.xs),
                     ) {
-                        Text(
-                            text = stringResource(R.string.brand_display_name),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Normal,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                         if (!uiState.isBalanceReady) {
                             com.pennywiseai.tracker.ui.components.skeleton.BalanceCardSkeleton(
                                 modifier = Modifier.fillMaxWidth()
@@ -389,15 +348,11 @@ fun HomeScreen(
                                 modifier = Modifier.fillMaxWidth(),
                             blurEffects = blurEffects,
                             hazeState = hazeStateHero,
-                            monthlyChange = uiState.monthlyChange,
-                            monthlyChangePercent = uiState.monthlyChangePercent,
                             currency = uiState.selectedCurrency,
                             currentMonthExpenses = uiState.currentMonthExpenses,
                             currentMonthIncome = uiState.currentMonthIncome,
                             currentMonthTotal = uiState.currentMonthTotal,
                             currentMonthInvestment = uiState.currentMonthInvestment,
-                            spendingHistory = uiState.spendingHistory,
-                            lastMonthSpendingHistory = uiState.lastMonthSpendingHistory,
                             periodDayLabel = uiState.periodDayLabel,
                             availableCurrencies = uiState.availableCurrencies,
                             isUnifiedMode = uiState.isUnifiedMode,
@@ -420,28 +375,6 @@ fun HomeScreen(
                             } else {
                                 null
                             },
-                            moreStatsIncomeText = formatStatAmount(uiState.currentMonthIncome, uiState.selectedCurrency),
-                            moreStatsIncomeSubLabel = uiState.incomeTodayLabel,
-                            moreStatsTopCategoryName = uiState.topCategoryName,
-                            moreStatsTopCategorySubLabel = uiState.topCategorySubLabel,
-                            moreStatsPaceText = uiState.dailyAverageLabel,
-                            moreStatsPaceSubLabel = uiState.paceLabel,
-                            moreStatsLoanLabel = if (loan != null) "Lent/Borrowed" else null,
-                            moreStatsLoanText = loanSubtitle,
-                            onMoreStatsIncomeClick = { onNavigateToTransactions(transactionsPeriod) },
-                            onMoreStatsTopCategoryClick = { onNavigateToTransactions(transactionsPeriod) },
-                            onMoreStatsPaceClick = onNavigateToAnalytics,
-                            onMoreStatsLoanClick = if (loan != null) onNavigateToLoans else null,
-                            moreStatsSubscriptionsLabel = stringResource(R.string.home_more_stats_subscriptions),
-                            moreStatsSubscriptionsValue = if (uiState.activeSubscriptionCount > 0) {
-                                stringResource(
-                                    R.string.home_more_stats_subscriptions_active,
-                                    uiState.activeSubscriptionCount,
-                                )
-                            } else {
-                                stringResource(R.string.home_more_stats_subscriptions_hint)
-                            },
-                            onMoreStatsSubscriptionsClick = onNavigateToSubscriptions,
                             )
                         }
                     }
@@ -703,6 +636,17 @@ fun HomeScreen(
                 )
             }
         }
+
+        AvatarPickerSheet(
+            visible = showAvatarPicker,
+            currentUri = uiState.profileImageUri,
+            userName = uiState.userName,
+            onDismiss = { showAvatarPicker = false },
+            onSelect = { uri ->
+                viewModel.updateProfileImage(uri)
+                showAvatarPicker = false
+            },
+        )
 
         HomeActionsSheet(
             visible = showActionsSheet,

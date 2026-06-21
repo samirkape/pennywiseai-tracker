@@ -228,6 +228,16 @@ fun GroupCard(
     }
     val subtitle = subtitleParts.joinToString(" · ")
 
+    // Flat mode subtitle also includes the item count at the front
+    val flatSubtitle = buildList {
+        add(itemPill)
+        if (dateRangeText.isNotEmpty()) add(dateRangeText)
+        group.note?.trim()?.takeIf { it.isNotEmpty() }?.let { note ->
+            val truncated = if (note.length > NOTE_MAX_CHARS) note.take(NOTE_MAX_CHARS - 1) + "…" else note
+            add(truncated)
+        }
+    }.joinToString(" · ")
+
     val showSplit =
         totalIncome > BigDecimal.ZERO && totalExpenseCredit > BigDecimal.ZERO
     val splitLine = if (showSplit) {
@@ -244,22 +254,50 @@ fun GroupCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
-            GroupMerchantAvatarStack(
-                merchantNames = merchantOrder,
-                merchantCategories = merchantCategories,
-            )
+            if (flat) {
+                // Single icon with folder badge — same width as TransactionItem for visual consistency
+                Box(contentAlignment = Alignment.BottomEnd) {
+                    BrandIcon(
+                        merchantName = merchantOrder.firstOrNull() ?: group.name,
+                        categoryOverride = merchantCategories?.get(merchantOrder.firstOrNull() ?: ""),
+                        size = Dimensions.Icon.list,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                            .border(1.5.dp, MaterialTheme.colorScheme.surface, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.FolderOpen,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(9.dp)
+                        )
+                    }
+                }
+            } else {
+                GroupMerchantAvatarStack(
+                    merchantNames = merchantOrder,
+                    merchantCategories = merchantCategories,
+                )
+            }
 
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.FolderOpen,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp)
-                    )
+                    if (!flat) {
+                        Icon(
+                            imageVector = Icons.Outlined.FolderOpen,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                     Text(
                         text = group.name,
                         style = MaterialTheme.typography.bodyLarge,
@@ -268,22 +306,25 @@ fun GroupCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.primaryContainer
-                    ) {
-                        Text(
-                            text = itemPill,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                        )
+                    if (!flat) {
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = itemPill,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
-                if (subtitle.isNotEmpty()) {
+                val displaySubtitle = if (flat) flatSubtitle else subtitle
+                if (displaySubtitle.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = subtitle,
+                        text = displaySubtitle,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,

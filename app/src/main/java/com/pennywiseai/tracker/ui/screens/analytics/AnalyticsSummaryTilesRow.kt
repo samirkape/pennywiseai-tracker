@@ -1,10 +1,12 @@
 package com.pennywiseai.tracker.ui.screens.analytics
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.heightIn
@@ -13,6 +15,8 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Payments
@@ -117,7 +121,17 @@ fun AnalyticsSummaryTilesRow(
                 } else {
                     "Excl. investments"
                 }
-                
+
+                fun pctOf(part: BigDecimal): Int =
+                    if (totalAmount > BigDecimal.ZERO)
+                        part.multiply(BigDecimal(100))
+                            .divide(totalAmount, 0, RoundingMode.HALF_UP)
+                            .toInt()
+                    else 0
+                val creditPct = pctOf(cardAndBank?.creditTotal ?: BigDecimal.ZERO)
+                val bankPct = pctOf(cardAndBank?.bankTotal ?: BigDecimal.ZERO)
+                val cashPct = pctOf(cash?.total ?: BigDecimal.ZERO)
+
                 add(
                     AnalyticsSummaryTileEntry.SpendingBreakdown(
                         key = "spending_breakdown",
@@ -134,6 +148,9 @@ fun AnalyticsSummaryTilesRow(
                             footerNote = footerNote,
                             deltaPercent = breakdown.deltaPercent,
                             totalTransactionCount = breakdown.totalTransactionCount,
+                            creditCardPercent = creditPct,
+                            bankPercent = bankPct,
+                            cashPercent = cashPct,
                         ),
                         onClick = onSpendingBreakdownClick,
                     ),
@@ -242,6 +259,21 @@ fun AnalyticsSummaryTilesRow(
                         }
                     }
                 }
+            }
+
+            val indicatorPos = pagerState.currentPage + pagerState.currentPageOffsetFraction
+            val connectorColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+            Canvas(modifier = Modifier.fillMaxWidth().height(6.dp)) {
+                val tabWidth = size.width / tiles.size
+                val cx = (indicatorPos + 0.5f) * tabWidth
+                val hw = tabWidth * 0.18f
+                drawLine(
+                    color = connectorColor,
+                    start = Offset(cx - hw, size.height),
+                    end = Offset(cx + hw, size.height),
+                    strokeWidth = 2.dp.toPx(),
+                    cap = StrokeCap.Round,
+                )
             }
         }
 

@@ -205,28 +205,42 @@ object DateRangeUtils {
     }
 
     private val defaultFormatter = DateTimeFormatter.ofPattern("MMM d")
+    private val yearFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy")
 
     /**
      * Formats a date range as a compact label string.
      * Used for displaying custom date ranges in filter chips and UI.
      *
+     * When both dates are in the current year the year is omitted ("Jan 1 - Jan 31").
+     * When both dates share the same past year the year is shown once at the end
+     * ("Dec 25 - Jan 24, 2025").
+     * When the dates span two different past years each side carries its own year
+     * ("Dec 25, 2024 - Jan 24, 2025").
+     *
      * @param startDate The start date of the range
      * @param endDate The end date of the range
      * @param formatter Optional custom formatter (defaults to "MMM d" pattern)
-     * @return Formatted string like "Jan 1 - Jan 31" or "Dec 25 - Jan 5"
-     *
-     * Example:
-     * ```
-     * formatDateRange(LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 31))
-     * // Returns: "Jan 1 - Jan 31"
-     * ```
+     * @return Formatted string like "Jan 1 - Jan 31" or "Dec 25 - Jan 24, 2025"
      */
     fun formatDateRange(
         startDate: LocalDate,
         endDate: LocalDate,
         formatter: DateTimeFormatter = defaultFormatter
     ): String {
-        return "${startDate.format(formatter)} - ${endDate.format(formatter)}"
+        val currentYear = LocalDate.now().year
+        val startYear = startDate.year
+        val endYear = endDate.year
+        return when {
+            // Both in current year – no year suffix (existing behaviour)
+            startYear == currentYear && endYear == currentYear ->
+                "${startDate.format(formatter)} - ${endDate.format(formatter)}"
+            // Same past year – append year once at the end
+            startYear == endYear ->
+                "${startDate.format(formatter)} - ${endDate.format(yearFormatter)}"
+            // Spanning two different years – show year on each side
+            else ->
+                "${startDate.format(yearFormatter)} - ${endDate.format(yearFormatter)}"
+        }
     }
 
     /**

@@ -137,6 +137,10 @@ class UserPreferencesRepository @Inject constructor(
 
         // Future parsing prompt
         val FUTURE_PARSING_PROMPT_DISABLED = booleanPreferencesKey("future_parsing_prompt_disabled")
+
+        // Credit card billing cycle
+        val CREDIT_CARD_BILLING_CYCLE_DAY = intPreferencesKey("credit_card_billing_cycle_day")
+        val CREDIT_CARD_BILLING_CYCLE_PER_CARD = stringPreferencesKey("credit_card_billing_cycle_per_card")
     }
 
     val hasRunCcPaymentBackfill: Flow<Boolean> = context.dataStore.data
@@ -165,6 +169,55 @@ class UserPreferencesRepository @Inject constructor(
     suspend fun updateInsightsDataWindowMonths(months: Int) {
         context.dataStore.edit { it[PreferencesKeys.INSIGHTS_DATA_WINDOW_MONTHS] = months }
     }
+
+    val creditCardBillingCycleDay: Flow<Int> = context.dataStore.data
+        .map { it[PreferencesKeys.CREDIT_CARD_BILLING_CYCLE_DAY] ?: 0 }
+
+    suspend fun updateCreditCardBillingCycleDay(day: Int) {
+        context.dataStore.edit { it[PreferencesKeys.CREDIT_CARD_BILLING_CYCLE_DAY] = day.coerceIn(0, 28) }
+    }
+
+    val creditCardBillingCyclePerCard: Flow<Map<String, Int>> = context.dataStore.data
+        .map { prefs ->
+            val raw = prefs[PreferencesKeys.CREDIT_CARD_BILLING_CYCLE_PER_CARD] ?: return@map emptyMap()
+            raw.split(";").mapNotNull { entry ->
+                val idx = entry.lastIndexOf('=')
+                if (idx < 1) return@mapNotNull null
+                val key = entry.substring(0, idx)
+                val day = entry.substring(idx + 1).toIntOrNull() ?: return@mapNotNull null
+                key to day
+            }.toMap()
+        }
+
+    suspend fun updateCreditCardBillingCycleForCard(cardKey: String, day: Int) {
+        context.dataStore.edit { prefs ->
+            val current = parseBillingCyclePerCard(prefs[PreferencesKeys.CREDIT_CARD_BILLING_CYCLE_PER_CARD])
+            val updated = current.toMutableMap().also { it[cardKey] = day.coerceIn(1, 28) }
+            prefs[PreferencesKeys.CREDIT_CARD_BILLING_CYCLE_PER_CARD] = serializeBillingCyclePerCard(updated)
+        }
+    }
+
+    suspend fun clearCreditCardBillingCycleForCard(cardKey: String) {
+        context.dataStore.edit { prefs ->
+            val current = parseBillingCyclePerCard(prefs[PreferencesKeys.CREDIT_CARD_BILLING_CYCLE_PER_CARD])
+            val updated = current.toMutableMap().also { it.remove(cardKey) }
+            prefs[PreferencesKeys.CREDIT_CARD_BILLING_CYCLE_PER_CARD] = serializeBillingCyclePerCard(updated)
+        }
+    }
+
+    private fun parseBillingCyclePerCard(raw: String?): Map<String, Int> {
+        if (raw.isNullOrBlank()) return emptyMap()
+        return raw.split(";").mapNotNull { entry ->
+            val idx = entry.lastIndexOf('=')
+            if (idx < 1) return@mapNotNull null
+            val key = entry.substring(0, idx)
+            val day = entry.substring(idx + 1).toIntOrNull() ?: return@mapNotNull null
+            key to day
+        }.toMap()
+    }
+
+    private fun serializeBillingCyclePerCard(map: Map<String, Int>): String =
+        map.entries.joinToString(";") { "${it.key}=${it.value}" }
 
     val userPreferences: Flow<UserPreferences> = context.dataStore.data
         .map { preferences ->
@@ -198,8 +251,7 @@ class UserPreferencesRepository @Inject constructor(
                     try { CoverStyle.valueOf(it) } catch (_: Exception) { CoverStyle.AURORA }
                 } ?: CoverStyle.AURORA,
                 userName = preferences[PreferencesKeys.USER_NAME] ?: "User",
-                profileImageUri = preferences[PreferencesKeys.PROFILE_IMAGE_URI]
-                    ?: if (preferences[PreferencesKeys.HAS_COMPLETED_ONBOARDING] == true) "avatar://0" else null,
+                profileImageUri = preferences[PreferencesKeys.PROFILE_IMAGE_URI],
                 profileBackgroundColor = preferences[PreferencesKeys.PROFILE_BACKGROUND_COLOR] ?: 0,
                 hasCompletedOnboarding = preferences[PreferencesKeys.HAS_COMPLETED_ONBOARDING] ?: false,
                 mainAccountKey = preferences[PreferencesKeys.MAIN_ACCOUNT_KEY],

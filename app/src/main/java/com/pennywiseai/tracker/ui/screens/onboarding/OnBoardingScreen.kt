@@ -8,15 +8,10 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,16 +20,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import com.pennywiseai.tracker.ui.effects.overScrollVertical
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MailOutline
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -43,8 +39,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -54,15 +48,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.shape.RoundedCornerShape
-// TextFieldDefaults already imported above
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pennywiseai.tracker.R
@@ -89,7 +81,6 @@ fun OnBoardingScreen(
                 onNext = {
                     when (uiState.currentStep) {
                         OnBoardingStep.WELCOME -> viewModel.goToNextStep()
-                        OnBoardingStep.PROFILE -> viewModel.goToNextStep()
                         OnBoardingStep.PERMISSIONS -> viewModel.goToNextStep()
                         OnBoardingStep.SMS_SCAN -> viewModel.completeOnboarding(onOnboardingComplete)
                     }
@@ -126,10 +117,6 @@ fun OnBoardingScreen(
         ) { step ->
             when (step) {
                 OnBoardingStep.WELCOME -> WelcomeStep()
-                OnBoardingStep.PROFILE -> ProfileStep(
-                    uiState = uiState,
-                    viewModel = viewModel
-                )
                 OnBoardingStep.PERMISSIONS -> PermissionsStep(
                     uiState = uiState,
                     onPermissionResult = { viewModel.onSmsPermissionResult(it) }
@@ -145,235 +132,110 @@ private fun WelcomeStep() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(Spacing.lg),
+            .padding(horizontal = Spacing.lg),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Image(
-            painter = painterResource(id = R.mipmap.ic_launcher_foreground),
-            contentDescription = "Spendly",
+        Box(
             modifier = Modifier
-                .size(100.dp)
-                .clip(CircleShape),
-            contentScale = ContentScale.Crop
-        )
+                .size(96.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(id = R.mipmap.ic_launcher_foreground),
+                contentDescription = "Spendly",
+                modifier = Modifier.size(88.dp),
+                contentScale = ContentScale.Crop
+            )
+        }
 
         Spacer(modifier = Modifier.height(Spacing.xl))
 
         Text(
-            text = "Welcome to Spendly",
+            text = "Spendly",
             style = MaterialTheme.typography.headlineLarge,
             textAlign = TextAlign.Center,
             fontWeight = FontWeight.Bold
         )
 
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Text(
+            text = "Expense tracking on autopilot",
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.primary
+        )
+
         Spacer(modifier = Modifier.height(Spacing.md))
 
         Text(
-            text = "Your AI-powered expense tracker that automatically detects transactions from SMS messages.",
+            text = "Spendly reads your bank SMS and organizes your spending — privately, on your device.",
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Spacer(modifier = Modifier.height(Spacing.lg))
+        Spacer(modifier = Modifier.height(Spacing.xl))
 
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer
-            ),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(Spacing.md)) {
-                Text(
-                    text = "What you'll set up:",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-                Spacer(modifier = Modifier.height(Spacing.sm))
-                Text(
-                    text = "1. Your profile\n2. SMS permissions for auto-detection\n3. Initial transaction scan",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-            }
-        }
+        WelcomeFeatureRow(
+            icon = Icons.Filled.MailOutline,
+            title = "Auto-detect transactions",
+            subtitle = "Picks up bank messages the moment they arrive"
+        )
+        Spacer(modifier = Modifier.height(Spacing.md))
+        WelcomeFeatureRow(
+            icon = Icons.Filled.Analytics,
+            title = "Smart categorization",
+            subtitle = "AI sorts your spending without any setup"
+        )
+        Spacer(modifier = Modifier.height(Spacing.md))
+        WelcomeFeatureRow(
+            icon = Icons.Filled.Security,
+            title = "Stays on your device",
+            subtitle = "No cloud, no accounts, no data sharing"
+        )
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ProfileStep(
-    uiState: OnBoardingUiState,
-    viewModel: OnBoardingViewModel
+private fun WelcomeFeatureRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String
 ) {
-    val imagePicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        uri?.let { viewModel.selectProfileImage(it) }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .overScrollVertical()
-            .verticalScroll(rememberScrollState())
-            .padding(Spacing.lg),
-        horizontalAlignment = Alignment.CenterHorizontally
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Spacer(modifier = Modifier.height(Spacing.xl))
-
-        Text(
-            text = "What should we call you?",
-            style = MaterialTheme.typography.headlineMedium,
-            textAlign = TextAlign.Center,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(modifier = Modifier.height(Spacing.lg))
-
-        TextField(
-            value = uiState.userName,
-            onValueChange = { viewModel.updateUserName(it) },
-            label = { Text("Your name") },
-            singleLine = true,
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth(),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                focusedLabelColor = MaterialTheme.colorScheme.primary,
-                unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.7f)
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.secondaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(24.dp)
             )
-        )
-
-        Spacer(modifier = Modifier.height(Spacing.xl))
-
-        Text(
-            text = "Choose an avatar",
-            style = MaterialTheme.typography.titleMedium
-        )
-
-        Spacer(modifier = Modifier.height(Spacing.sm))
-
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            itemsIndexed(viewModel.avatarDrawables) { index, drawableRes ->
-                val isSelected = uiState.profileImageUri == null && uiState.selectedAvatarIndex == index
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceVariant
-                        )
-                        .then(
-                            if (isSelected) Modifier.border(
-                                3.dp,
-                                MaterialTheme.colorScheme.primary,
-                                CircleShape
-                            ) else Modifier
-                        )
-                        .clickable { viewModel.selectAvatar(index) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        painter = painterResource(id = drawableRes),
-                        contentDescription = "Avatar ${index + 1}",
-                        modifier = Modifier.size(40.dp),
-                        colorFilter = ColorFilter.tint(
-                            if (isSelected) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    )
-                }
-            }
-
-            item {
-                // Gallery picker option
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (uiState.profileImageUri != null) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceVariant
-                        )
-                        .then(
-                            if (uiState.profileImageUri != null) Modifier.border(
-                                3.dp,
-                                MaterialTheme.colorScheme.primary,
-                                CircleShape
-                            ) else Modifier
-                        )
-                        .clickable { imagePicker.launch("image/*") },
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (uiState.profileImageUri != null) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Photo selected",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    } else {
-                        Text(
-                            text = "+",
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
         }
-
-        Spacer(modifier = Modifier.height(Spacing.xl))
-
-        Text(
-            text = "Pick a background color",
-            style = MaterialTheme.typography.titleMedium
-        )
-
-        Spacer(modifier = Modifier.height(Spacing.sm))
-
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            viewModel.backgroundColors.forEachIndexed { index, colorInt ->
-                val isSelected = uiState.selectedBackgroundColor == index
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(Color(colorInt))
-                        .then(
-                            if (isSelected) Modifier.border(
-                                3.dp,
-                                MaterialTheme.colorScheme.onSurface,
-                                CircleShape
-                            ) else Modifier
-                        )
-                        .clickable { viewModel.selectBackgroundColor(index) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isSelected) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Selected",
-                            tint = MaterialTheme.colorScheme.surface,
-                            modifier = Modifier.size(Dimensions.Icon.medium)
-                        )
-                    }
-                }
-            }
+        Spacer(modifier = Modifier.width(Spacing.md))
+        Column {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -399,12 +261,20 @@ private fun PermissionsStep(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(
-            imageVector = Icons.Filled.MailOutline,
-            contentDescription = null,
-            modifier = Modifier.size(80.dp),
-            tint = MaterialTheme.colorScheme.primary
-        )
+        Box(
+            modifier = Modifier
+                .size(96.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Filled.MailOutline,
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
 
         Spacer(modifier = Modifier.height(Spacing.lg))
 
@@ -415,7 +285,7 @@ private fun PermissionsStep(
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(modifier = Modifier.height(Spacing.md))
+        Spacer(modifier = Modifier.height(Spacing.sm))
 
         Text(
             text = "Spendly can automatically detect and categorize your bank transactions from SMS messages.",
@@ -434,20 +304,48 @@ private fun PermissionsStep(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(Spacing.md)) {
-                Text(
-                    text = "Your Privacy Matters",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Security,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = "Your Privacy Matters",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
                 Spacer(modifier = Modifier.height(Spacing.sm))
-                Text(
-                    text = "\u2022 Only transaction messages are processed\n" +
-                            "\u2022 All data stays on your device\n" +
-                            "\u2022 No personal messages are read\n" +
-                            "\u2022 You can revoke access anytime in Settings",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                listOf(
+                    "Only transaction messages are processed",
+                    "All data stays on your device",
+                    "No personal messages are read",
+                    "You can revoke access anytime in Settings"
+                ).forEach { item ->
+                    Row(
+                        modifier = Modifier.padding(vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            text = item,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
             }
         }
 
@@ -702,15 +600,6 @@ private fun OnBoardingBottomBar(
                 OnBoardingStep.WELCOME -> {
                     Button(onClick = onNext) {
                         Text("Get Started")
-                    }
-                }
-
-                OnBoardingStep.PROFILE -> {
-                    Button(
-                        onClick = onNext,
-                        enabled = uiState.userName.isNotBlank()
-                    ) {
-                        Text("Save & Continue")
                     }
                 }
 

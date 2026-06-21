@@ -374,7 +374,11 @@
     <!-- Subscriptions screen -->
     <string name="subs_screen_title">Subscriptions</string>
     <string name="subs_section_active">Active Subscriptions</string>
+    <string name="subs_section_due_soon">Due Soon</string>
     <string name="subs_summary_monthly_title">Monthly Subscriptions</string>
+    <string name="subs_summary_yearly">≈ %1$s / year</string>
+    <string name="subs_hero_next_billing">Next: %1$s · %2$s · %3$s</string>
+    <string name="subs_item_per_month">/ mo</string>
     <string name="subs_empty_headline">No subscriptions detected yet</string>
     <string name="subs_empty_description">Sync SMS for mandates, add from the + button, or mark a transaction as recurring on save.</string>
     <string name="subs_fab_add_cd">Add subscription</string>
@@ -406,6 +410,23 @@
     <string name="subs_item_menu_delete">Delete permanently</string>
     <string name="subs_item_notes_title">Notes</string>
     <string name="subs_item_sms_title">Original SMS</string>
+
+    <!-- Merchant rename grouped sheet (Phase 2 tiered review) -->
+    <string name="merchant_rename_grouped_title">Fix merchant name?</string>
+    <string name="merchant_rename_grouped_subtitle">Apply "%1$s" to matching past transactions</string>
+    <string name="merchant_rename_tier_exact">Identical matches</string>
+    <string name="merchant_rename_tier_exact_desc">Same name — safe to apply in bulk</string>
+    <string name="merchant_rename_tier_close">Similar matches</string>
+    <string name="merchant_rename_tier_close_desc">Names look similar — tap ↗ to preview a transaction before applying</string>
+    <string name="merchant_rename_tier_fuzzy">Review individually</string>
+    <string name="merchant_rename_tier_fuzzy_desc">Weaker match — confirm each transaction before renaming</string>
+    <string name="merchant_rename_apply_tier">Apply %1$d</string>
+    <string name="merchant_rename_skip_tier">Skip</string>
+    <string name="merchant_rename_tier_applied">✓ Applied %1$d</string>
+    <string name="merchant_rename_tier_skipped">Skipped</string>
+    <string name="merchant_rename_applying">Applying…</string>
+    <string name="merchant_rename_fuzzy_progress">%1$d of %2$d</string>
+    <string name="merchant_rename_open_transaction_cd">Open transaction for review</string>
 
     <plurals name="subs_active_subscription_count">
         <item quantity="one">%d active subscription</item>

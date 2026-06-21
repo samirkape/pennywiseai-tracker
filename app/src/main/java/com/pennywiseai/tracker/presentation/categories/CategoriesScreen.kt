@@ -41,7 +41,8 @@ fun CategoriesScreen(
     val showAddEditDialog by viewModel.showAddEditDialog.collectAsStateWithLifecycle()
     val editingCategory by viewModel.editingCategory.collectAsStateWithLifecycle()
     val snackbarMessage by viewModel.snackbarMessage.collectAsStateWithLifecycle()
-    
+    val pendingDeleteCategory by viewModel.pendingDeleteCategory.collectAsStateWithLifecycle()
+
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     
@@ -122,7 +123,9 @@ fun CategoriesScreen(
                     SwipeableCategoryItem(
                         category = category,
                         onEdit = { viewModel.showEditDialog(category) },
-                        onDelete = { viewModel.deleteCategory(category) }
+                        onDelete = if (!category.isSystem) {
+                            { viewModel.requestDeleteCategory(category) }
+                        } else null
                     )
                 }
             }
@@ -140,7 +143,9 @@ fun CategoriesScreen(
                     SwipeableCategoryItem(
                         category = category,
                         onEdit = { viewModel.showEditDialog(category) },
-                        onDelete = { viewModel.deleteCategory(category) }
+                        onDelete = if (!category.isSystem) {
+                            { viewModel.requestDeleteCategory(category) }
+                        } else null
                     )
                 }
             }
@@ -157,40 +162,142 @@ fun CategoriesScreen(
             }
         )
     }
+
+    // Delete with replacement dialog
+    pendingDeleteCategory?.let { categoryToDelete ->
+        DeleteCategoryDialog(
+            categoryToDelete = categoryToDelete,
+            allCategories = categories,
+            onDismiss = { viewModel.cancelDeleteRequest() },
+            onConfirm = { replacement ->
+                viewModel.deleteCategory(categoryToDelete, replacement)
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DeleteCategoryDialog(
+    categoryToDelete: CategoryEntity,
+    allCategories: List<CategoryEntity>,
+    onDismiss: () -> Unit,
+    onConfirm: (replacement: CategoryEntity?) -> Unit,
+) {
+    val replacementOptions = allCategories.filter { it.id != categoryToDelete.id }
+    var selectedReplacement by remember {
+        mutableStateOf<CategoryEntity?>(
+            replacementOptions.firstOrNull { it.name == "Others" } ?: replacementOptions.firstOrNull()
+        )
+    }
+    var dropdownExpanded by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete Category") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                Text(
+                    "Delete '${categoryToDelete.name}'? Choose what to do with its transactions:",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                if (replacementOptions.isNotEmpty()) {
+                    Text(
+                        "Reassign transactions to:",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Box {
+                        OutlinedCard(
+                            onClick = { dropdownExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                if (selectedReplacement != null) {
+                                    CategoryChip(
+                                        category = selectedReplacement!!,
+                                        showText = true,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                } else {
+                                    Text(
+                                        "No reassignment",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                Icon(
+                                    Icons.Default.ArrowDropDown,
+                                    contentDescription = "Select category",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "No reassignment (keep old name)",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                },
+                                onClick = {
+                                    selectedReplacement = null
+                                    dropdownExpanded = false
+                                }
+                            )
+                            HorizontalDivider()
+                            replacementOptions.forEach { cat ->
+                                DropdownMenuItem(
+                                    text = { CategoryChip(category = cat, showText = true) },
+                                    onClick = {
+                                        selectedReplacement = cat
+                                        dropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(selectedReplacement) },
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                )
+            ) {
+                Text("Delete")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @Composable
 private fun SwipeableCategoryItem(
     category: CategoryEntity,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: (() -> Unit)?
 ) {
-    var showDeleteConfirm by remember { mutableStateOf(false) }
-
     CategoryItem(
         category = category,
         onClick = onEdit,
-        onDelete = if (!category.isSystem) { { showDeleteConfirm = true } } else null
+        onDelete = onDelete
     )
-
-    if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete Category") },
-            text = { Text("Delete '${category.name}'? Existing transactions will remain unchanged.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteConfirm = false
-                        onDelete()
-                    }
-                ) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
-            }
-        )
-    }
 }
 
 @Composable

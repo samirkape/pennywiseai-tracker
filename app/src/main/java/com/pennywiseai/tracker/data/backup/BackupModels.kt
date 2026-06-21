@@ -348,7 +348,13 @@ data class AppPreferences(
     val selectedProfileId: Long? = null,
 
     @SerializedName("insights_data_window_months")
-    val insightsDataWindowMonths: Int = 3
+    val insightsDataWindowMonths: Int = 3,
+
+    @SerializedName("credit_card_billing_cycle_day")
+    val creditCardBillingCycleDay: Int = 0,
+
+    @SerializedName("credit_card_billing_cycle_per_card")
+    val creditCardBillingCyclePerCard: String? = null
 )
 
 /**

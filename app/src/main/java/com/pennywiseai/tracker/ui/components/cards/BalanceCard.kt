@@ -2,11 +2,10 @@ package com.pennywiseai.tracker.ui.components.cards
 
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,7 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -55,10 +54,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.pennywiseai.tracker.R
 import com.pennywiseai.tracker.ui.components.AnimatedCurrencyText
 import com.pennywiseai.tracker.ui.theme.Dimensions
+import com.pennywiseai.tracker.ui.theme.PlayfairDisplayFontFamily
 import com.pennywiseai.tracker.ui.theme.Spacing
+import com.pennywiseai.tracker.ui.theme.textMuted
 import com.pennywiseai.tracker.ui.theme.expense_dark
 import com.pennywiseai.tracker.ui.theme.expense_light
 import com.pennywiseai.tracker.ui.theme.income_dark
@@ -78,14 +80,10 @@ import java.math.RoundingMode
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HeroSpendCard(
-    monthlyChange: BigDecimal,
-    monthlyChangePercent: Int,
     currency: String,
     currentMonthExpenses: BigDecimal,
     currentMonthIncome: BigDecimal,
     currentMonthTotal: BigDecimal,
-    spendingHistory: List<BigDecimal>,
-    lastMonthSpendingHistory: List<BigDecimal>,
     periodDayLabel: String,
     availableCurrencies: List<String>,
     isUnifiedMode: Boolean,
@@ -94,7 +92,6 @@ fun HeroSpendCard(
     onToggleSpendingMode: () -> Unit,
     onCurrencySelect: (String) -> Unit,
     onNavigateToTransactions: () -> Unit,
-    /** When set, a short tap on the “Spend so far” row opens this (e.g. timeline sheet) instead of Transactions. */
     onSpendSoFarClick: (() -> Unit)? = null,
     onNavigateToBudgets: () -> Unit,
     onShowBreakdown: () -> Unit,
@@ -102,22 +99,6 @@ fun HeroSpendCard(
     onPeriodChipClick: (() -> Unit)? = null,
     currentMonthInvestment: BigDecimal = BigDecimal.ZERO,
     onNavigateToInvestmentTransactions: (() -> Unit)? = null,
-    // More-stats fold data — all optional; fold hidden when all null/empty
-    moreStatsIncomeText: String? = null,
-    moreStatsIncomeSubLabel: String? = null,
-    moreStatsTopCategoryName: String? = null,
-    moreStatsTopCategorySubLabel: String? = null,
-    moreStatsPaceText: String? = null,
-    moreStatsPaceSubLabel: String? = null,
-    moreStatsLoanLabel: String? = null,
-    moreStatsLoanText: String? = null,
-    moreStatsSubscriptionsLabel: String? = null,
-    moreStatsSubscriptionsValue: String? = null,
-    onMoreStatsIncomeClick: (() -> Unit)? = null,
-    onMoreStatsTopCategoryClick: (() -> Unit)? = null,
-    onMoreStatsPaceClick: (() -> Unit)? = null,
-    onMoreStatsLoanClick: (() -> Unit)? = null,
-    onMoreStatsSubscriptionsClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     blurEffects: Boolean = false,
     hazeState: HazeState = remember { HazeState() },
@@ -127,39 +108,16 @@ fun HeroSpendCard(
     var showOptionsSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val useExternalPeriodSheet = onPeriodChipClick != null
-    var moreStatsExpanded by remember { mutableStateOf(false) }
-    val hasSubscriptionsMoreStat = onMoreStatsSubscriptionsClick != null &&
-        !moreStatsSubscriptionsLabel.isNullOrEmpty()
-    val hasMoreStats = !moreStatsIncomeText.isNullOrEmpty() ||
-        !moreStatsTopCategoryName.isNullOrEmpty() ||
-        !moreStatsPaceText.isNullOrEmpty() ||
-        !moreStatsLoanLabel.isNullOrEmpty() ||
-        hasSubscriptionsMoreStat
 
-    val spendingIncreased = monthlyChange >= BigDecimal.ZERO
-    val deltaColor = if (spendingIncreased) {
-        if (isDark) expense_dark else expense_light
-    } else {
-        if (isDark) income_dark else income_light
-    }
-    val absPercent = kotlin.math.abs(monthlyChangePercent)
-    val arrow = if (spendingIncreased) "↑" else "↓"
-    val deltaText = "$arrow $absPercent% vs last"
+    val accentColor = if (isDark) income_dark else income_light
 
-    val containerColor = MaterialTheme.colorScheme.surfaceContainer
+    val containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     val periodChipText = when {
         spendingPeriodLabel.isNotEmpty() -> spendingPeriodLabel
         else -> stringResource(R.string.period_type_calendar)
     }
 
     val incomeForProgress = currentMonthIncome.coerceAtLeast(BigDecimal.ZERO)
-
-    fun pct(amount: BigDecimal): Int =
-        if (incomeForProgress > BigDecimal.ZERO)
-            amount.multiply(BigDecimal(100))
-                .divide(incomeForProgress, 0, RoundingMode.HALF_UP)
-                .toInt()
-        else 0
 
     fun fraction(amount: BigDecimal): Float =
         if (incomeForProgress > BigDecimal.ZERO)
@@ -171,15 +129,14 @@ fun HeroSpendCard(
     val investmentFraction = fraction(currentMonthInvestment)
         .coerceIn(0f, (1f - spendFraction).coerceAtLeast(0f))
 
-    val spentPercent = pct(currentMonthExpenses)
-    val investedPercent = pct(currentMonthInvestment)
-
     // "Left" = income minus both expenses AND investments — true available cash
     val trueRemaining = (currentMonthTotal - currentMonthInvestment).coerceAtLeast(BigDecimal.ZERO)
     val remainingFormatted = CurrencyFormatter.formatCurrency(trueRemaining.setScale(0, RoundingMode.HALF_UP), currency)
+    val incomeFormatted = CurrencyFormatter.formatCurrency(incomeForProgress.setScale(0, RoundingMode.HALF_UP), currency)
+
 
     PennyWiseCardV2(
-        contentPadding = Spacing.sm,
+        contentPadding = Spacing.md,
         modifier = modifier
             .fillMaxWidth()
             .then(
@@ -202,24 +159,36 @@ fun HeroSpendCard(
                     Modifier
                 },
             ),
-        onClick = null,
+        onClick = {
+            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            if (onSpendSoFarClick != null) onSpendSoFarClick() else onNavigateToTransactions()
+        },
         colors = CardDefaults.cardColors(
-            containerColor = if (blurEffects) containerColor.copy(alpha = 0.5f) else containerColor,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ),
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = Spacing.xs),
+            modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.Start,
         ) {
+            // ── Eyebrow: "SPENDING" section label (left) + period date ▼ + status pill (right) ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Surface(
-                    onClick = {
+                // Left: fixed section label — same pattern as "THIS WEEK", "LAST 7 DAYS"
+                Text(
+                    text = stringResource(R.string.home_spent_so_far).uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.textMuted,
+                    letterSpacing = 0.66.sp,
+                )
+                // Right: tappable period date range + optional status pill
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.clickable {
                         view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                         if (useExternalPeriodSheet) {
                             onPeriodChipClick!!.invoke()
@@ -227,78 +196,61 @@ fun HeroSpendCard(
                             showOptionsSheet = true
                         }
                     },
-                    shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
                 ) {
                     Text(
-                        text = periodChipText,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    )
-                }
-                if (periodDayLabel.isNotEmpty()) {
-                    Text(
-                        text = periodDayLabel,
+                        text = periodChipText.uppercase(),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.textMuted,
+                        letterSpacing = 0.66.sp,
+                    )
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.textMuted,
+                        modifier = Modifier.size(14.dp),
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(Spacing.xs))
+            Spacer(modifier = Modifier.height(Spacing.sm))
 
+            // ── Amount row: big expense + "of [income]" ──────────────────────
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .combinedClickable(
                         role = Role.Button,
-                        onClick = {
-                            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                            if (onSpendSoFarClick != null) {
-                                onSpendSoFarClick()
-                            } else {
-                                onNavigateToTransactions()
-                            }
-                        },
+                        onClick = {},
                         onLongClick = {
                             view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                             onShowBreakdown()
                         },
                     ),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                AnimatedCurrencyText(
+                    text = CurrencyFormatter.formatCurrency(currentMonthExpenses.setScale(0, RoundingMode.HALF_UP), currency),
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        letterSpacing = (-0.25).sp,
+                    ),
+                    fontWeight = FontWeight.Bold,
+                    brush = null,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (incomeForProgress > BigDecimal.ZERO) {
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = stringResource(R.string.home_spent_so_far),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    )
-                    AnimatedCurrencyText(
-                        text = CurrencyFormatter.formatCurrency(currentMonthExpenses.setScale(0, RoundingMode.HALF_UP), currency),
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        brush = null,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-                Column(
-                    horizontalAlignment = Alignment.End,
-                ) {
-                    Text(
-                        text = deltaText,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = deltaColor,
+                        text = "of $incomeFormatted",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.textMuted,
+                        modifier = Modifier.padding(bottom = 4.dp),
                     )
                 }
             }
 
+            Spacer(modifier = Modifier.height(2.dp))
 
-            Spacer(modifier = Modifier.height(Spacing.xs))
-
+            // ── Progress bar (4dp, teal accent) ─────────────────────────────
             Surface(
                 onClick = {
                     view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
@@ -307,193 +259,40 @@ fun HeroSpendCard(
                 shape = RoundedCornerShape(Dimensions.CornerRadius.medium),
                 color = Color.Transparent,
             ) {
-                Column(
+                SpendProgressBar(
+                    expenseFraction = spendFraction,
+                    investmentFraction = investmentFraction,
+                    accentColor = accentColor,
+                    trackHeightDp = 4,
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.xs),
-                ) {
-                    SpendProgressBar(
-                        expenseFraction = spendFraction,
-                        investmentFraction = investmentFraction,
-                        modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.xs))
+
+            // ── Footer: day progress (left) + remaining (right) ──────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (periodDayLabel.isNotEmpty()) {
+                    Text(
+                        text = periodDayLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.textMuted,
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // Left: "X% spent · Y% invested"  (or just "X% spent" when no investments)
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Text(
-                                text = "$spentPercent% spent",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            if (investedPercent > 0) {
-                                Text(
-                                    text = "·",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                                )
-                                val investColor = if (isDark) income_dark else income_light
-                                Text(
-                                    text = "$investedPercent% invested",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = investColor,
-                                )
-                            }
-                        }
-                        // Right: "₹X left"
-                        Text(
-                            text = stringResource(R.string.home_remaining, remainingFormatted),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
+                }
+                if (incomeForProgress > BigDecimal.ZERO) {
+                    Text(
+                        text = "$remainingFormatted remaining",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = accentColor,
+                    )
                 }
             }
 
-            if (hasMoreStats) {
-                Spacer(modifier = Modifier.height(Spacing.xs))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-                Surface(
-                    onClick = {
-                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                        moreStatsExpanded = !moreStatsExpanded
-                    },
-                    color = Color.Transparent,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.home_more_stats),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        val chevronRotation by animateFloatAsState(
-                            targetValue = if (moreStatsExpanded) 270f else 90f,
-                            animationSpec = tween(200),
-                            label = "chevron",
-                        )
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(16.dp)
-                                .graphicsLayer { rotationZ = chevronRotation },
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                AnimatedVisibility(visible = moreStatsExpanded) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-                        ) {
-                            if (!moreStatsIncomeText.isNullOrEmpty()) {
-                                HeroMoreStatCell(
-                                    label = stringResource(R.string.home_summary_income),
-                                    value = moreStatsIncomeText,
-                                    subLabel = moreStatsIncomeSubLabel,
-                                    onClick = onMoreStatsIncomeClick,
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
-                            if (!moreStatsTopCategoryName.isNullOrEmpty()) {
-                                HeroMoreStatCell(
-                                    label = stringResource(R.string.home_summary_top_spend),
-                                    value = moreStatsTopCategoryName,
-                                    subLabel = moreStatsTopCategorySubLabel,
-                                    onClick = onMoreStatsTopCategoryClick,
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
-                            if (!moreStatsPaceText.isNullOrEmpty()) {
-                                HeroMoreStatCell(
-                                    label = stringResource(R.string.home_summary_pace),
-                                    value = moreStatsPaceText,
-                                    subLabel = moreStatsPaceSubLabel,
-                                    onClick = onMoreStatsPaceClick,
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
-                        }
-                        if (!moreStatsLoanLabel.isNullOrEmpty() && !moreStatsLoanText.isNullOrEmpty()) {
-                            Surface(
-                                onClick = { onMoreStatsLoanClick?.invoke() },
-                                shape = RoundedCornerShape(Dimensions.CornerRadius.small),
-                                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        text = moreStatsLoanLabel,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Text(
-                                        text = moreStatsLoanText,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                }
-                            }
-                        }
-                        if (!moreStatsSubscriptionsLabel.isNullOrEmpty() && onMoreStatsSubscriptionsClick != null) {
-                            Surface(
-                                onClick = {
-                                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                                    onMoreStatsSubscriptionsClick.invoke()
-                                },
-                                shape = RoundedCornerShape(Dimensions.CornerRadius.small),
-                                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        text = moreStatsSubscriptionsLabel,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Text(
-                                        text = moreStatsSubscriptionsValue.orEmpty(),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(Spacing.xs))
-                    }
-                }
-            }
         }
     }
 
@@ -656,18 +455,21 @@ private fun HeroSparkline(
 internal fun SpendProgressBar(
     expenseFraction: Float,
     investmentFraction: Float = 0f,
+    accentColor: Color? = null,
+    trackHeightDp: Int = 6,
     modifier: Modifier = Modifier,
 ) {
     val isDark = isSystemInDarkTheme()
-    val expenseColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
-    val investmentColor = if (isDark) income_dark else income_light
+    val resolvedAccent = accentColor ?: (if (isDark) income_dark else income_light)
+    val expenseColor = resolvedAccent
+    val investmentColor = resolvedAccent.copy(alpha = 0.5f)
     val trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
     val totalFraction = (expenseFraction + investmentFraction).coerceIn(0f, 1f)
 
     Box(
         modifier = modifier
-            .height(6.dp)
-            .clip(RoundedCornerShape(3.dp)),
+            .height(trackHeightDp.dp)
+            .clip(RoundedCornerShape((trackHeightDp / 2).dp)),
     ) {
         // Track background
         Box(

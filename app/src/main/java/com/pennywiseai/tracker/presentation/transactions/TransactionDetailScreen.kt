@@ -116,54 +116,6 @@ private val editTopShape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, 
 private val editBottomShape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
 private val editFullShape = RoundedCornerShape(16.dp)
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun BulkCategoryDateScopeRow(viewModel: TransactionDetailViewModel) {
-    val scope by viewModel.bulkCategoryDateScope.collectAsStateWithLifecycle()
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
-    ) {
-        Text(
-            text = stringResource(R.string.txn_bulk_category_scope_label),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            SegmentedButton(
-                selected = scope == BulkCategoryDateScope.ALL_TIME,
-                onClick = { viewModel.setBulkCategoryDateScope(BulkCategoryDateScope.ALL_TIME) },
-                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
-            ) {
-                Text(
-                    stringResource(R.string.txn_bulk_category_scope_all),
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
-            SegmentedButton(
-                selected = scope == BulkCategoryDateScope.LAST_90_DAYS,
-                onClick = { viewModel.setBulkCategoryDateScope(BulkCategoryDateScope.LAST_90_DAYS) },
-                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
-            ) {
-                Text(
-                    stringResource(R.string.txn_bulk_category_scope_90d),
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
-            SegmentedButton(
-                selected = scope == BulkCategoryDateScope.LAST_365_DAYS,
-                onClick = { viewModel.setBulkCategoryDateScope(BulkCategoryDateScope.LAST_365_DAYS) },
-                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
-            ) {
-                Text(
-                    stringResource(R.string.txn_bulk_category_scope_365d),
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
-        }
-    }
-}
-
 @Composable
 private fun EditSectionLabel(label: String) {
     Text(
@@ -227,150 +179,6 @@ private fun MoreOptionsSwitchRow(
             checked = checked,
             onCheckedChange = onCheckedChange,
         )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PreSaveBulkOptionsSheet(
-    state: PreSaveBulkState,
-    viewModel: TransactionDetailViewModel,
-) {
-    val applyToPast by viewModel.applyToPast.collectAsStateWithLifecycle()
-    val applyToFuture by viewModel.applyToFuture.collectAsStateWithLifecycle()
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    val showPastSection = state.existingCount > 0 &&
-        (state.categoryChanged || state.merchantChanged || state.typeChanged)
-    val showFutureSection = (state.categoryChanged && !state.isSelfTransfer) || state.merchantChanged
-
-    // Build field summary strings
-    val pastFields = buildList {
-        if (state.categoryChanged && !state.isSelfTransfer) add("Category")
-        if (state.merchantChanged) add("Merchant name")
-        if (state.typeChanged) add("Type")
-    }.joinToString(" · ")
-    val futureFields = buildList {
-        if (state.categoryChanged && !state.isSelfTransfer) add("Category")
-        if (state.merchantChanged) add("Merchant name")
-    }.joinToString(" · ")
-
-    ModalBottomSheet(
-        onDismissRequest = { viewModel.dismissPreSaveBulkSheet() },
-        sheetState = sheetState,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Spacing.md)
-                .padding(bottom = Spacing.xl),
-            verticalArrangement = Arrangement.spacedBy(Spacing.md),
-        ) {
-            Text(
-                text = "Saving will also...",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-
-            if (showPastSection) {
-                BulkConfirmRow(
-                    checked = applyToPast,
-                    onCheckedChange = { viewModel.toggleApplyToPast() },
-                    title = if (state.existingCount == 1)
-                        "Update 1 past transaction"
-                    else
-                        "Update ${state.existingCount} past transactions",
-                    subtitle = pastFields,
-                    footer = if (applyToPast && state.categoryChanged && !state.isSelfTransfer) {
-                        { BulkCategoryDateScopeRow(viewModel = viewModel) }
-                    } else null,
-                )
-            }
-
-            if (showFutureSection) {
-                BulkConfirmRow(
-                    checked = applyToFuture,
-                    onCheckedChange = { viewModel.toggleApplyToFuture() },
-                    title = "Auto-apply to future transactions",
-                    subtitle = futureFields,
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm, Alignment.End),
-            ) {
-                OutlinedButton(onClick = { viewModel.saveWithoutBulkOptions() }) {
-                    Text("Skip")
-                }
-                Button(onClick = { viewModel.saveWithBulkOptions() }) {
-                    Text("Confirm & Save")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BulkConfirmRow(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    title: String,
-    subtitle: String,
-    footer: (@Composable () -> Unit)? = null,
-) {
-    val cardColor = MaterialTheme.colorScheme.surfaceContainerLow
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = cardColor,
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onCheckedChange(!checked) }
-                    .padding(start = Spacing.sm, end = Spacing.md, top = Spacing.sm, bottom = Spacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-            ) {
-                Checkbox(
-                    checked = checked,
-                    onCheckedChange = null,
-                )
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = if (checked) MaterialTheme.colorScheme.onSurface
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (subtitle.isNotEmpty()) {
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-            if (footer != null && checked) {
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = Spacing.md),
-                    color = MaterialTheme.colorScheme.outlineVariant,
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-                ) {
-                    footer()
-                }
-            }
-        }
     }
 }
 
@@ -635,7 +443,7 @@ fun TransactionDetailScreen(
     val isSaving by viewModel.isSaving.collectAsStateWithLifecycle()
     val saveSuccess by viewModel.saveSuccess.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
-    val merchantRenameReview by viewModel.merchantRenameReview.collectAsStateWithLifecycle()
+    val merchantRenameGrouped by viewModel.merchantRenameGrouped.collectAsStateWithLifecycle()
     val futureParsingPrompt by viewModel.futureParsingPrompt.collectAsStateWithLifecycle()
     val showDeleteDialog by viewModel.showDeleteDialog.collectAsStateWithLifecycle()
     val isDeleting by viewModel.isDeleting.collectAsStateWithLifecycle()
@@ -646,7 +454,6 @@ fun TransactionDetailScreen(
     val bulkCategorySaveConfirmParams by viewModel.bulkCategorySaveConfirm.collectAsStateWithLifecycle()
     val bulkCategoryPreviewRows by viewModel.bulkCategoryPreviewRows.collectAsStateWithLifecycle()
     val bulkCategoryUndoSnackCount by viewModel.bulkCategoryUndoSnackCount.collectAsStateWithLifecycle()
-    val preSaveBulkState by viewModel.preSaveBulkState.collectAsStateWithLifecycle()
 
     // Split state
     val splits by viewModel.splits.collectAsStateWithLifecycle()
@@ -808,13 +615,15 @@ fun TransactionDetailScreen(
         }
     }
     
-    merchantRenameReview?.let { reviewState ->
-        MerchantRenameReviewSheet(
-            reviewState = reviewState,
-            onApprove = { viewModel.approveCurrentRenameCandidate() },
-            onSkip = { viewModel.skipCurrentRenameCandidate() },
-            onApplyAll = { viewModel.applyAllRenameCandidates() },
-            onDismiss = { viewModel.dismissMerchantRenameReview() },
+    merchantRenameGrouped?.let { groupedState ->
+        MerchantRenameGroupedSheet(
+            state = groupedState,
+            onApplyTier = { tier -> viewModel.applyGroupTier(tier) },
+            onSkipTier = { tier -> viewModel.skipGroupTier(tier) },
+            onApproveFuzzy = { viewModel.approveCurrentFuzzyCandidate() },
+            onSkipFuzzy = { viewModel.skipCurrentFuzzyCandidate() },
+            onOpenTransaction = { txId -> onNavigateToTransactionDetail(txId) },
+            onDismiss = { viewModel.dismissMerchantRenameGrouped() },
         )
     }
 
@@ -910,12 +719,6 @@ fun TransactionDetailScreen(
         )
     }
 
-    preSaveBulkState?.let { state ->
-        PreSaveBulkOptionsSheet(
-            state = state,
-            viewModel = viewModel,
-        )
-    }
 
     // Delete Confirmation Dialog
     if (showDeleteDialog) {
@@ -2524,6 +2327,7 @@ private fun CategoryMultiSelect(
     val pendingTags by viewModel.pendingTags.collectAsStateWithLifecycle()
     val tagSuggestions by viewModel.tagSuggestions.collectAsStateWithLifecycle()
     var categoryDropdownExpanded by remember { mutableStateOf(false) }
+    var showCreateCategoryDialog by remember { mutableStateOf(false) }
     var tagInput by remember { mutableStateOf("") }
 
     val catEntity = categories.find { it.name == primaryCategory }
@@ -2611,8 +2415,45 @@ private fun CategoryMultiSelect(
                             contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
                         )
                     }
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                            ) {
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(Dimensions.Icon.small),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    "Create new category",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        },
+                        onClick = {
+                            categoryDropdownExpanded = false
+                            showCreateCategoryDialog = true
+                        },
+                        contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                    )
                 }
             }
+        }
+
+        if (showCreateCategoryDialog) {
+            CategoryEditDialog(
+                category = null,
+                onDismiss = { showCreateCategoryDialog = false },
+                onSave = { name, color, isIncome, icon ->
+                    viewModel.createCategoryAndSelect(name, color, isIncome, icon)
+                    showCreateCategoryDialog = false
+                }
+            )
         }
 
         // ── Tags ──

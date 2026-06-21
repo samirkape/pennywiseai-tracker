@@ -9,6 +9,7 @@ package com.pennywiseai.tracker.ui.components.cards
 // .cash-note  ℹ info text
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -54,6 +55,9 @@ data class SpendingBreakdownData(
     val footerNote: String,
     val deltaPercent: Float? = null,
     val totalTransactionCount: Int = 0,
+    val creditCardPercent: Int = 0,
+    val bankPercent: Int = 0,
+    val cashPercent: Int = 0,
 )
 
 @Composable
@@ -61,6 +65,7 @@ fun SpendingBreakdownTile(
     data: SpendingBreakdownData,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    onCardClick: (() -> Unit)? = null,
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -146,15 +151,16 @@ fun SpendingBreakdownTile(
                     icon = Icons.Outlined.CreditCard,
                     label = "Card",
                     amount = data.creditCardAmount,
-                    txns = "${data.creditCardTxns} txns",
+                    percent = data.creditCardPercent,
                     modifier = Modifier.weight(1f),
+                    onClick = onCardClick,
                 )
                 VerticalDivider(modifier = Modifier.height(48.dp).padding(horizontal = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                 BreakdownCol(
                     icon = Icons.Outlined.AccountBalance,
                     label = "Bank",
                     amount = data.bankAmount,
-                    txns = "${data.bankTxns} txns",
+                    percent = data.bankPercent,
                     modifier = Modifier.weight(1f),
                 )
                 VerticalDivider(modifier = Modifier.height(48.dp).padding(horizontal = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
@@ -162,7 +168,7 @@ fun SpendingBreakdownTile(
                     icon = Icons.Outlined.Wallet,
                     label = "Cash",
                     amount = data.cashAmount,
-                    txns = "${data.cashTxns} txns",
+                    percent = data.cashPercent,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -196,16 +202,17 @@ private fun BreakdownCol(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     amount: String,
-    txns: String,
+    percent: Int,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier = modifier.then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(11.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text(text = amount, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(text = txns, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text = "$percent%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

@@ -40,6 +40,7 @@ import com.pennywiseai.tracker.ui.theme.income_dark
 import com.pennywiseai.tracker.ui.theme.income_light
 import com.pennywiseai.tracker.utils.CurrencyFormatter
 import java.math.BigDecimal
+import java.math.RoundingMode
 
 @Composable
 fun PeriodOutflowMetricTile(
@@ -55,7 +56,9 @@ fun PeriodOutflowMetricTile(
 ) {
     val metricRows = buildList {
         add(OutflowMetricRow(OutflowMetricOption.SPENDING, outflow.spending, outflow.spendingTransactionCount))
-        add(OutflowMetricRow(OutflowMetricOption.INVESTED, outflow.invested, outflow.investmentTransactionCount))
+        if (outflow.invested > BigDecimal.ZERO) {
+            add(OutflowMetricRow(OutflowMetricOption.INVESTED, outflow.invested, outflow.investmentTransactionCount))
+        }
         if (outflow.ccBillPayment > BigDecimal.ZERO) {
             add(OutflowMetricRow(OutflowMetricOption.CC_PAYMENT, outflow.ccBillPayment, outflow.ccBillPaymentTransactionCount))
         }
@@ -161,9 +164,15 @@ fun PeriodOutflowMetricTile(
             // .breakdown-row 3-col
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 metricRows.forEachIndexed { index, row ->
+                    val percent = if (outflow.total > BigDecimal.ZERO)
+                        row.amount.multiply(BigDecimal(100))
+                            .divide(outflow.total, 0, RoundingMode.HALF_UP)
+                            .toInt()
+                    else 0
                     BreakdownItem(
                         row = row,
                         currency = currency,
+                        percentOfTotal = percent,
                         modifier = Modifier.weight(1f),
                         onClick = onBreakdownRowClick?.let { h ->
                             {
@@ -191,6 +200,7 @@ fun PeriodOutflowMetricTile(
 private fun BreakdownItem(
     row: OutflowMetricRow,
     currency: String,
+    percentOfTotal: Int,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
 ) {
@@ -203,7 +213,7 @@ private fun BreakdownItem(
             Text(text = row.option.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text(text = CurrencyFormatter.formatCurrency(row.amount, currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(text = "${row.transactionCount} txn${if (row.transactionCount != 1) "s" else ""}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text = "$percentOfTotal%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

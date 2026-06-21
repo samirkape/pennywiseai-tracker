@@ -176,7 +176,11 @@ class TransactionRepository @Inject constructor(
     
     fun getTransactionsByCategory(category: String): Flow<List<TransactionEntity>> = 
         transactionDao.getTransactionsByCategory(category)
-    
+
+    suspend fun reassignTransactionsByCategory(oldCategory: String, newCategory: String) {
+        transactionDao.updateAllTransactionsByCategory(oldCategory, newCategory, LocalDateTime.now())
+    }
+
     fun searchTransactions(query: String): Flow<List<TransactionEntity>> =
         transactionDao.searchTransactions(query)
 

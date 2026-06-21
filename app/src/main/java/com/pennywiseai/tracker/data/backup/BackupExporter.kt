@@ -111,6 +111,9 @@ class BackupExporter @Inject constructor(
         val dismissedSalarySuggestions = userPreferencesRepository.dismissedSalarySuggestions.first()
         val selectedProfileId = userPreferencesRepository.selectedProfileId.first()
         val insightsDataWindowMonths = userPreferencesRepository.insightsDataWindowMonths.first()
+        val creditCardBillingCycleDay = userPreferencesRepository.creditCardBillingCycleDay.first()
+        val creditCardBillingCyclePerCard = userPreferencesRepository.creditCardBillingCyclePerCard.first()
+            .entries.joinToString(";") { "${it.key}=${it.value}" }.ifEmpty { null }
 
         // Calculate statistics
         val dateRange = if (transactions.isNotEmpty()) {
@@ -249,7 +252,9 @@ class BackupExporter @Inject constructor(
                     dismissedSalarySuggestions = dismissedSalarySuggestions
                         .joinToString("|").ifEmpty { null },
                     selectedProfileId = selectedProfileId,
-                    insightsDataWindowMonths = insightsDataWindowMonths
+                    insightsDataWindowMonths = insightsDataWindowMonths,
+                    creditCardBillingCycleDay = creditCardBillingCycleDay,
+                    creditCardBillingCyclePerCard = creditCardBillingCyclePerCard
                 ),
                 security = SecurityPreferences(
                     appLockEnabled = isAppLockEnabled,

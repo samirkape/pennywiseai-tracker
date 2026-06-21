@@ -314,6 +314,12 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun updateProfileImage(uri: String?) {
+        viewModelScope.launch {
+            userPreferencesRepository.updateProfileImageUri(uri)
+        }
+    }
+
     private fun filterTransactions(transactions: List<TransactionEntity>): List<TransactionEntity> {
         return filterTransactionsByProfile(
             transactions,

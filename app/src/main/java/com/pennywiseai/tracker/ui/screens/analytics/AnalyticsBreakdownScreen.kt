@@ -55,6 +55,7 @@ fun AnalyticsBreakdownScreen(
         bankName: String?,
         accountLast4: String?,
     ) -> Unit,
+    onNavigateToCreditCardAnalytics: (startEpoch: Long, endEpoch: Long, currency: String) -> Unit = { _, _, _ -> },
 ) {
     val parentEntry = remember(navController) {
         navController.getBackStackEntry(Constants.Routes.ANALYTICS)
@@ -171,6 +172,14 @@ fun AnalyticsBreakdownScreen(
                             transactionType = TransactionTypeFilter.EXPENSE.name,
                         )
                     },
+                    onSpendingCardClick = {
+                        val (start, end) = drillDownPeriodEpochs
+                        if (start != null && end != null) {
+                            onNavigateToCreditCardAnalytics(start, end, uiState.currency)
+                        } else {
+                            drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name, paymentMode = "CREDIT_CARD")
+                        }
+                    },
                 )
             }
 
@@ -203,6 +212,7 @@ private fun BreakdownMetricSection(
     onSpendingClick: () -> Unit,
     onInvestmentClick: () -> Unit,
     onSpendingBreakdownClick: () -> Unit,
+    onSpendingCardClick: (() -> Unit)? = null,
 ) {
     when (tileKey) {
         "outflow" -> uiState.periodOutflow?.let { outflow ->
@@ -312,6 +322,7 @@ private fun BreakdownMetricSection(
                         footerNote = footerNote,
                     ),
                     onClick = onSpendingBreakdownClick,
+                    onCardClick = onSpendingCardClick,
                 )
             }
         }

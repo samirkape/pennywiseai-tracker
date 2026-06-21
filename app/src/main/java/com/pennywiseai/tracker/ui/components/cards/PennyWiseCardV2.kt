@@ -33,7 +33,7 @@ fun PennyWiseCardV2(
     val effectiveBorder = border ?: if (isSystemInDarkTheme()) {
         BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f))
     } else {
-        null
+        BorderStroke(0.3.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
     }
 
     if (onClick != null) {

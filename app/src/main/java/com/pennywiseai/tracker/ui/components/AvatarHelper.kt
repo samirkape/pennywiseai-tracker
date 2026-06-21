@@ -18,11 +18,13 @@ object AvatarHelper {
 
     /**
      * Resolves an "avatar://INDEX" URI to a drawable resource ID.
-     * Returns null if the URI is not an avatar URI or index is out of range.
+     * Returns null if the URI is not an avatar URI, index is out of range, or index is 0
+     * (index 0 was a gendered default; null falls through to the initials display).
      */
     fun resolveAvatarDrawable(uri: String): Int? {
         if (!uri.startsWith("avatar://")) return null
         val index = uri.removePrefix("avatar://").toIntOrNull() ?: return null
+        if (index == 0) return null
         return avatarDrawables.getOrNull(index)
     }
 }

@@ -11,20 +11,16 @@ import dev.chrisbanes.haze.HazeState
 import java.math.BigDecimal
 
 /**
- * Hero spend card with period context, amount, trend sparkline, and optional "More stats" fold.
+ * Hero spend card with period context, amount, progress bar, and remaining headroom.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeHeroPager(
-    monthlyChange: BigDecimal,
-    monthlyChangePercent: Int,
     currency: String,
     currentMonthExpenses: BigDecimal,
     currentMonthIncome: BigDecimal,
     currentMonthTotal: BigDecimal,
     currentMonthInvestment: BigDecimal,
-    spendingHistory: List<BigDecimal>,
-    lastMonthSpendingHistory: List<BigDecimal>,
     periodDayLabel: String,
     availableCurrencies: List<String>,
     isUnifiedMode: Boolean,
@@ -38,21 +34,6 @@ fun HomeHeroPager(
     onNavigateToBudgets: () -> Unit,
     onShowBreakdown: () -> Unit,
     onOpenPayPeriodSettings: (() -> Unit)?,
-    moreStatsIncomeText: String? = null,
-    moreStatsIncomeSubLabel: String? = null,
-    moreStatsTopCategoryName: String? = null,
-    moreStatsTopCategorySubLabel: String? = null,
-    moreStatsPaceText: String? = null,
-    moreStatsPaceSubLabel: String? = null,
-    moreStatsLoanLabel: String? = null,
-    moreStatsLoanText: String? = null,
-    moreStatsSubscriptionsLabel: String? = null,
-    moreStatsSubscriptionsValue: String? = null,
-    onMoreStatsIncomeClick: (() -> Unit)? = null,
-    onMoreStatsTopCategoryClick: (() -> Unit)? = null,
-    onMoreStatsPaceClick: (() -> Unit)? = null,
-    onMoreStatsLoanClick: (() -> Unit)? = null,
-    onMoreStatsSubscriptionsClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     blurEffects: Boolean = false,
     hazeState: HazeState = remember { HazeState() },
@@ -63,15 +44,11 @@ fun HomeHeroPager(
         modifier = modifier,
         blurEffects = blurEffects,
         hazeState = hazeState,
-        monthlyChange = monthlyChange,
-        monthlyChangePercent = monthlyChangePercent,
         currency = currency,
         currentMonthExpenses = currentMonthExpenses,
         currentMonthIncome = currentMonthIncome,
         currentMonthTotal = currentMonthTotal,
         currentMonthInvestment = currentMonthInvestment,
-        spendingHistory = spendingHistory,
-        lastMonthSpendingHistory = lastMonthSpendingHistory,
         periodDayLabel = periodDayLabel,
         availableCurrencies = availableCurrencies,
         isUnifiedMode = isUnifiedMode,
@@ -86,21 +63,6 @@ fun HomeHeroPager(
         onShowBreakdown = onShowBreakdown,
         onOpenPayPeriodSettings = onOpenPayPeriodSettings,
         onPeriodChipClick = { showOptionsSheet = true },
-        moreStatsIncomeText = moreStatsIncomeText,
-        moreStatsIncomeSubLabel = moreStatsIncomeSubLabel,
-        moreStatsTopCategoryName = moreStatsTopCategoryName,
-        moreStatsTopCategorySubLabel = moreStatsTopCategorySubLabel,
-        moreStatsPaceText = moreStatsPaceText,
-        moreStatsPaceSubLabel = moreStatsPaceSubLabel,
-        moreStatsLoanLabel = moreStatsLoanLabel,
-        moreStatsLoanText = moreStatsLoanText,
-        moreStatsSubscriptionsLabel = moreStatsSubscriptionsLabel,
-        moreStatsSubscriptionsValue = moreStatsSubscriptionsValue,
-        onMoreStatsIncomeClick = onMoreStatsIncomeClick,
-        onMoreStatsTopCategoryClick = onMoreStatsTopCategoryClick,
-        onMoreStatsPaceClick = onMoreStatsPaceClick,
-        onMoreStatsLoanClick = onMoreStatsLoanClick,
-        onMoreStatsSubscriptionsClick = onMoreStatsSubscriptionsClick,
     )
 
     if (showOptionsSheet) {

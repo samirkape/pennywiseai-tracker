@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pennywiseai.tracker.data.database.entity.CategoryEntity
 import com.pennywiseai.tracker.data.repository.CategoryRepository
+import com.pennywiseai.tracker.data.repository.TransactionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -11,7 +12,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class CategoriesViewModel @Inject constructor(
-    private val categoryRepository: CategoryRepository
+    private val categoryRepository: CategoryRepository,
+    private val transactionRepository: TransactionRepository,
 ) : ViewModel() {
     
     // UI State
@@ -37,6 +39,10 @@ class CategoriesViewModel @Inject constructor(
     private val _snackbarMessage = MutableStateFlow<String?>(null)
     val snackbarMessage: StateFlow<String?> = _snackbarMessage.asStateFlow()
     
+    // Delete-with-replacement dialog state
+    private val _pendingDeleteCategory = MutableStateFlow<CategoryEntity?>(null)
+    val pendingDeleteCategory: StateFlow<CategoryEntity?> = _pendingDeleteCategory.asStateFlow()
+
     fun showAddDialog() {
         _editingCategory.value = null
         _showAddEditDialog.value = true
@@ -98,17 +104,39 @@ class CategoriesViewModel @Inject constructor(
         }
     }
     
-    fun deleteCategory(category: CategoryEntity) {
+    fun requestDeleteCategory(category: CategoryEntity) {
         if (category.isSystem) {
             _snackbarMessage.value = "System categories cannot be deleted"
             return
         }
-        
+        _pendingDeleteCategory.value = category
+    }
+
+    fun cancelDeleteRequest() {
+        _pendingDeleteCategory.value = null
+    }
+
+    fun deleteCategory(category: CategoryEntity, replacementCategory: CategoryEntity? = null) {
+        if (category.isSystem) {
+            _snackbarMessage.value = "System categories cannot be deleted"
+            return
+        }
+        _pendingDeleteCategory.value = null
+
         viewModelScope.launch {
             try {
+                if (replacementCategory != null) {
+                    transactionRepository.reassignTransactionsByCategory(
+                        category.name, replacementCategory.name
+                    )
+                }
                 val deleted = categoryRepository.deleteCategory(category.id)
                 if (deleted) {
-                    _snackbarMessage.value = "Category deleted successfully"
+                    _snackbarMessage.value = if (replacementCategory != null) {
+                        "Category deleted, transactions moved to '${replacementCategory.name}'"
+                    } else {
+                        "Category deleted successfully"
+                    }
                 } else {
                     _snackbarMessage.value = "Cannot delete this category"
                 }
