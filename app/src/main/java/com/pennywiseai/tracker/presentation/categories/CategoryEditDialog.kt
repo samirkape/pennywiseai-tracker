@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -16,7 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.pennywiseai.tracker.data.database.entity.CategoryEntity
@@ -66,7 +64,7 @@ fun CategoryEditDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(Dimensions.Padding.content),
-            shape = RoundedCornerShape(28.dp),
+            shape = MaterialTheme.shapes.extraLarge,
             contentPadding = 0.dp
         ) {
             Column(
@@ -83,7 +81,6 @@ fun CategoryEditDialog(
                         else -> "Edit Category"
                     },
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
                 )
 
                 if (isSystemCategory) {
@@ -102,14 +99,14 @@ fun CategoryEditDialog(
                             nameError = if (it.isBlank()) "Category name is required" else null
                         }
                     },
-                    label = { Text("Category Name", fontWeight = FontWeight.SemiBold) },
+                    label = { Text("Category Name") },
                     isError = nameError != null,
                     supportingText = nameError?.let { { Text(it) } },
                     singleLine = true,
                     readOnly = isSystemCategory,
                     enabled = !isSystemCategory,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = MaterialTheme.shapes.large,
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -126,8 +123,7 @@ fun CategoryEditDialog(
                     Column {
                         Text(
                             text = "Category Type",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium
+                            style = MaterialTheme.typography.titleSmall,
                         )
                         Spacer(modifier = Modifier.height(Spacing.xs))
                         Row(
@@ -152,8 +148,7 @@ fun CategoryEditDialog(
                     Column {
                         Text(
                             text = "Color",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium
+                            style = MaterialTheme.typography.titleSmall,
                         )
                         Spacer(modifier = Modifier.height(Spacing.sm))
 
@@ -198,8 +193,7 @@ fun CategoryEditDialog(
                 Column {
                     Text(
                         text = "Icon",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium
+                        style = MaterialTheme.typography.titleSmall,
                     )
                     Spacer(modifier = Modifier.height(Spacing.sm))
 

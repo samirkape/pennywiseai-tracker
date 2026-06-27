@@ -69,7 +69,7 @@ import java.time.YearMonth
 fun InsightsScreen(
     viewModel: InsightsViewModel = hiltViewModel(),
     onBack: () -> Unit = {},
-    onNavigateToBehavioralStats: () -> Unit = {},
+    onNavigateToBehavioralStats: (YearMonth) -> Unit = {},
     onNavigateToQuickCategorize: () -> Unit = {},
     onNavigateToTransactions: (
         category: String?,
@@ -198,7 +198,7 @@ fun InsightsScreen(
                     subtitle = "Spending habits, time patterns, merchant loyalty",
                     icon = Icons.Default.Insights,
                     tint = MaterialTheme.colorScheme.primary,
-                    onClick = onNavigateToBehavioralStats
+                    onClick = { onNavigateToBehavioralStats(selectedMonth) }
                 )
             }
         }

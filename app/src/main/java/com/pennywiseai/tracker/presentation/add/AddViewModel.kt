@@ -12,6 +12,8 @@ import com.pennywiseai.tracker.data.database.entity.BudgetImpactType
 import com.pennywiseai.tracker.data.database.entity.TransactionType
 import com.pennywiseai.tracker.data.database.entity.TransferKind
 import com.pennywiseai.tracker.data.database.entity.SubscriptionState
+import com.pennywiseai.tracker.domain.model.getAccountType
+import com.pennywiseai.tracker.presentation.accounts.AccountType
 import com.pennywiseai.tracker.data.preferences.UserPreferencesRepository
 import com.pennywiseai.tracker.data.receipt.ReceiptManager
 import com.pennywiseai.tracker.data.repository.AccountBalanceRepository
@@ -137,6 +139,35 @@ class AddViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
+    private val _accountSearchQuery = MutableStateFlow("")
+
+    /** Accounts filtered by the current payment channel / transaction type, then by search query. */
+    val filteredAccounts: StateFlow<List<AccountBalanceEntity>> = combine(
+        accounts,
+        transactionUiState,
+        _accountSearchQuery
+    ) { allAccounts, state, query ->
+        val typeFiltered = when {
+            state.transactionType == TransactionType.TRANSFER -> allAccounts
+            state.paymentChannel == PaymentChannel.CREDIT_CARD ->
+                allAccounts.filter { it.getAccountType() == AccountType.CREDIT }
+            state.paymentChannel == PaymentChannel.CASH ->
+                allAccounts.filter { it.getAccountType() == AccountType.CASH }
+            else -> allAccounts.filter {
+                it.getAccountType() in listOf(AccountType.SAVINGS, AccountType.CURRENT)
+            }
+        }
+        if (query.isBlank()) typeFiltered
+        else typeFiltered.filter {
+            it.bankName.contains(query, ignoreCase = true) ||
+                it.accountLast4.contains(query, ignoreCase = true)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun updateAccountSearchQuery(query: String) {
+        _accountSearchQuery.value = query
+    }
+
     val activeBudgetCategories = budgetGroupRepository.getActiveGroups()
         .map { groups ->
             groups.flatMap { it.categories.map { cat -> cat.categoryName } }.distinct().sorted()
@@ -190,6 +221,12 @@ class AddViewModel @Inject constructor(
             } else {
                 null
             }
+            val shouldClearAccount = when (type) {
+                TransactionType.INCOME, TransactionType.INVESTMENT ->
+                    currentState.selectedAccount?.getAccountType()
+                        ?.let { it == AccountType.CREDIT || it == AccountType.CASH } ?: false
+                else -> false
+            }
             currentState.copy(
                 transactionType = type,
                 transferKind = newTransferKind,
@@ -208,7 +245,8 @@ class AddViewModel @Inject constructor(
                 budgetImpactType = if (type != TransactionType.INCOME) null else currentState.budgetImpactType,
                 budgetCategory = if (type != TransactionType.INCOME) null else currentState.budgetCategory,
                 isSplitEnabled = if (type == TransactionType.TRANSFER) false else currentState.isSplitEnabled,
-                splits = if (type == TransactionType.TRANSFER) emptyList() else currentState.splits
+                splits = if (type == TransactionType.TRANSFER) emptyList() else currentState.splits,
+                selectedAccount = if (shouldClearAccount) null else currentState.selectedAccount
             )
         }
     }
@@ -225,13 +263,21 @@ class AddViewModel @Inject constructor(
 
     fun updatePaymentChannel(channel: PaymentChannel) {
         _transactionUiState.update { currentState ->
+            val shouldClearAccount = currentState.selectedAccount?.let { account ->
+                when (channel) {
+                    PaymentChannel.CREDIT_CARD -> account.getAccountType() != AccountType.CREDIT
+                    PaymentChannel.CASH -> account.getAccountType() != AccountType.CASH
+                    PaymentChannel.ACCOUNT -> account.getAccountType() !in listOf(AccountType.SAVINGS, AccountType.CURRENT)
+                }
+            } ?: false
             currentState.copy(
                 paymentChannel = channel,
                 transactionType = if (channel == PaymentChannel.CREDIT_CARD) {
                     TransactionType.CREDIT
                 } else {
                     TransactionType.EXPENSE
-                }
+                },
+                selectedAccount = if (shouldClearAccount) null else currentState.selectedAccount
             )
         }
     }

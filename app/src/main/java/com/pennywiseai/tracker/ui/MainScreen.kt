@@ -224,6 +224,11 @@ fun MainScreen(
                             launchSingleTop = true
                         }
                     },
+                    onNavigateToIncomeTransactions = { period ->
+                        navController.navigate("transactions?period=$period&type=INCOME") {
+                            launchSingleTop = true
+                        }
+                    },
                     onNavigateToAnalytics = {
                         navController.navigate(Constants.Routes.ANALYTICS) {
                             launchSingleTop = true
@@ -231,6 +236,11 @@ fun MainScreen(
                     },
                     onNavigateToTransactionsWithSearch = { period ->
                         navController.navigate("transactions?period=$period&focusSearch=true") {
+                            launchSingleTop = true
+                        }
+                    },
+                    onNavigateToThisWeekTransactions = { startEpochDay, endEpochDay ->
+                        navController.navigate("transactions?startDateEpoch=$startEpochDay&endDateEpoch=$endEpochDay") {
                             launchSingleTop = true
                         }
                     },

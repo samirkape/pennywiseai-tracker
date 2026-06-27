@@ -468,6 +468,7 @@ fun TransactionDetailScreen(
     // Goal state
     val showLinkGoalSheet by viewModel.showLinkGoalSheet.collectAsStateWithLifecycle()
     val availableGoals by viewModel.availableGoals.collectAsStateWithLifecycle()
+    val linkedGoalContributions by viewModel.linkedGoalContributions.collectAsStateWithLifecycle()
 // Account profile state
     val accountProfileId by viewModel.accountProfileId.collectAsStateWithLifecycle()
 
@@ -783,12 +784,14 @@ fun TransactionDetailScreen(
         )
     }
 
-    // Link to Goal Bottom Sheet
+    // Split Among Goals Bottom Sheet
     if (showLinkGoalSheet) {
-        LinkToGoalBottomSheet(
+        SplitGoalsBottomSheet(
             goals = availableGoals,
+            transactionAmount = transaction?.amount ?: BigDecimal.ZERO,
+            existingContributions = linkedGoalContributions,
             onDismiss = { viewModel.hideLinkGoalSheet() },
-            onConfirm = { goalId -> viewModel.linkToGoal(goalId) }
+            onConfirm = { splits -> viewModel.linkToGoals(splits) }
         )
     }
 
@@ -884,8 +887,9 @@ private fun TransactionDetailContent(
                     showSplitEditor = showSplitEditor
                 )
 
-                // Bottom spacer for sticky Save button
-                Spacer(modifier = Modifier.height(80.dp))
+                // Bottom spacer for sticky Save button (button height + nav bar inset)
+                val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                Spacer(modifier = Modifier.height(56.dp + navBarBottom))
 
             } else {
                 TransactionReceipt(
@@ -914,29 +918,31 @@ private fun TransactionDetailContent(
                 shadowElevation = 0.dp,
                 tonalElevation = 0.dp,
             ) {
-                HorizontalDivider(
-                    modifier = Modifier.fillMaxWidth(),
-                    thickness = Dimensions.Component.dividerThickness,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f),
-                )
-                Button(
-                    onClick = { viewModel.saveChanges() },
-                    enabled = !isSaving,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Dimensions.Padding.content, vertical = Spacing.md)
-                        .navigationBarsPadding()
-                ) {
-                    if (isSaving) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(Dimensions.Icon.small),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                        Spacer(modifier = Modifier.width(Spacing.sm))
-                        Text("Saving…")
-                    } else {
-                        Text("Save", style = MaterialTheme.typography.labelLarge)
+                Column {
+                    HorizontalDivider(
+                        modifier = Modifier.fillMaxWidth(),
+                        thickness = Dimensions.Component.dividerThickness,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f),
+                    )
+                    Button(
+                        onClick = { viewModel.saveChanges() },
+                        enabled = !isSaving,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Dimensions.Padding.content, vertical = Spacing.md)
+                            .navigationBarsPadding()
+                    ) {
+                        if (isSaving) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(Dimensions.Icon.small),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.width(Spacing.sm))
+                            Text("Saving…")
+                        } else {
+                            Text("Save", style = MaterialTheme.typography.labelLarge)
+                        }
                     }
                 }
             }
@@ -963,6 +969,7 @@ private fun TransactionReceipt(
 ) {
     val currentGroup by viewModel.currentGroup.collectAsStateWithLifecycle()
     val linkedGoalContribution by viewModel.linkedGoalContribution.collectAsStateWithLifecycle()
+    val linkedGoalContributions by viewModel.linkedGoalContributions.collectAsStateWithLifecycle()
     val isDark = isSystemInDarkTheme()
     val typeColor = when (transaction.transactionType) {
         TransactionType.INCOME -> if (isDark) income_dark else income_light
@@ -1148,7 +1155,6 @@ private fun TransactionReceipt(
         }
 
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-            val compactScreen = maxWidth < 420.dp
             val similarTransactions by viewModel.similarTransactions.collectAsStateWithLifecycle()
             val quickActions = buildList {
                 if (loan == null) {
@@ -1179,7 +1185,7 @@ private fun TransactionReceipt(
                         )
                     )
                 }
-                if (linkedGoalContribution == null) {
+                if (linkedGoalContributions.isEmpty()) {
                     add(
                         TransactionQuickAction(
                             icon = Icons.Default.EmojiEvents,
@@ -1188,16 +1194,21 @@ private fun TransactionReceipt(
                             onClick = { viewModel.showLinkGoalSheet() }
                         )
                     )
-                }
-                add(
-                    TransactionQuickAction(
-                        icon = Icons.Default.Search,
-                        label = "Find similar",
-                        compactLabel = "Similar",
-                        onClick = { onFindSimilar(transaction.merchantName) }
+                } else {
+                    val n = linkedGoalContributions.size
+                    add(
+                        TransactionQuickAction(
+                            icon = Icons.Default.EmojiEvents,
+                            label = if (n == 1) "Edit goal" else "Edit $n goals",
+                            compactLabel = if (n == 1) "1 goal" else "$n goals",
+                            onClick = { viewModel.showLinkGoalSheet() }
+                        )
                     )
-                )
+                }
             }
+
+            // Use compact layout only when there are many actions — fewer items get larger icons/text.
+            val compactScreen = quickActions.size >= 5
 
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -1214,7 +1225,7 @@ private fun TransactionReceipt(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = Spacing.sm, vertical = Spacing.xs),
-                        horizontalArrangement = Arrangement.Start
+                        horizontalArrangement = Arrangement.Center
                     ) {
                         quickActions.forEach { action ->
                             QuickActionItem(
@@ -1222,7 +1233,8 @@ private fun TransactionReceipt(
                                 label = if (compactScreen) action.compactLabel else action.label,
                                 onClick = action.onClick,
                                 compact = compactScreen,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                enabled = action.enabled
                             )
                         }
                     }
@@ -1606,14 +1618,17 @@ private fun QuickActionItem(
     label: String,
     onClick: () -> Unit,
     compact: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
+    val contentColor = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant
+                       else MaterialTheme.colorScheme.primary
     Column(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = if (compact) 52.dp else 58.dp)
             .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(vertical = if (compact) 3.dp else Spacing.xs),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -1622,18 +1637,14 @@ private fun QuickActionItem(
             icon,
             contentDescription = label,
             modifier = Modifier.size(if (compact) 14.dp else 18.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+            tint = contentColor
         )
         Spacer(modifier = Modifier.height(if (compact) 2.dp else 4.dp))
         Text(
             text = label,
             modifier = Modifier.fillMaxWidth(),
-            style = if (compact) {
-                MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp)
-            } else {
-                MaterialTheme.typography.labelSmall
-            },
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall,
+            color = contentColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center
@@ -1645,7 +1656,8 @@ private data class TransactionQuickAction(
     val icon: ImageVector,
     val label: String,
     val compactLabel: String,
-    val onClick: () -> Unit
+    val onClick: () -> Unit,
+    val enabled: Boolean = true
 )
 
 @Composable
@@ -3151,24 +3163,89 @@ private fun GroupBottomSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LinkToGoalBottomSheet(
+fun SplitGoalsBottomSheet(
     goals: List<GoalEntity>,
+    transactionAmount: BigDecimal,
+    existingContributions: List<GoalContributionEntity>,
     onDismiss: () -> Unit,
-    onConfirm: (Long) -> Unit
+    onConfirm: (List<Pair<Long, BigDecimal>>) -> Unit
 ) {
+    val selectedAmounts = remember(goals, existingContributions) {
+        mutableStateMapOf<Long, String>().apply {
+            existingContributions.forEach { c -> put(c.goalId, c.amount.toPlainString()) }
+        }
+    }
+    // Boxes the user has explicitly typed — their values are preserved during auto-recalc.
+    // Existing contributions start locked so reopening the sheet keeps intentional splits intact.
+    val lockedIds = remember(existingContributions) {
+        mutableStateSetOf<Long>().apply { existingContributions.forEach { add(it.goalId) } }
+    }
+
+    fun formatShare(v: BigDecimal): String =
+        v.setScale(2, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
+
+    fun distributeAmong(ids: List<Long>, amount: BigDecimal) {
+        if (ids.isEmpty()) return
+        val share = amount.divide(BigDecimal(ids.size), 2, java.math.RoundingMode.FLOOR)
+        val lastShare = amount - share.multiply(BigDecimal(ids.size - 1))
+        ids.forEachIndexed { i, id ->
+            selectedAmounts[id] = formatShare(if (i == ids.lastIndex) lastShare else share)
+        }
+    }
+
+    // When a box is checked/unchecked — only free (unlocked) boxes absorb the remainder.
+    fun redistributeFree() {
+        val free = selectedAmounts.keys.filter { it !in lockedIds }
+        if (free.isEmpty()) return
+        val locked = selectedAmounts.entries
+            .filter { it.key in lockedIds }
+            .mapNotNull { it.value.toBigDecimalOrNull() }
+            .fold(BigDecimal.ZERO) { acc, v -> acc + v }
+        val remainder = transactionAmount - locked
+        if (remainder < BigDecimal.ZERO) return
+        distributeAmong(free, remainder)
+    }
+
+    // When user types in anchorId — anchor and other locked boxes stay fixed,
+    // all remaining free boxes split the leftover.
+    fun redistributeRemainderExcluding(anchorId: Long, anchorAmount: BigDecimal) {
+        val free = selectedAmounts.keys.filter { it != anchorId && it !in lockedIds }
+        if (free.isEmpty()) return
+        val locked = selectedAmounts.entries
+            .filter { it.key != anchorId && it.key in lockedIds }
+            .mapNotNull { it.value.toBigDecimalOrNull() }
+            .fold(BigDecimal.ZERO) { acc, v -> acc + v }
+        val remainder = transactionAmount - anchorAmount - locked
+        if (remainder < BigDecimal.ZERO) return
+        distributeAmong(free, remainder)
+    }
+
+    val totalSelected = selectedAmounts.values
+        .mapNotNull { it.toBigDecimalOrNull() }
+        .fold(BigDecimal.ZERO) { acc, v -> acc + v }
+    val remaining = transactionAmount - totalSelected
+    val isValid = selectedAmounts.isNotEmpty() && remaining.compareTo(BigDecimal.ZERO) == 0
+
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
-            modifier = androidx.compose.ui.Modifier
+            modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = com.pennywiseai.tracker.ui.theme.Dimensions.Padding.content)
                 .padding(bottom = com.pennywiseai.tracker.ui.theme.Spacing.xl),
+            verticalArrangement = Arrangement.spacedBy(com.pennywiseai.tracker.ui.theme.Spacing.sm)
         ) {
             Text(
-                text = "Link to Goal",
+                text = "Split Among Goals",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                modifier = androidx.compose.ui.Modifier.padding(bottom = com.pennywiseai.tracker.ui.theme.Spacing.md)
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
             )
+            Text(
+                text = "Transaction: ${com.pennywiseai.tracker.utils.CurrencyFormatter.formatCurrency(transactionAmount)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
             if (goals.isEmpty()) {
                 Text(
                     text = "No active goals. Create a goal first.",
@@ -3177,37 +3254,113 @@ fun LinkToGoalBottomSheet(
                 )
             } else {
                 goals.forEach { goal ->
-                    val progress = if (goal.targetAmount > java.math.BigDecimal.ZERO)
-                        (goal.currentAmount.toFloat() / goal.targetAmount.toFloat()).coerceIn(0f, 1f)
-                    else 0f
-                    androidx.compose.foundation.layout.Row(
-                        modifier = androidx.compose.ui.Modifier
-                            .fillMaxWidth()
-                            .clickable { onConfirm(goal.id) }
-                            .padding(vertical = com.pennywiseai.tracker.ui.theme.Spacing.sm),
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
+                    val isSelected = selectedAmounts.containsKey(goal.id)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(com.pennywiseai.tracker.ui.theme.Spacing.sm)
                     ) {
-                        Column(modifier = androidx.compose.ui.Modifier.weight(1f)) {
+                        Checkbox(
+                            checked = isSelected,
+                            onCheckedChange = { checked ->
+                                if (checked) {
+                                    lockedIds.remove(goal.id)
+                                    selectedAmounts[goal.id] = "0"
+                                    redistributeFree()
+                                } else {
+                                    lockedIds.remove(goal.id)
+                                    selectedAmounts.remove(goal.id)
+                                    redistributeFree()
+                                }
+                            }
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = goal.name,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
                             )
+                            val progress = if (goal.targetAmount > BigDecimal.ZERO)
+                                (goal.currentAmount.toFloat() / goal.targetAmount.toFloat()).coerceIn(0f, 1f)
+                            else 0f
                             Text(
-                                text = "${(progress * 100).toInt()}% · ${com.pennywiseai.tracker.utils.CurrencyFormatter.formatCurrency(goal.currentAmount, goal.currency)} / ${com.pennywiseai.tracker.utils.CurrencyFormatter.formatCurrency(goal.targetAmount, goal.currency)}",
+                                text = "${(progress * 100).toInt()}% complete",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Icon(
-                            Icons.Default.ChevronRight,
-                            contentDescription = "Link",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        if (isSelected) {
+                            val isLocked = goal.id in lockedIds
+                            val pct = selectedAmounts[goal.id]?.toBigDecimalOrNull()
+                                ?.takeIf { transactionAmount > BigDecimal.ZERO }
+                                ?.let { amt ->
+                                    (amt.toDouble() / transactionAmount.toDouble() * 100)
+                                        .toInt().coerceIn(0, 100)
+                                }
+                            Column(horizontalAlignment = Alignment.End) {
+                                OutlinedTextField(
+                                    value = selectedAmounts[goal.id] ?: "",
+                                    onValueChange = { newText ->
+                                        lockedIds.add(goal.id)
+                                        selectedAmounts[goal.id] = newText
+                                        val parsed = newText.toBigDecimalOrNull()
+                                        if (parsed != null && parsed >= BigDecimal.ZERO) {
+                                            redistributeRemainderExcluding(goal.id, parsed)
+                                        }
+                                    },
+                                    label = { Text(if (isLocked) "Fixed" else "Auto") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    singleLine = true,
+                                    modifier = Modifier.width(120.dp)
+                                )
+                                if (pct != null) {
+                                    Text(
+                                        text = "$pct%",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                     HorizontalDivider()
                 }
+            }
+
+            val remainingColor = when {
+                remaining.compareTo(BigDecimal.ZERO) == 0 -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.error
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Unallocated",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = com.pennywiseai.tracker.utils.CurrencyFormatter.formatCurrency(remaining),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    color = remainingColor
+                )
+            }
+
+            Button(
+                onClick = {
+                    val splits = selectedAmounts.mapNotNull { (goalId, amtText) ->
+                        amtText.toBigDecimalOrNull()?.let { goalId to it }
+                    }
+                    onConfirm(splits)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = isValid
+            ) {
+                Text(if (existingContributions.isEmpty()) "Link to Goals" else "Update Splits")
             }
         }
     }

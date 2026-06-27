@@ -324,7 +324,7 @@ fun GoalCard(
                         }
                     }
                     Text(
-                        text = "${goal.goalType.displayName()} · ${daysLabel(goalProgress.daysRemaining)}",
+                        text = "${goal.goalType.displayName(goal.customTypeName)} · ${daysLabel(goalProgress.daysRemaining)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
                     )
@@ -420,14 +420,14 @@ private fun GoalCardSkeleton() {
     }
 }
 
-private fun GoalType.displayName(): String = when (this) {
+private fun GoalType.displayName(customTypeName: String? = null): String = when (this) {
     GoalType.SAVINGS -> "Savings"
     GoalType.EMERGENCY_FUND -> "Emergency Fund"
     GoalType.PURCHASE -> "Purchase"
     GoalType.VACATION -> "Vacation"
     GoalType.DEBT_PAYOFF -> "Debt Payoff"
     GoalType.INVESTMENT -> "Investment"
-    GoalType.CUSTOM -> "Custom"
+    GoalType.CUSTOM -> customTypeName?.takeIf { it.isNotBlank() } ?: "Custom"
 }
 
 private fun GoalType.icon(): ImageVector = when (this) {

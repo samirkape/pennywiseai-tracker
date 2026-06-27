@@ -151,7 +151,7 @@ private fun SubscriptionRenewalRow(
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically) {
-        Text(sub.merchantName, style = MaterialTheme.typography.bodySmall, fontSize = 12.sp,
+        Text(sub.merchantName, style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f),
             maxLines = 1, overflow = TextOverflow.Ellipsis)
         when {
@@ -160,11 +160,11 @@ private fun SubscriptionRenewalRow(
                     .background(MaterialTheme.colorScheme.spendAmberBg, CircleShape)
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
-                Text("Today", style = MaterialTheme.typography.labelSmall, fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.spendAmber)
+                Text("Today", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.spendAmber)
             }
             isTomorrow -> Text("Tomorrow", style = MaterialTheme.typography.labelSmall,
-                fontSize = 10.sp, color = MaterialTheme.colorScheme.textMuted)
+                color = MaterialTheme.colorScheme.textMuted)
             sub.nextPaymentDate != null -> Text(sub.nextPaymentDate.format(dateFmt),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.textMuted)
@@ -285,27 +285,26 @@ private fun GoalDonutContent(
                     style = Stroke(strokeWidth, cap = StrokeCap.Round))
         }
         Text("$progress%", style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Medium, fontSize = 13.sp,
             color = MaterialTheme.colorScheme.onSurface)
     }
 
     Spacer(Modifier.height(Spacing.sm))
 
-    Text(goal.name, style = MaterialTheme.typography.labelSmall, fontSize = 11.sp,
-        fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface,
+    Text(goal.name, style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurface,
         textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis,
         modifier = Modifier.fillMaxWidth())
 
     Spacer(Modifier.height(Spacing.xs))
 
     Text(CurrencyFormatter.formatCurrency(goal.currentAmount, currency),
-        style = MaterialTheme.typography.bodySmall, fontSize = 12.sp,
-        fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurface,
         textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
 
     Text(
         text = "of ${CurrencyFormatter.formatCurrency(goal.targetAmount, currency)} · ${goal.targetDate.format(dateFmt)}",
-        style = MaterialTheme.typography.labelSmall, fontSize = 11.sp,
+        style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.textMuted, textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth(), maxLines = 1, overflow = TextOverflow.Ellipsis)
 }

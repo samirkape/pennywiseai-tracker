@@ -24,6 +24,9 @@ interface GoalContributionDao {
     @Query("SELECT * FROM goal_contributions WHERE transaction_id = :transactionId LIMIT 1")
     suspend fun getContributionByTransactionId(transactionId: Long): GoalContributionEntity?
 
+    @Query("SELECT * FROM goal_contributions WHERE transaction_id = :transactionId AND source = 'TRANSACTION_LINKED'")
+    suspend fun getLinkedContributionsForTransaction(transactionId: Long): List<GoalContributionEntity>
+
     @Query("SELECT * FROM goal_contributions WHERE transaction_id = :transactionId AND source = 'AUTO' LIMIT 1")
     suspend fun getAutoContributionForTransaction(transactionId: Long): GoalContributionEntity?
 

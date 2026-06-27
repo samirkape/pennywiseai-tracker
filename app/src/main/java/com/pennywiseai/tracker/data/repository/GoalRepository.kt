@@ -45,7 +45,8 @@ class GoalRepository @Inject constructor(
         currency: String,
         color: String,
         trackingMode: GoalTrackingMode,
-        autoTrackCategories: List<String>
+        autoTrackCategories: List<String>,
+        customTypeName: String? = null
     ): Long {
         val entity = GoalEntity(
             name = name,
@@ -57,6 +58,7 @@ class GoalRepository @Inject constructor(
             color = color,
             trackingMode = trackingMode,
             autoTrackCategories = autoTrackCategories.joinToString(","),
+            customTypeName = customTypeName,
             createdAt = LocalDateTime.now(),
             updatedAt = LocalDateTime.now()
         )
@@ -73,7 +75,8 @@ class GoalRepository @Inject constructor(
         currency: String,
         color: String,
         trackingMode: GoalTrackingMode,
-        autoTrackCategories: List<String>
+        autoTrackCategories: List<String>,
+        customTypeName: String? = null
     ) {
         val existing = goalDao.getGoalById(goalId) ?: return
         goalDao.updateGoal(
@@ -87,6 +90,7 @@ class GoalRepository @Inject constructor(
                 color = color,
                 trackingMode = trackingMode,
                 autoTrackCategories = autoTrackCategories.joinToString(","),
+                customTypeName = customTypeName,
                 updatedAt = LocalDateTime.now()
             )
         )
@@ -126,8 +130,9 @@ class GoalRepository @Inject constructor(
         amount: BigDecimal,
         note: String?
     ): Long {
-        val existing = goalContributionDao.getContributionByTransactionId(transactionId)
-        if (existing?.goalId == goalId) return existing.id
+        val existing = goalContributionDao.getLinkedContributionsForTransaction(transactionId)
+            .firstOrNull { it.goalId == goalId }
+        if (existing != null) return existing.id
         val contribution = GoalContributionEntity(
             goalId = goalId,
             transactionId = transactionId,
@@ -139,6 +144,28 @@ class GoalRepository @Inject constructor(
         val id = goalContributionDao.insertContribution(contribution)
         goalDao.adjustCurrentAmount(goalId, amount.toPlainString())
         return id
+    }
+
+    suspend fun replaceTransactionLinks(
+        transactionId: Long,
+        splits: List<Pair<Long, BigDecimal>>
+    ) {
+        val existing = goalContributionDao.getLinkedContributionsForTransaction(transactionId)
+        existing.forEach { contribution ->
+            goalContributionDao.deleteContributionById(contribution.id)
+            goalDao.adjustCurrentAmount(contribution.goalId, contribution.amount.negate().toPlainString())
+        }
+        splits.forEach { (goalId, amount) ->
+            val contribution = GoalContributionEntity(
+                goalId = goalId,
+                transactionId = transactionId,
+                amount = amount,
+                contributedAt = LocalDateTime.now(),
+                source = ContributionSource.TRANSACTION_LINKED
+            )
+            goalContributionDao.insertContribution(contribution)
+            goalDao.adjustCurrentAmount(goalId, amount.toPlainString())
+        }
     }
 
     suspend fun unlinkTransaction(contributionId: Long) {
@@ -181,4 +208,7 @@ class GoalRepository @Inject constructor(
 
     suspend fun getLinkedGoalForTransaction(transactionId: Long): GoalContributionEntity? =
         goalContributionDao.getContributionByTransactionId(transactionId)
+
+    suspend fun getLinkedGoalsForTransaction(transactionId: Long): List<GoalContributionEntity> =
+        goalContributionDao.getLinkedContributionsForTransaction(transactionId)
 }

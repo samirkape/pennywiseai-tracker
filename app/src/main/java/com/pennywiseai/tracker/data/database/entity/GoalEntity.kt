@@ -55,6 +55,9 @@ data class GoalEntity(
     @ColumnInfo(name = "auto_track_categories", defaultValue = "")
     val autoTrackCategories: String = "",
 
+    @ColumnInfo(name = "custom_type_name")
+    val customTypeName: String? = null,
+
     @ColumnInfo(name = "created_at")
     val createdAt: LocalDateTime = LocalDateTime.now(),
 

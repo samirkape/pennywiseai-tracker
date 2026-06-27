@@ -87,10 +87,13 @@ fun BrandIcon(
             }
             is IconResource.VectorIcon -> {
                 // Category icon fallback
+                // Use white tint only when a brand color provides a dark background;
+                // when falling back to surfaceVariant (light in light mode), use the
+                // icon's own tint so it remains visible.
                 Icon(
                     imageVector = finalIconResource.icon,
                     contentDescription = merchantName,
-                    tint = if (showBackground) Color.White else finalIconResource.tint,
+                    tint = if (showBackground && brandColor != null) Color.White else finalIconResource.tint,
                     modifier = Modifier.fillMaxSize()
                 )
             }

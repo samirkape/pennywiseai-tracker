@@ -16,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
@@ -244,7 +245,6 @@ private fun ExchangeRateCard(
                 Text(
                     text = rate.rate.setScale(4, java.math.RoundingMode.HALF_UP).toPlainString(),
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = if (rate.isCustomRate) "Custom" else "API",
@@ -297,12 +297,12 @@ private fun EditRateDialog(
                     } else null,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    shape = MaterialTheme.shapes.large,
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                        focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                        unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent
                     )
                 )
 

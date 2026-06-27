@@ -581,8 +581,8 @@ fun PennyWiseNavHost(
         ) {
             com.pennywiseai.tracker.ui.screens.insights.InsightsScreen(
                 onBack = { navController.safePopBackStack() },
-                onNavigateToBehavioralStats = {
-                    navController.navigate(BehavioralStats) { launchSingleTop = true }
+                onNavigateToBehavioralStats = { month ->
+                    navController.navigate(BehavioralStats(month.toString())) { launchSingleTop = true }
                 },
                 onNavigateToQuickCategorize = {
                     navController.navigate(QuickCategorize) { launchSingleTop = true }

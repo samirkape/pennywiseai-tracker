@@ -92,6 +92,7 @@ import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
+import java.time.DayOfWeek
 import java.time.LocalDate
 
 /**
@@ -109,6 +110,7 @@ fun HomeScreen(
     onNavigateToSettings: () -> Unit = {},
     onNavigateToTransactions: (period: String) -> Unit = {},
     onNavigateToInvestmentTransactions: (period: String) -> Unit = {},
+    onNavigateToIncomeTransactions: (period: String) -> Unit = {},
     onNavigateToAnalytics: () -> Unit = {},
     onNavigateToTransactionsWithSearch: (period: String) -> Unit = {},
     onNavigateToSubscriptions: () -> Unit = {},
@@ -124,6 +126,7 @@ fun HomeScreen(
     onFabPositioned: (Rect) -> Unit = {},
     onNavigateToPayPeriodSettings: () -> Unit = {},
     onNavigateToPayPeriodExplorer: (Long, Long) -> Unit = { _, _ -> },
+    onNavigateToThisWeekTransactions: (startEpochDay: Long, endEpochDay: Long) -> Unit = { _, _ -> },
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val transactionsPeriod = defaultTimePeriodNavParam(uiState.useFinancialMonth)
@@ -387,7 +390,11 @@ fun HomeScreen(
                     thisWeekSpend = uiState.thisWeekSpend,
                     lastWeekSpend = uiState.lastWeekSpend,
                     currency = uiState.selectedCurrency,
-                    onClick = { onNavigateToTransactions(transactionsPeriod) },
+                    onClick = {
+                        val weekStart = LocalDate.now().with(DayOfWeek.MONDAY)
+                        val weekEnd = weekStart.plusDays(6)
+                        onNavigateToThisWeekTransactions(weekStart.toEpochDay(), weekEnd.toEpochDay())
+                    },
                     modifier = Modifier.padding(horizontal = Dimensions.Padding.content)
                 )
             }
@@ -762,11 +769,11 @@ fun HomeScreen(
             BreakdownDialog(
                 currentMonthIncome = uiState.currentMonthIncome,
                 currentMonthExpenses = uiState.currentMonthExpenses,
-                currentMonthTotal = uiState.currentMonthTotal,
-                lastMonthIncome = uiState.lastMonthIncome,
-                lastMonthExpenses = uiState.lastMonthExpenses,
-                lastMonthTotal = uiState.lastMonthTotal,
                 currency = uiState.selectedCurrency,
+                onNavigateToIncomeTransactions = {
+                    viewModel.hideBreakdownDialog()
+                    onNavigateToIncomeTransactions(transactionsPeriod)
+                },
                 onDismiss = { viewModel.hideBreakdownDialog() }
             )
         }
@@ -814,132 +821,96 @@ fun HomeScreen(
 private fun BreakdownDialog(
     currentMonthIncome: BigDecimal,
     currentMonthExpenses: BigDecimal,
-    currentMonthTotal: BigDecimal,
-    lastMonthIncome: BigDecimal,
-    lastMonthExpenses: BigDecimal,
-    lastMonthTotal: BigDecimal,
     currency: String = "INR",
-    onDismiss: () -> Unit
+    onNavigateToIncomeTransactions: () -> Unit,
+    onDismiss: () -> Unit,
 ) {
     val now = LocalDate.now()
-    val currentPeriod = "${now.month.name.lowercase().replaceFirstChar { it.uppercase() }} 1-${now.dayOfMonth}"
-    val lastMonth = now.minusMonths(1)
-    val lastPeriod = "${lastMonth.month.name.lowercase().replaceFirstChar { it.uppercase() }} 1-${now.dayOfMonth}"
-    
-    Dialog(onDismissRequest = onDismiss) {
-        PennyWiseCardV2(
+    val currentPeriod = "${now.month.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault())} 1–${now.dayOfMonth}"
+    val incomeFormatted = CurrencyFormatter.formatCurrency(
+        currentMonthIncome.setScale(0, java.math.RoundingMode.HALF_UP), currency
+    )
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+    ) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = Spacing.md), // Reduced horizontal padding for wider modal
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            contentPadding = 0.dp
+                .padding(horizontal = Dimensions.Padding.content)
+                .padding(bottom = Spacing.xl),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
-            Column(
+            Text(
+                text = "Where does $incomeFormatted come from?",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+
+            PennyWiseCardV2(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = Spacing.sm,
+            ) {
+                Text(
+                    text = "Total of all credit / salary transactions automatically detected from your bank SMS messages during this pay period.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+
+            HorizontalDivider()
+
+            Text(
+                text = "This period  ·  $currentPeriod",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+
+            // Income row — tappable to drill down into income transactions
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(Dimensions.Padding.card),
-                verticalArrangement = Arrangement.spacedBy(Spacing.md)
+                    .clickable { onNavigateToIncomeTransactions() }
+                    .padding(vertical = Spacing.xs),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Title
-                Text(
-                    text = "Calculation Breakdown",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                
-                // Current Period Section
-                Text(
-                    text = currentPeriod,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                
-                BreakdownRow(
-                    label = "Income",
-                    amount = currentMonthIncome,
-                    isIncome = true,
-                    currency = currency
-                )
-
-                BreakdownRow(
-                    label = "Expenses",
-                    amount = currentMonthExpenses,
-                    isIncome = false,
-                    currency = currency
-                )
-
-                HorizontalDivider()
-
-                BreakdownRow(
-                    label = "Net Worth",
-                    amount = currentMonthTotal,
-                    isIncome = currentMonthTotal >= BigDecimal.ZERO,
-                    isBold = true,
-                    currency = currency
-                )
-
-                Spacer(modifier = Modifier.height(Spacing.sm))
-
-                // Last Period Section
-                Text(
-                    text = lastPeriod,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                BreakdownRow(
-                    label = "Income",
-                    amount = lastMonthIncome,
-                    isIncome = true,
-                    currency = currency
-                )
-
-                BreakdownRow(
-                    label = "Expenses",
-                    amount = lastMonthExpenses,
-                    isIncome = false,
-                    currency = currency
-                )
-
-                HorizontalDivider()
-
-                BreakdownRow(
-                    label = "Net Worth",
-                    amount = lastMonthTotal,
-                    isIncome = lastMonthTotal >= BigDecimal.ZERO,
-                    isBold = true,
-                    currency = currency
-                )
-                
-                // Formula explanation
-                Spacer(modifier = Modifier.height(Spacing.sm))
-                PennyWiseCardV2(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = Spacing.sm
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
                 ) {
                     Text(
-                        text = "Formula: Income - Expenses = Net Worth\n" +
-                               "Green (+) = Savings | Red (-) = Overspending",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        textAlign = TextAlign.Center
+                        text = "Income (from SMS)",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "View income transactions",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
                     )
                 }
-                
-                // Close button
-                TextButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.align(Alignment.End)
-                ) {
-                    Text("Close")
-                }
+                Text(
+                    text = "+${CurrencyFormatter.formatCurrency(currentMonthIncome.abs(), currency)}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (!isSystemInDarkTheme()) income_light else income_dark,
+                )
+            }
+
+            BreakdownRow(label = "Expenses", amount = currentMonthExpenses, isIncome = false, currency = currency)
+
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.End),
+            ) {
+                Text("Close")
             }
         }
     }

@@ -131,9 +131,22 @@ class BehavioralStatsViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            val default = defaultTimePeriod(userPreferencesRepository.useFinancialMonth.first())
+            val useFinancialMonth = userPreferencesRepository.useFinancialMonth.first()
+            val default = defaultTimePeriod(useFinancialMonth)
             _selectedPeriod.value = default
-            updatePeriodAnchorForChip(default)
+
+            val initialMonthStr = savedStateHandle.get<String?>("initialMonthStr")
+            if (initialMonthStr != null) {
+                val initialMonth = java.time.YearMonth.parse(initialMonthStr)
+                if (initialMonth == java.time.YearMonth.now()) {
+                    updatePeriodAnchorForChip(default)
+                } else {
+                    savedStateHandle["periodAnchorMonth"] = initialMonthStr
+                    savedStateHandle[periodNavUsesCalendarKey] = false
+                }
+            } else {
+                updatePeriodAnchorForChip(default)
+            }
         }
     }
 

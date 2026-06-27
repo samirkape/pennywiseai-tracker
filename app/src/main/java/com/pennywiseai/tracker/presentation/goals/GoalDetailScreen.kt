@@ -18,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -220,7 +219,6 @@ private fun GoalProgressCard(progress: GoalProgress) {
                 Text(
                     text = CurrencyFormatter.formatCurrency(goal.currentAmount, goal.currency),
                     style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Column(horizontalAlignment = Alignment.End) {
@@ -232,7 +230,6 @@ private fun GoalProgressCard(progress: GoalProgress) {
                     Text(
                         text = CurrencyFormatter.formatCurrency(goal.targetAmount, goal.currency),
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -285,7 +282,6 @@ private fun GoalStatItem(label: String, value: String) {
         Text(
             text = value,
             style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface
         )
         Text(
@@ -321,7 +317,6 @@ private fun ContributionItem(
                 Text(
                     text = CurrencyFormatter.formatCurrency(contribution.amount, currency),
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
@@ -406,7 +401,6 @@ private fun AddDepositSheet(
             Text(
                 text = "Add Deposit",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
             )
             OutlinedTextField(
                 value = amountText,

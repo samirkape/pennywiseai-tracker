@@ -50,7 +50,6 @@ import com.pennywiseai.tracker.ui.utils.LocalWindowSizeInfo
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.unit.sp
 import com.pennywiseai.tracker.utils.CurrencyFormatter
 import ir.ehsannarmani.compose_charts.LineChart
 import ir.ehsannarmani.compose_charts.models.*
@@ -428,22 +427,19 @@ private fun MonthSelector(
             }
         }
 
-        // Mode toggle — only relevant for current month
-        if (isCurrentMonth) {
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.height(32.dp)) {
-                SegmentedButton(
-                    selected = useFinancialMonth,
-                    onClick = { if (!useFinancialMonth) onToggleMode() },
-                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                    label = { Text("Pay Period", style = MaterialTheme.typography.labelSmall) }
-                )
-                SegmentedButton(
-                    selected = !useFinancialMonth,
-                    onClick = { if (useFinancialMonth) onToggleMode() },
-                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                    label = { Text("Calendar", style = MaterialTheme.typography.labelSmall) }
-                )
-            }
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.height(32.dp)) {
+            SegmentedButton(
+                selected = useFinancialMonth,
+                onClick = { if (!useFinancialMonth) onToggleMode() },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                label = { Text("Pay Period", style = MaterialTheme.typography.labelSmall) }
+            )
+            SegmentedButton(
+                selected = !useFinancialMonth,
+                onClick = { if (useFinancialMonth) onToggleMode() },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                label = { Text("Calendar", style = MaterialTheme.typography.labelSmall) }
+            )
         }
     }
 }
@@ -1030,8 +1026,7 @@ private fun SpendingPaceChart(
                 dividerProperties = DividerProperties(enabled = false),
                 indicatorProperties = HorizontalIndicatorProperties(
                     enabled = true,
-                    textStyle = androidx.compose.ui.text.TextStyle.Default.copy(
-                        fontSize = 10.sp,
+                    textStyle = MaterialTheme.typography.labelSmall.copy(
                         color = themeColors.onSurfaceVariant.copy(0.7f)
                     ),
                     contentBuilder = { value ->

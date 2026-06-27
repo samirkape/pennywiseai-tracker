@@ -73,7 +73,7 @@ import com.pennywiseai.tracker.data.database.entity.InsightsCacheEntity
  */
 @Database(
     entities = [TransactionEntity::class, SubscriptionEntity::class, ChatMessage::class, MerchantMappingEntity::class, MerchantAliasEntity::class, CategoryEntity::class, AccountBalanceEntity::class, UnrecognizedSmsEntity::class, CardEntity::class, RuleEntity::class, RuleApplicationEntity::class, ExchangeRateEntity::class, BudgetEntity::class, BudgetCategoryEntity::class, BudgetMonthSnapshotEntity::class, BudgetCategoryMonthSnapshotEntity::class, TransactionSplitEntity::class, BankNotificationEntity::class, LoanEntity::class, TransactionGroupEntity::class, ProfileEntity::class, SalaryMonthOverrideEntity::class, TransactionReceiptEntity::class, InsightsCacheEntity::class, GoalEntity::class, GoalContributionEntity::class],
-    version = 59,
+    version = 60,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -742,6 +742,12 @@ abstract class PennyWiseDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_goal_contributions_goal_id` ON `goal_contributions` (`goal_id`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_goal_contributions_transaction_id` ON `goal_contributions` (`transaction_id`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_goal_contributions_contributed_at` ON `goal_contributions` (`contributed_at`)")
+            }
+        }
+
+        val MIGRATION_59_60 = object : Migration(59, 60) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `financial_goals` ADD COLUMN `custom_type_name` TEXT DEFAULT NULL")
             }
         }
 

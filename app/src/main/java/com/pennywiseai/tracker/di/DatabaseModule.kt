@@ -84,7 +84,8 @@ object DatabaseModule {
                 PennyWiseDatabase.MIGRATION_54_55,
                 PennyWiseDatabase.MIGRATION_55_56,
                 PennyWiseDatabase.MIGRATION_56_57,
-                PennyWiseDatabase.MIGRATION_58_59
+                PennyWiseDatabase.MIGRATION_58_59,
+                PennyWiseDatabase.MIGRATION_59_60
             )
             .fallbackToDestructiveMigrationOnDowngrade()
 

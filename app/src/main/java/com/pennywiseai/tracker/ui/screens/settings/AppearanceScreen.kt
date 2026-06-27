@@ -741,12 +741,22 @@ private fun CoverStyleSelector(
                     )
                 }
                 if (isSelected) {
-                    Icon(
-                        Icons.Default.Check,
-                        contentDescription = "Selected",
-                        tint = Color.White,
-                        modifier = Modifier.size(Dimensions.Icon.medium)
-                    )
+                    // Use a semi-opaque scrim behind the check so it's visible
+                    // on any gradient (including very light LAVENDER_MIST / ROSE_GOLD).
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(Dimensions.Icon.small)
+                        )
+                    }
                 }
             }
         }

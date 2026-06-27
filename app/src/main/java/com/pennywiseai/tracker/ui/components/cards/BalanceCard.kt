@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -239,12 +240,31 @@ fun HeroSpendCard(
                 )
                 if (incomeForProgress > BigDecimal.ZERO) {
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "of $incomeFormatted",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.textMuted,
-                        modifier = Modifier.padding(bottom = 4.dp),
-                    )
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        modifier = Modifier
+                            .clickable {
+                                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                onShowBreakdown()
+                            }
+                            .padding(bottom = 4.dp),
+                    ) {
+                        Text(
+                            text = "of $incomeFormatted",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.textMuted,
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "How is this calculated?",
+                            tint = MaterialTheme.colorScheme.textMuted.copy(alpha = 0.6f),
+                            modifier = Modifier
+                                .size(13.dp)
+                                .padding(bottom = 1.dp)
+                                .align(Alignment.Bottom),
+                        )
+                    }
                 }
             }
 

@@ -307,11 +307,16 @@ private fun CategorySelectChip(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    // Compute on-color for selected state based on luminance of the category color
+    val onCategoryColor = remember(color) {
+        val luminance = 0.2126f * color.red + 0.7152f * color.green + 0.0722f * color.blue
+        if (luminance > 0.35f) Color(0xFF1C1B1F) else Color.White
+    }
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
         color = if (isSelected) color else MaterialTheme.colorScheme.surfaceContainerLow,
-        contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface,
+        contentColor = if (isSelected) onCategoryColor else MaterialTheme.colorScheme.onSurface,
         border = if (isSelected) null else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(
@@ -325,14 +330,14 @@ private fun CategorySelectChip(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .background(if (isSelected) Color.White.copy(alpha = 0.2f) else color.copy(alpha = 0.1f)),
+                    .background(if (isSelected) onCategoryColor.copy(alpha = 0.2f) else color.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
-                    tint = if (isSelected) Color.White else color
+                    tint = if (isSelected) onCategoryColor else color
                 )
             }
             Spacer(modifier = Modifier.height(Spacing.xs))

@@ -125,6 +125,18 @@ fun GoalEditScreen(
                     selected = uiState.goalType,
                     onSelect = { viewModel.updateGoalType(it) }
                 )
+                if (uiState.goalType == GoalType.CUSTOM) {
+                    Spacer(modifier = Modifier.height(Spacing.sm))
+                    OutlinedTextField(
+                        value = uiState.customTypeName,
+                        onValueChange = { viewModel.updateCustomTypeName(it) },
+                        label = { Text("Custom type name") },
+                        placeholder = { Text("e.g. Wedding, Pet fund…") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        isError = uiState.errorMessage?.contains("custom goal type") == true
+                    )
+                }
             }
 
             item {

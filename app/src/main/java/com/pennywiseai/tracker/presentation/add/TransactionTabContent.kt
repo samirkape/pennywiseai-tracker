@@ -16,8 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.*import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -30,7 +29,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.pennywiseai.tracker.data.database.entity.BudgetImpactType
 import com.pennywiseai.tracker.data.database.entity.TransactionType
@@ -77,6 +75,7 @@ fun TransactionTabContent(
     val uiState by viewModel.transactionUiState.collectAsState()
     val categories by viewModel.categories.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
+    val filteredAccounts by viewModel.filteredAccounts.collectAsState()
     val applyToAllFromMerchant by viewModel.applyToAllFromMerchant.collectAsState()
     val tagSuggestions by viewModel.tagSuggestions.collectAsState()
 
@@ -87,6 +86,25 @@ fun TransactionTabContent(
     var showAccountMenu by remember { mutableStateOf(false) }
     var showCurrencyMenu by remember { mutableStateOf(false) }
     var tagInput by remember { mutableStateOf("") }
+    var accountQuery by remember { mutableStateOf("") }
+
+    // Sync accountQuery when selected account is set or cleared externally
+    val selectedAccount = uiState.selectedAccount
+    LaunchedEffect(selectedAccount) {
+        accountQuery = selectedAccount
+            ?.let { "${it.bankName} ••${it.accountLast4}" }
+            ?: ""
+        viewModel.updateAccountSearchQuery("")
+    }
+    // Reset search query when filter context changes and no account is selected
+    val paymentChannel = uiState.paymentChannel
+    val transactionType = uiState.transactionType
+    LaunchedEffect(paymentChannel, transactionType) {
+        if (uiState.selectedAccount == null) {
+            accountQuery = ""
+            viewModel.updateAccountSearchQuery("")
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -387,15 +405,13 @@ fun TransactionTabContent(
                         Column {
                             Text(
                                 text = uiState.date.format(DateTimeFormatter.ofPattern("yyyy")),
-                                fontSize = 10.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary,
-                                style = MaterialTheme.typography.bodyLarge
                             )
                             Text(
                                 text = uiState.date.format(DateTimeFormatter.ofPattern("dd MMMM")),
-                                fontSize = 14.sp,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
-                                style = MaterialTheme.typography.bodyLarge,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -425,47 +441,41 @@ fun TransactionTabContent(
                                 .padding(4.dp)
                                 .background(
                                     color = MaterialTheme.colorScheme.primary.copy(0.2f),
-                                    shape = RoundedCornerShape(8.dp)
+                                    shape = MaterialTheme.shapes.small
                                 )
                         ) {
                             Text(
                                 text = String.format("%02d", hour),
+                                style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
-                                lineHeight = 16.sp,
                                 modifier = Modifier.padding(5.dp)
                             )
                         }
                         Text(
                             text = ":",
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 16.sp
                         )
                         Box(
                             modifier = Modifier
                                 .padding(4.dp)
                                 .background(
                                     color = MaterialTheme.colorScheme.surfaceVariant,
-                                    shape = RoundedCornerShape(8.dp)
+                                    shape = MaterialTheme.shapes.small
                                 )
                         ) {
                             Text(
                                 text = String.format("%02d", minute),
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = 16.sp,
-                                lineHeight = 16.sp,
                                 modifier = Modifier.padding(5.dp)
                             )
                         }
                         Box(modifier = Modifier.padding(4.dp)) {
                             Text(
                                 text = amPm,
-                                fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 14.sp
                             )
                         }
                     }
@@ -477,68 +487,164 @@ fun TransactionTabContent(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(1.5.dp)
             ) {
-                // Account card
+                // Account field with autocomplete
                 val accountInteractionSource = remember { MutableInteractionSource() }
-                Card(
-                    onClick = { showAccountMenu = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = topShape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                    ),
-                    border = null
+                ExposedDropdownMenuBox(
+                    expanded = showAccountMenu,
+                    onExpandedChange = { showAccountMenu = it },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
+                    TextField(
+                        value = accountQuery,
+                        onValueChange = { newValue ->
+                            // If user edits while an account is selected, clear the selection
+                            val currentSelected = uiState.selectedAccount
+                            if (currentSelected != null &&
+                                newValue != "${currentSelected.bankName} ••${currentSelected.accountLast4}"
+                            ) {
+                                viewModel.updateSelectedAccount(null)
+                            }
+                            accountQuery = newValue
+                            viewModel.updateAccountSearchQuery(newValue)
+                            if (!showAccountMenu) showAccountMenu = true
+                        },
+                        label = { Text("Account (Optional)", fontWeight = FontWeight.SemiBold) },
+                        singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            when (uiState.selectedAccount?.getAccountType()) {
-                                AccountType.CASH -> Icons.Default.Money
-                                AccountType.CREDIT -> Icons.Default.CreditCard
-                                AccountType.SAVINGS, AccountType.CURRENT -> Icons.Default.AccountBalance
-                                null -> Icons.Default.AccountBalance
-                            },
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = uiState.selectedAccount?.bankName ?: "Select Account",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = if (uiState.selectedAccount != null)
-                                    MaterialTheme.colorScheme.onSurface
-                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            .menuAnchor(MenuAnchorType.PrimaryEditable),
+                        shape = topShape,
+                        leadingIcon = {
+                            Icon(
+                                when (uiState.selectedAccount?.getAccountType()) {
+                                    AccountType.CASH -> Icons.Default.Money
+                                    AccountType.CREDIT -> Icons.Default.CreditCard
+                                    AccountType.SAVINGS, AccountType.CURRENT -> Icons.Default.AccountBalance
+                                    null -> Icons.Default.AccountBalance
+                                },
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            if (uiState.selectedAccount != null) {
-                                Text(
-                                    text = "••${uiState.selectedAccount?.accountLast4}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        if (uiState.selectedAccount != null) {
-                            IconButton(
-                                onClick = { viewModel.updateSelectedAccount(null) },
-                                modifier = Modifier.size(24.dp)
-                            ) {
+                        },
+                        trailingIcon = {
+                            if (uiState.selectedAccount != null || accountQuery.isNotEmpty()) {
+                                IconButton(
+                                    onClick = {
+                                        viewModel.updateSelectedAccount(null)
+                                        accountQuery = ""
+                                        viewModel.updateAccountSearchQuery("")
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Clear,
+                                        contentDescription = "Clear",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            } else {
                                 Icon(
-                                    Icons.Default.Clear,
-                                    contentDescription = "Clear",
-                                    modifier = Modifier.size(16.dp),
+                                    Icons.Rounded.KeyboardArrowDown,
+                                    contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                        }
-                        Icon(
-                            Icons.Rounded.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        colors = filledFieldColors()
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = showAccountMenu,
+                        onDismissRequest = { showAccountMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text("No account (Manual Entry)")
+                                    Text(
+                                        "Won't affect account balance",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
+                            onClick = {
+                                viewModel.updateSelectedAccount(null)
+                                accountQuery = ""
+                                viewModel.updateAccountSearchQuery("")
+                                showAccountMenu = false
+                            },
+                            leadingIcon = { Icon(Icons.Default.Block, contentDescription = null) }
                         )
+                        if (filteredAccounts.isNotEmpty()) {
+                            HorizontalDivider()
+                            val groupedAccounts = filteredAccounts.groupBy { it.getAccountType() }
+                            groupedAccounts.forEach { (accountType, accountList) ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = accountType.displayName(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    },
+                                    onClick = {},
+                                    enabled = false
+                                )
+                                accountList.forEach { account ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text("${account.bankName} ••${account.accountLast4}")
+                                                Text(
+                                                    CurrencyFormatter.formatCurrency(account.balance, account.currency),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        },
+                                        onClick = {
+                                            viewModel.updateSelectedAccount(account)
+                                            accountQuery = "${account.bankName} ••${account.accountLast4}"
+                                            viewModel.updateAccountSearchQuery("")
+                                            showAccountMenu = false
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                when (accountType) {
+                                                    AccountType.CASH -> Icons.Default.Money
+                                                    AccountType.CREDIT -> Icons.Default.CreditCard
+                                                    else -> Icons.Default.AccountBalance
+                                                },
+                                                contentDescription = null
+                                            )
+                                        },
+                                        trailingIcon = {
+                                            if (uiState.selectedAccount?.id == account.id) {
+                                                Icon(
+                                                    Icons.Default.Check,
+                                                    "Selected",
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        } else if (accountQuery.isNotEmpty()) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "No matching accounts",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                onClick = {},
+                                enabled = false
+                            )
+                        }
                     }
                 }
 
@@ -628,79 +734,6 @@ fun TransactionTabContent(
                             text = "Apply category to all from ${uiState.merchant}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            }
-
-            // Account selection dropdown menu
-            DropdownMenu(
-                expanded = showAccountMenu,
-                onDismissRequest = { showAccountMenu = false }
-            ) {
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text("No account (Manual Entry)")
-                            Text(
-                                "Won't affect account balance",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    },
-                    onClick = {
-                        viewModel.updateSelectedAccount(null)
-                        showAccountMenu = false
-                    },
-                    leadingIcon = { Icon(Icons.Default.Block, contentDescription = null) }
-                )
-                HorizontalDivider()
-                val groupedAccounts = accounts.groupBy { it.getAccountType() }
-                groupedAccounts.forEach { (accountType, accountList) ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = accountType.displayName(),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
-                        onClick = {},
-                        enabled = false
-                    )
-                    accountList.forEach { account ->
-                        DropdownMenuItem(
-                            text = {
-                                Column {
-                                    Text("${account.bankName} ••${account.accountLast4}")
-                                    Text(
-                                        CurrencyFormatter.formatCurrency(account.balance, account.currency),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            },
-                            onClick = {
-                                viewModel.updateSelectedAccount(account)
-                                showAccountMenu = false
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    when (accountType) {
-                                        AccountType.CASH -> Icons.Default.Money
-                                        AccountType.CREDIT -> Icons.Default.CreditCard
-                                        else -> Icons.Default.AccountBalance
-                                    },
-                                    contentDescription = null
-                                )
-                            },
-                            trailingIcon = {
-                                if (uiState.selectedAccount?.id == account.id) {
-                                    Icon(Icons.Default.Check, "Selected", tint = MaterialTheme.colorScheme.primary)
-                                }
-                            }
                         )
                     }
                 }
@@ -854,8 +887,9 @@ fun TransactionTabContent(
                 onCreateCameraUri = { viewModel.createCameraUri() }
             )
 
-            // Bottom padding for save button overlay
-            Spacer(modifier = Modifier.height(72.dp))
+            // Bottom padding for save button overlay (button height + nav bar inset)
+            val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            Spacer(modifier = Modifier.height(56.dp + navBarBottom))
         }
 
         // ── Sticky Save Button ──

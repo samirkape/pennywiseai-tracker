@@ -44,7 +44,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pennywiseai.tracker.ui.components.cards.PennyWiseCardV2
@@ -110,7 +109,6 @@ fun SmartInsightsCard(
                 Text(
                     text = "SMART INSIGHTS",
                     style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Normal,
                     color = MaterialTheme.colorScheme.spendPurple,
                     letterSpacing = 0.66.sp
                 )
@@ -248,7 +246,7 @@ private fun InsightRow(
             ) {
                 Text(
                     text = insight.actionLabel,
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelMedium,
                     color = accentColor
                 )
             }

@@ -1635,6 +1635,9 @@ class TransactionDetailViewModel @Inject constructor(
     private val _linkedGoalContribution = MutableStateFlow<GoalContributionEntity?>(null)
     val linkedGoalContribution: StateFlow<GoalContributionEntity?> = _linkedGoalContribution.asStateFlow()
 
+    private val _linkedGoalContributions = MutableStateFlow<List<GoalContributionEntity>>(emptyList())
+    val linkedGoalContributions: StateFlow<List<GoalContributionEntity>> = _linkedGoalContributions.asStateFlow()
+
     private val _showLinkGoalSheet = MutableStateFlow(false)
     val showLinkGoalSheet: StateFlow<Boolean> = _showLinkGoalSheet.asStateFlow()
 
@@ -1644,6 +1647,21 @@ class TransactionDetailViewModel @Inject constructor(
     private fun loadLinkedGoal(transactionId: Long) {
         viewModelScope.launch {
             _linkedGoalContribution.value = goalRepository.getLinkedGoalForTransaction(transactionId)
+            _linkedGoalContributions.value = goalRepository.getLinkedGoalsForTransaction(transactionId)
+        }
+    }
+
+    fun linkToGoals(splits: List<Pair<Long, java.math.BigDecimal>>) {
+        val txn = _transaction.value ?: return
+        viewModelScope.launch {
+            try {
+                goalRepository.replaceTransactionLinks(txn.id, splits)
+                _linkedGoalContributions.value = goalRepository.getLinkedGoalsForTransaction(txn.id)
+                _linkedGoalContribution.value = goalRepository.getLinkedGoalForTransaction(txn.id)
+                _showLinkGoalSheet.value = false
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to link goals: ${e.message}"
+            }
         }
     }
 
@@ -1653,6 +1671,7 @@ class TransactionDetailViewModel @Inject constructor(
             try {
                 goalRepository.linkTransaction(goalId, txn.id, txn.amount, null)
                 _linkedGoalContribution.value = goalRepository.getLinkedGoalForTransaction(txn.id)
+                _linkedGoalContributions.value = goalRepository.getLinkedGoalsForTransaction(txn.id)
                 _showLinkGoalSheet.value = false
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to link goal: ${e.message}"
@@ -1666,6 +1685,20 @@ class TransactionDetailViewModel @Inject constructor(
             try {
                 goalRepository.unlinkTransaction(contribution.id)
                 _linkedGoalContribution.value = null
+                _linkedGoalContributions.value = goalRepository.getLinkedGoalsForTransaction(contribution.transactionId ?: return@launch)
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to unlink goal: ${e.message}"
+            }
+        }
+    }
+
+    fun unlinkFromGoalById(contributionId: Long) {
+        viewModelScope.launch {
+            try {
+                goalRepository.unlinkTransaction(contributionId)
+                val txn = _transaction.value ?: return@launch
+                _linkedGoalContributions.value = goalRepository.getLinkedGoalsForTransaction(txn.id)
+                _linkedGoalContribution.value = goalRepository.getLinkedGoalForTransaction(txn.id)
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to unlink goal: ${e.message}"
             }

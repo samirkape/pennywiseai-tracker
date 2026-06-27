@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -426,7 +425,7 @@ private fun AddTransactionToGroupSheet(
                 placeholder = { Text("Search transactions…") },
                 leadingIcon = { Icon(Icons.Default.Search, null) },
                 singleLine = true,
-                shape = RoundedCornerShape(16.dp),
+                shape = MaterialTheme.shapes.large,
                 colors = TextFieldDefaults.colors(
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent
@@ -531,7 +530,7 @@ private fun EditGroupDialog(
                     label = { Text("Group name") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = MaterialTheme.shapes.large,
                     colors = TextFieldDefaults.colors(
                         focusedIndicatorColor = Color.Transparent,
                         unfocusedIndicatorColor = Color.Transparent
@@ -543,7 +542,7 @@ private fun EditGroupDialog(
                     onValueChange = { note = it },
                     label = { Text("Note (optional)") },
                     singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
+                    shape = MaterialTheme.shapes.large,
                     colors = TextFieldDefaults.colors(
                         focusedIndicatorColor = Color.Transparent,
                         unfocusedIndicatorColor = Color.Transparent

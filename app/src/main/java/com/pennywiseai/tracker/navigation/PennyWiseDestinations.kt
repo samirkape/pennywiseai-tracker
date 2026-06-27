@@ -45,7 +45,7 @@ object Insights
 object QuickCategorize
 
 @Serializable
-object BehavioralStats
+data class BehavioralStats(val initialMonthStr: String? = null)
 
 @Serializable
 data class TransactionDetail(val transactionId: Long)

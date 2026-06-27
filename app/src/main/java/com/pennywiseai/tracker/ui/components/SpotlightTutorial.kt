@@ -114,7 +114,7 @@ fun SpotlightTutorial(
         ) {
             Surface(
                 shape = RoundedCornerShape(8.dp),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 4.dp
             ) {
                 Column(
@@ -125,14 +125,14 @@ fun SpotlightTutorial(
                     Text(
                         text = message,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = Color.Black,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.Medium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Tap anywhere to dismiss",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.Black.copy(alpha = 0.6f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

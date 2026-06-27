@@ -23,6 +23,7 @@ data class GoalEditUiState(
     val name: String = "",
     val description: String = "",
     val goalType: GoalType = GoalType.SAVINGS,
+    val customTypeName: String = "",
     val targetAmountText: String = "",
     val targetDate: LocalDate = LocalDate.now().plusMonths(6),
     val currency: String = "INR",
@@ -66,6 +67,7 @@ class GoalEditViewModel @Inject constructor(
                         name = goal.name,
                         description = goal.description ?: "",
                         goalType = goal.goalType,
+                        customTypeName = goal.customTypeName ?: "",
                         targetAmountText = goal.targetAmount.toPlainString(),
                         targetDate = goal.targetDate,
                         currency = goal.currency,
@@ -83,6 +85,7 @@ class GoalEditViewModel @Inject constructor(
     fun updateName(name: String) { _uiState.update { it.copy(name = name, errorMessage = null) } }
     fun updateDescription(description: String) { _uiState.update { it.copy(description = description) } }
     fun updateGoalType(goalType: GoalType) { _uiState.update { it.copy(goalType = goalType) } }
+    fun updateCustomTypeName(name: String) { _uiState.update { it.copy(customTypeName = name) } }
     fun updateTargetAmount(text: String) { _uiState.update { it.copy(targetAmountText = text, errorMessage = null) } }
     fun updateTargetDate(date: LocalDate) { _uiState.update { it.copy(targetDate = date) } }
     fun updateCurrency(currency: String) { _uiState.update { it.copy(currency = currency) } }
@@ -105,6 +108,10 @@ class GoalEditViewModel @Inject constructor(
             _uiState.update { it.copy(errorMessage = "Goal name is required") }
             return
         }
+        if (state.goalType == GoalType.CUSTOM && state.customTypeName.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Enter a name for your custom goal type") }
+            return
+        }
         if (amount == null || amount <= BigDecimal.ZERO) {
             _uiState.update { it.copy(errorMessage = "Enter a valid target amount") }
             return
@@ -113,6 +120,8 @@ class GoalEditViewModel @Inject constructor(
             _uiState.update { it.copy(errorMessage = "Target date must be in the future") }
             return
         }
+
+        val resolvedCustomTypeName = if (state.goalType == GoalType.CUSTOM) state.customTypeName.trim() else null
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
@@ -128,7 +137,8 @@ class GoalEditViewModel @Inject constructor(
                         currency = state.currency,
                         color = state.color,
                         trackingMode = state.trackingMode,
-                        autoTrackCategories = state.autoTrackCategories
+                        autoTrackCategories = state.autoTrackCategories,
+                        customTypeName = resolvedCustomTypeName
                     )
                 } else {
                     goalRepository.createGoal(
@@ -140,7 +150,8 @@ class GoalEditViewModel @Inject constructor(
                         currency = state.currency,
                         color = state.color,
                         trackingMode = state.trackingMode,
-                        autoTrackCategories = state.autoTrackCategories
+                        autoTrackCategories = state.autoTrackCategories,
+                        customTypeName = resolvedCustomTypeName
                     )
                 }
                 _uiState.update { it.copy(saveSuccess = true) }

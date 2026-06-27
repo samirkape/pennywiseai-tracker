@@ -21,7 +21,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.pennywiseai.tracker.ui.components.cards.PennyWiseCardV2
 import com.pennywiseai.tracker.presentation.categories.CategoryEditDialog
 import com.pennywiseai.tracker.ui.theme.*
@@ -249,15 +248,13 @@ fun SubscriptionTabContent(
                         Column {
                             Text(
                                 text = uiState.nextPaymentDate.format(DateTimeFormatter.ofPattern("yyyy")),
-                                fontSize = 10.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary,
-                                style = MaterialTheme.typography.bodyLarge
                             )
                             Text(
                                 text = uiState.nextPaymentDate.format(DateTimeFormatter.ofPattern("dd MMMM")),
-                                fontSize = 14.sp,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
-                                style = MaterialTheme.typography.bodyLarge,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -359,8 +356,9 @@ fun SubscriptionTabContent(
                 )
             }
 
-            // Bottom padding for save button overlay
-            Spacer(modifier = Modifier.height(72.dp))
+            // Bottom padding for save button overlay (button height + nav bar inset)
+            val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            Spacer(modifier = Modifier.height(56.dp + navBarBottom))
         }
 
         // Sticky Save Button

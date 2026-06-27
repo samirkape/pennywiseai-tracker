@@ -18,6 +18,7 @@ import com.pennywiseai.tracker.utils.DateRangeUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDate
@@ -121,14 +123,20 @@ class BudgetGroupsViewModel @Inject constructor(
             }.collect { params ->
                 val currency = if (params.unifiedMode) params.displayCurrency else params.baseCurrency
                 val isCurrentMonth = params.yearMonth == YearMonth.now()
-                val periodLabel = if (params.useFinancial && isCurrentMonth) {
-                    val (start, end) = DateRangeUtils.calculateBudgetPeriodRange(
-                        LocalDate.now(),
-                        params.monthStartDay,
-                        params.useFixedEnd,
-                        params.endDom,
-                        params.overrides
-                    )
+                val periodLabel = if (params.useFinancial) {
+                    val (start, end) = if (isCurrentMonth) {
+                        DateRangeUtils.calculateBudgetPeriodRange(
+                            LocalDate.now(),
+                            params.monthStartDay,
+                            params.useFixedEnd,
+                            params.endDom,
+                            params.overrides
+                        )
+                    } else if (params.useFixedEnd) {
+                        DateRangeUtils.customDomPeriodStartingInMonth(params.yearMonth, params.monthStartDay, params.endDom)
+                    } else {
+                        DateRangeUtils.financialMonthRangeFor(params.yearMonth, params.monthStartDay, params.overrides)
+                    }
                     DateRangeUtils.formatDateRange(start, end)
                 } else {
                     params.yearMonth.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy"))
@@ -191,14 +199,20 @@ class BudgetGroupsViewModel @Inject constructor(
                 )
             }.flatMapLatest { params ->
                 val isCurrentMonth = params.yearMonth == YearMonth.now()
-                if (isCurrentMonth && params.useFinancial) {
-                    val (financialStart, financialEnd) = DateRangeUtils.calculateBudgetPeriodRange(
-                        LocalDate.now(),
-                        params.monthStartDay,
-                        params.useFixedEnd,
-                        params.endDom,
-                        params.overrides
-                    )
+                if (params.useFinancial) {
+                    val (financialStart, financialEnd) = if (isCurrentMonth) {
+                        DateRangeUtils.calculateBudgetPeriodRange(
+                            LocalDate.now(),
+                            params.monthStartDay,
+                            params.useFixedEnd,
+                            params.endDom,
+                            params.overrides
+                        )
+                    } else if (params.useFixedEnd) {
+                        DateRangeUtils.customDomPeriodStartingInMonth(params.yearMonth, params.monthStartDay, params.endDom)
+                    } else {
+                        DateRangeUtils.financialMonthRangeFor(params.yearMonth, params.monthStartDay, params.overrides)
+                    }
                     android.util.Log.d("PWDebug", "=== BudgetGroupsVM date range (financial) ===")
                     android.util.Log.d("PWDebug", "start=$financialStart end=$financialEnd currency=${params.displayCurrency} monthStartDay=${params.monthStartDay}")
                     if (params.unifiedMode) {
@@ -228,7 +242,9 @@ class BudgetGroupsViewModel @Inject constructor(
 
     fun toggleMonthViewMode() {
         viewModelScope.launch {
-            userPreferencesRepository.updateUseFinancialMonth(!_uiState.value.useFinancialMonth)
+            withContext(NonCancellable) {
+                userPreferencesRepository.updateUseFinancialMonth(!_uiState.value.useFinancialMonth)
+            }
         }
     }
 
