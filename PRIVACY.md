@@ -85,7 +85,7 @@ When you export your data:
 ## Open Source Transparency
 
 PennyWise AI is fully open source:
-- Review our code at [GitHub](https://github.com/sarim2000/pennywiseai-tracker)
+- Review our code at [GitHub](https://github.com/sarim2000/spendly-tracker)
 - Verify our privacy claims yourself
 - Contribute to make it even better
 
@@ -103,7 +103,7 @@ Any changes to this privacy policy will be:
 ## Contact
 
 For privacy concerns or questions:
-- Open an issue on [GitHub](https://github.com/sarim2000/pennywiseai-tracker/issues)
+- Open an issue on [GitHub](https://github.com/sarim2000/spendly-tracker/issues)
 - Join our [Discord community](https://discord.gg/H3xWeMWjKQ)
 
 ## Summary

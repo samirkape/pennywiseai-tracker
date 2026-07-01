@@ -1,8 +1,8 @@
-import com.pennywiseai.parser.core.TransactionType
-import com.pennywiseai.parser.core.bank.CharlesSchwabParser
-import com.pennywiseai.parser.core.test.ExpectedTransaction
-import com.pennywiseai.parser.core.test.ParserTestCase
-import com.pennywiseai.parser.core.test.ParserTestUtils
+import com.spendly.parser.core.TransactionType
+import com.spendly.parser.core.bank.CharlesSchwabParser
+import com.spendly.parser.core.test.ExpectedTransaction
+import com.spendly.parser.core.test.ParserTestCase
+import com.spendly.parser.core.test.ParserTestUtils
 import org.junit.jupiter.api.*
 import java.math.BigDecimal
 
@@ -188,7 +188,7 @@ class CharlesSchwabParserTest {
     @TestFactory
     fun `factory resolves charles schwab`(): List<DynamicTest> {
         val cases = listOf(
-            com.pennywiseai.parser.core.test.SimpleTestCase(
+            com.spendly.parser.core.test.SimpleTestCase(
                 bankName = "Charles Schwab",
                 sender = "SCHWAB",
                 currency = "USD",
@@ -202,7 +202,7 @@ class CharlesSchwabParserTest {
                 ),
                 shouldHandle = true
             ),
-            com.pennywiseai.parser.core.test.SimpleTestCase(
+            com.spendly.parser.core.test.SimpleTestCase(
                 bankName = "Charles Schwab",
                 sender = "CHARLES SCHWAB",
                 currency = "USD",

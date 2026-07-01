@@ -9,8 +9,8 @@ Captured during Phase 0 (baseline) and Phase 1 (green build) execution. Update t
 | **Branch** | `main` (tracks `origin/main`) |
 | **HEAD at capture** | `e27dc48` — *note: working tree had many local modifications; commit before tagging a release.* |
 | **Default release flavor** | `standard` (`app/build.gradle.kts`, `isDefault = true`) |
-| **applicationId** | `com.pennywiseai.tracker` |
-| **Debug applicationId** | `com.pennywiseai.tracker.debug` (`applicationIdSuffix` on `debug`) |
+| **applicationId** | `com.spendly.tracker` |
+| **Debug applicationId** | `com.spendly.tracker.debug` (`applicationIdSuffix` on `debug`) |
 | **versionCode** | `88` |
 | **versionName** | `2.15.53` (debug: `2.15.53-debug`) |
 | **minSdk / targetSdk** | `26` / `36` |

@@ -1,4 +1,4 @@
-package com.pennywiseai.parser.core.test
+package com.spendly.parser.core.test
 
 import org.w3c.dom.Document
 import org.w3c.dom.Element

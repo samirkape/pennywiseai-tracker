@@ -1,8 +1,8 @@
-package com.pennywiseai.parser.core.bank
+package com.spendly.parser.core.bank
 
-import com.pennywiseai.parser.core.test.ExpectedTransaction
-import com.pennywiseai.parser.core.test.ParserTestCase
-import com.pennywiseai.parser.core.test.ParserTestUtils
+import com.spendly.parser.core.test.ExpectedTransaction
+import com.spendly.parser.core.test.ParserTestCase
+import com.spendly.parser.core.test.ParserTestUtils
 import org.junit.jupiter.api.*
 import java.math.BigDecimal
 
@@ -44,7 +44,7 @@ T&C. Ignore if paid""",
                 expected = ExpectedTransaction(
                     amount = BigDecimal("500.00"),
                     currency = "INR",
-                    type = com.pennywiseai.parser.core.TransactionType.EXPENSE,
+                    type = com.spendly.parser.core.TransactionType.EXPENSE,
                     accountLast4 = "1234",
                     reference = "123456789012"
                 )
@@ -57,7 +57,7 @@ T&C. Ignore if paid""",
                 expected = ExpectedTransaction(
                     amount = BigDecimal("15000.00"),
                     currency = "INR",
-                    type = com.pennywiseai.parser.core.TransactionType.EXPENSE,
+                    type = com.spendly.parser.core.TransactionType.EXPENSE,
                     accountLast4 = "1234",
                     merchant = "TEST MERCHANT"
                 )
@@ -71,7 +71,7 @@ T&C. Ignore if paid""",
                 expected = ExpectedTransaction(
                     amount = BigDecimal("197317.00"),
                     currency = "INR",
-                    type = com.pennywiseai.parser.core.TransactionType.INCOME,
+                    type = com.spendly.parser.core.TransactionType.INCOME,
                     accountLast4 = "2518",
                     merchant = "THWORKSTECHINDPV",
                 ),
@@ -84,7 +84,7 @@ T&C. Ignore if paid""",
                 expected = ExpectedTransaction(
                     amount = BigDecimal("187883.00"),
                     currency = "INR",
-                    type = com.pennywiseai.parser.core.TransactionType.INCOME,
+                    type = com.spendly.parser.core.TransactionType.INCOME,
                     accountLast4 = "2518",
                     merchant = "THWORKSTECHINDPV",
                 ),
@@ -98,7 +98,7 @@ T&C. Ignore if paid""",
                 expected = ExpectedTransaction(
                     amount = BigDecimal("3151"),
                     currency = "INR",
-                    type = com.pennywiseai.parser.core.TransactionType.CREDIT,
+                    type = com.spendly.parser.core.TransactionType.CREDIT,
                     merchant = "TALIC",
                 ),
             ),
@@ -124,7 +124,7 @@ Call 18002586161/SMS BLOCK UPI to 7308080808""",
                 expected = ExpectedTransaction(
                     amount = BigDecimal("25.00"),
                     currency = "INR",
-                    type = com.pennywiseai.parser.core.TransactionType.EXPENSE,
+                    type = com.spendly.parser.core.TransactionType.EXPENSE,
                     accountLast4 = "2518",
                     merchant = "Prajwal Kirana",
                     reference = "919580778477",
@@ -144,7 +144,7 @@ Avl bal INR 1,276.99""",
                 expected = ExpectedTransaction(
                     amount = BigDecimal("229.00"),
                     currency = "INR",
-                    type = com.pennywiseai.parser.core.TransactionType.INCOME,
+                    type = com.spendly.parser.core.TransactionType.INCOME,
                     accountLast4 = "2518",
                     merchant = "MYNTRA DESIGNS",
                     balance = BigDecimal("1276.99"),
@@ -159,7 +159,7 @@ Avl bal INR 1,276.99""",
                 expected = ExpectedTransaction(
                     amount = BigDecimal("1.00"),
                     currency = "INR",
-                    type = com.pennywiseai.parser.core.TransactionType.INCOME,
+                    type = com.spendly.parser.core.TransactionType.INCOME,
                     accountLast4 = "9999",
                     merchant = "ACME TECHNOLOGIES",
                     balance = BigDecimal("8.00")

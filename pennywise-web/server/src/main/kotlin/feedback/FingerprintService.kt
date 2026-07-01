@@ -6,7 +6,7 @@ import io.ktor.http.*
 import java.security.MessageDigest
 
 object FingerprintService {
-    private const val SALT = "pennywiseai-feedback-v1"
+    private const val SALT = "spendly-feedback-v1"
     private const val COOKIE_NAME = "pw_fp"
     private const val COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365 // 1 year
 

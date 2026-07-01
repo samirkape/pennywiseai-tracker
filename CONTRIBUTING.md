@@ -6,7 +6,7 @@ Thank you for your interest in contributing to PennyWise AI! We welcome contribu
 
 ### 🐛 Reporting Bugs
 
-1. Check if the bug has already been reported in [Issues](https://github.com/sarim2000/pennywiseai-tracker/issues)
+1. Check if the bug has already been reported in [Issues](https://github.com/sarim2000/spendly-tracker/issues)
 2. If not, create a new issue using the bug report template
 3. Include:
    - Device model and Android version
@@ -17,7 +17,7 @@ Thank you for your interest in contributing to PennyWise AI! We welcome contribu
 
 ### 💡 Suggesting Features
 
-1. Check [existing issues](https://github.com/sarim2000/pennywiseai-tracker/issues) for similar suggestions
+1. Check [existing issues](https://github.com/sarim2000/spendly-tracker/issues) for similar suggestions
 2. Create a new issue using the feature request template
 3. Describe the problem it solves and how it would work
 
@@ -25,7 +25,7 @@ Thank you for your interest in contributing to PennyWise AI! We welcome contribu
 
 To add support for a new bank:
 
-1. Create a new parser class in `/app/src/main/java/com/pennywiseai/tracker/data/parser/bank/`
+1. Create a new parser class in `/app/src/main/java/com/spendly/tracker/data/parser/bank/`
 2. Extend the `BankParser` abstract class
 3. Implement required methods:
    ```kotlin
@@ -75,8 +75,8 @@ To add support for a new bank:
 
 ```bash
 # Clone the repo
-git clone https://github.com/sarim2000/pennywiseai-tracker.git
-cd pennywiseai-tracker
+git clone https://github.com/sarim2000/spendly-tracker.git
+cd spendly-tracker
 
 # Build debug APK
 ./gradlew assembleDebug
@@ -92,7 +92,7 @@ cd pennywiseai-tracker
 
 ```
 app/
-├── src/main/java/com/pennywiseai/tracker/
+├── src/main/java/com/spendly/tracker/
 │   ├── data/
 │   │   ├── database/      # Room database
 │   │   ├── parser/        # SMS parsers
@@ -112,7 +112,7 @@ app/
 ## Community
 
 - Join our [Discord](https://discord.gg/H3xWeMWjKQ) for discussions
-- Follow development updates on [GitHub](https://github.com/sarim2000/pennywiseai-tracker)
+- Follow development updates on [GitHub](https://github.com/sarim2000/spendly-tracker)
 
 ## Code of Conduct
 

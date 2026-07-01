@@ -1,9 +1,9 @@
-package com.pennywiseai.parser.core.bank
+package com.spendly.parser.core.bank
 
-import com.pennywiseai.parser.core.TransactionType
-import com.pennywiseai.parser.core.test.ParserTestUtils
-import com.pennywiseai.parser.core.test.SMSData
-import com.pennywiseai.parser.core.test.XMLTestUtils
+import com.spendly.parser.core.TransactionType
+import com.spendly.parser.core.test.ParserTestUtils
+import com.spendly.parser.core.test.SMSData
+import com.spendly.parser.core.test.XMLTestUtils
 import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.*
 import java.math.BigDecimal
@@ -59,7 +59,7 @@ class FABXmlTest {
     }
 
     private fun validateResult(
-        result: com.pennywiseai.parser.core.ParsedTransaction,
+        result: com.spendly.parser.core.ParsedTransaction,
         smsData: SMSData
     ): List<String> {
         val errors = mutableListOf<String>()

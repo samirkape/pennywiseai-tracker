@@ -21,7 +21,7 @@ val enableIosTargets = providers
 
 kotlin {
     androidLibrary {
-        namespace = "com.pennywiseai.shared"
+        namespace = "com.spendly.shared"
         compileSdk = 36
         minSdk = 26
     }

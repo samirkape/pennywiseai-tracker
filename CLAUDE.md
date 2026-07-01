@@ -52,8 +52,8 @@ After making changes, always build and install the debug APK on the connected de
 adb install -r app/build/outputs/apk/standard/debug/app-standard-arm64-v8a-debug.apk
 ```
 - The connected device ID is `R5CW61GQRTB` (use `-s R5CW61GQRTB` if multiple devices are connected)
-- The debug app package is `com.pennywiseai.tracker.debug` (separate from the release build)
-- After install, relaunch with: `adb -s R5CW61GQRTB shell am force-stop com.pennywiseai.tracker.debug && adb -s R5CW61GQRTB shell am start -n com.pennywiseai.tracker.debug/com.pennywiseai.tracker.MainActivity`
+- The debug app package is `com.spendly.tracker.debug` (separate from the release build)
+- After install, relaunch with: `adb -s R5CW61GQRTB shell am force-stop com.spendly.tracker.debug && adb -s R5CW61GQRTB shell am start -n com.spendly.tracker.debug/com.spendly.tracker.MainActivity`
 - You can take a screenshot to verify UI changes: `adb -s R5CW61GQRTB exec-out screencap -p > /tmp/screen.png`
 
 ## Versioning Strategy
@@ -78,7 +78,7 @@ The project now uses a multi-module architecture:
 Bank parsers are now in the `parser-core` module for reusability across platforms.
 
 ### When adding new bank parsers:
-1. **Location**: Add to `parser-core/src/main/kotlin/com/pennywiseai/parser/core/bank/`
+1. **Location**: Add to `parser-core/src/main/kotlin/com/spendly/parser/core/bank/`
 2. **Base Class**: All bank parsers extend `BankParser` abstract class
    - **Indian Banks**: MUST extend `BaseIndianBankParser` to inherit centralized mandate, subscription, and balance update logic.
    - **UAE Banks**: MUST extend `UAEBankParser` for currency and transaction type handling.
@@ -93,12 +93,12 @@ Bank parsers are now in the `parser-core` module for reusability across platform
 5. **Registration**: Add new parser to `BankParserFactory.parsers` list in parser-core
 6. **Return Type**: Use `ParsedTransaction` from parser-core
 7. **Imports for parser-core**:
-   - `com.pennywiseai.parser.core.TransactionType`
-   - `com.pennywiseai.parser.core.ParsedTransaction`
+   - `com.spendly.parser.core.TransactionType`
+   - `com.spendly.parser.core.ParsedTransaction`
    - `java.math.BigDecimal` for amounts
 
 ### Integration in main app:
-- Use `com.pennywiseai.tracker.data.mapper.toEntity()` to convert ParsedTransaction to TransactionEntity
+- Use `com.spendly.tracker.data.mapper.toEntity()` to convert ParsedTransaction to TransactionEntity
 - The mapper handles type conversions between modules
 
 ## Supported Banks (54 parsers)

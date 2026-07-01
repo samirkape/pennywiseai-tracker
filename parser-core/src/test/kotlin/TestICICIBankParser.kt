@@ -1,8 +1,8 @@
-import com.pennywiseai.parser.core.TransactionType
-import com.pennywiseai.parser.core.bank.ICICIBankParser
-import com.pennywiseai.parser.core.test.ExpectedTransaction
-import com.pennywiseai.parser.core.test.ParserTestCase
-import com.pennywiseai.parser.core.test.ParserTestUtils
+import com.spendly.parser.core.TransactionType
+import com.spendly.parser.core.bank.ICICIBankParser
+import com.spendly.parser.core.test.ExpectedTransaction
+import com.spendly.parser.core.test.ParserTestCase
+import com.spendly.parser.core.test.ParserTestUtils
 import org.junit.jupiter.api.*
 import java.math.BigDecimal
 
@@ -100,7 +100,7 @@ class ICICIBankParserTest {
                     amount = BigDecimal("26266.00"),
                     currency = "INR",
                     type = TransactionType.TRANSFER,
-                    transferKind = com.pennywiseai.parser.core.TransferKinds.CC_BILL_PAYMENT,
+                    transferKind = com.spendly.parser.core.TransferKinds.CC_BILL_PAYMENT,
                     accountLast4 = "9006"
                 )
             ),
