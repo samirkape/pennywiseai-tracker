@@ -225,6 +225,9 @@ class TransactionDetailViewModel @Inject constructor(
     private val _bulkCategoryUndoSnackCount = MutableStateFlow<Int?>(null)
     val bulkCategoryUndoSnackCount: StateFlow<Int?> = _bulkCategoryUndoSnackCount.asStateFlow()
 
+    private val _merchantRenameUndoCount = MutableStateFlow<Int?>(null)
+    val merchantRenameUndoCount: StateFlow<Int?> = _merchantRenameUndoCount.asStateFlow()
+
     private val _merchantMappingCategoryHint = MutableStateFlow<String?>(null)
     val merchantMappingCategoryHint: StateFlow<String?> = _merchantMappingCategoryHint.asStateFlow()
     private val _budgetImpactType = MutableStateFlow<BudgetImpactType?>(null)
@@ -1247,6 +1250,7 @@ class TransactionDetailViewModel @Inject constructor(
                             originalMerchant = origMerchantForScan,
                             newMerchantName = normalizedTransaction.merchantName,
                             excludeTransactionId = normalizedTransaction.id,
+                            originalSmsBody = normalizedTransaction.smsBody,
                         )
                     }
                     if (similar.isNotEmpty()) {
@@ -1288,10 +1292,12 @@ class TransactionDetailViewModel @Inject constructor(
                 s?.copy(groups = s.groups.map { if (it.tier == tier) it.copy(isApplying = true) else it })
             }
             try {
+                val snapshot = group.transactions.map { it.transactionId to it.currentMerchantName }
                 for (txn in group.transactions) {
                     transactionRepository.updateMerchantNameForTransaction(txn.transactionId, state.newMerchantName)
                     merchantAliasRepository.setAlias(txn.currentMerchantName, state.newMerchantName)
                 }
+                transactionRepository.rememberMerchantRenameUndo(snapshot)
                 _merchantRenameGrouped.update { s ->
                     s?.copy(groups = s.groups.map {
                         if (it.tier == tier) it.copy(approved = true, isApplying = false) else it
@@ -1321,6 +1327,7 @@ class TransactionDetailViewModel @Inject constructor(
             try {
                 transactionRepository.updateMerchantNameForTransaction(tx.transactionId, state.newMerchantName)
                 merchantAliasRepository.setAlias(tx.currentMerchantName, state.newMerchantName)
+                transactionRepository.rememberMerchantRenameUndo(listOf(tx.transactionId to tx.currentMerchantName))
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to rename: ${e.message}"
             }
@@ -1342,9 +1349,25 @@ class TransactionDetailViewModel @Inject constructor(
     private fun checkAndFinishGroupedRename() {
         val state = _merchantRenameGrouped.value ?: return
         if (state.isComplete) {
+            val renamedCount = state.groups.filter { it.approved }.sumOf { it.count }
             _merchantRenameGrouped.value = null
-            finishSaveFlow()
+            if (renamedCount > 0) {
+                _merchantRenameUndoCount.value = renamedCount
+            } else {
+                finishSaveFlow()
+            }
         }
+    }
+
+    fun clearMerchantRenameUndoSnack() {
+        _merchantRenameUndoCount.value = null
+        finishSaveFlow()
+    }
+
+    suspend fun undoMerchantRenameSuspend() {
+        transactionRepository.undoLastMerchantRename()
+        _merchantRenameUndoCount.value = null
+        finishSaveFlow()
     }
 
     fun confirmFutureParsing(extraBodyAliasSources: Collection<String> = emptyList()) {

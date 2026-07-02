@@ -9,12 +9,27 @@ import java.time.LocalDateTime
  */
 object MerchantRenameMatcher {
 
-    private const val NAME_WEIGHT = 0.70
-    private const val TEXT_BRIDGE_WEIGHT = 0.20
-    private const val ENTITY_COMPAT_WEIGHT = 0.10
+    private const val NAME_WEIGHT = 0.60
+    private const val TEXT_BRIDGE_WEIGHT = 0.18
+    private const val ENTITY_COMPAT_WEIGHT = 0.09
+    private const val SMS_TEMPLATE_WEIGHT = 0.13
     private const val HIGH_NAME_CONFIDENCE = 0.90
     private const val MIN_TEXT_BRIDGE = 0.25
     private const val MIN_ENTITY_COMPAT = 0.40
+
+    // Regex patterns to strip variable parts from SMS bodies before template comparison
+    private val SMS_STRIP_PATTERNS = listOf(
+        Regex("""[₹$€£¥]\s*[\d,]+(\.\d{1,2})?"""),                 // currency amounts
+        Regex("""(?i)(INR|USD|AED|SAR|EUR|GBP)\s*[\d,]+(\.\d{1,2})?"""), // ISO currency amounts
+        Regex("""[\d,]+(\.\d{1,2})?\s*(?i)(INR|USD|AED|SAR|EUR|GBP)"""), // amounts trailing currency
+        Regex("""\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b"""),            // dates dd/mm/yyyy
+        Regex("""\b\d{1,2}\s+(?i)(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{2,4}\b"""), // dates 12 Jan 2025
+        Regex("""\b\d{1,2}:\d{2}(?::\d{2})?(?:\s*[APap][Mm])?\b"""), // times
+        Regex("""[Xx*]{2,}\d{4,}"""),                               // masked account XX1234
+        Regex("""\b\d{4,}\b"""),                                    // standalone 4+ digit numbers (ref/UTR/acct)
+        Regex("""(?i)(avl|available|bal|balance|limit)\b.*"""),     // balance lines (to end of line)
+        Regex("""\s{2,}"""),                                        // collapse extra spaces
+    )
 
     private val BUSINESS_KEYWORDS = setOf(
         "bank", "pay", "mart", "store", "shop", "hotel", "cafe", "food", "fuel",
@@ -26,10 +41,13 @@ object MerchantRenameMatcher {
         originalMerchant: String,
         newMerchantName: String,
         merchantDetails: List<MerchantMatchDetails>,
+        originalSmsBody: String? = null,
     ): List<MerchantRenameMatch> {
         val original = originalMerchant.trim()
         val target = newMerchantName.trim()
         if (original.isEmpty() || target.isEmpty()) return emptyList()
+
+        val normalizedOriginalSms = originalSmsBody?.let { normalizeSmsBody(it) }
 
         return merchantDetails
             .asSequence()
@@ -38,15 +56,27 @@ object MerchantRenameMatcher {
                 val nameScore = MerchantNameMatcher.weightedSimilarity(original, details.merchantName)
                 val textBridge = textBridgeScore(original, details.merchantName)
                 val entityCompat = entityCompatibilityScore(target, details.merchantName)
-                val hybridScore =
+                val smsTemplate = if (normalizedOriginalSms != null && details.smsBody != null) {
+                    smsTemplateScore(normalizedOriginalSms, normalizeSmsBody(details.smsBody))
+                } else {
+                    null
+                }
+                val hybridScore = if (smsTemplate != null) {
                     NAME_WEIGHT * nameScore +
                         TEXT_BRIDGE_WEIGHT * textBridge +
-                        ENTITY_COMPAT_WEIGHT * entityCompat
+                        ENTITY_COMPAT_WEIGHT * entityCompat +
+                        SMS_TEMPLATE_WEIGHT * smsTemplate
+                } else {
+                    // No SMS data — redistribute SMS weight proportionally across other components
+                    val scale = 1.0 / (NAME_WEIGHT + TEXT_BRIDGE_WEIGHT + ENTITY_COMPAT_WEIGHT)
+                    scale * (NAME_WEIGHT * nameScore + TEXT_BRIDGE_WEIGHT * textBridge + ENTITY_COMPAT_WEIGHT * entityCompat)
+                }
                 MatchScore(
                     details = details,
                     nameScore = nameScore,
                     textBridge = textBridge,
                     entityCompat = entityCompat,
+                    smsTemplate = smsTemplate,
                     hybridScore = hybridScore,
                 )
             }
@@ -79,8 +109,27 @@ object MerchantRenameMatcher {
         val nameScore: Double,
         val textBridge: Double,
         val entityCompat: Double,
+        val smsTemplate: Double?,
         val hybridScore: Double,
     )
+
+    internal fun normalizeSmsBody(body: String): String {
+        var s = body
+        for (pattern in SMS_STRIP_PATTERNS) {
+            s = s.replace(pattern, " ")
+        }
+        return s.trim().lowercase()
+    }
+
+    private fun smsTemplateScore(normalizedA: String, normalizedB: String): Double {
+        if (normalizedA.isEmpty() || normalizedB.isEmpty()) return 0.0
+        val tokensA = normalizedA.split(Regex("\\s+")).filter { it.length >= 3 }.toSet()
+        val tokensB = normalizedB.split(Regex("\\s+")).filter { it.length >= 3 }.toSet()
+        if (tokensA.isEmpty() || tokensB.isEmpty()) return 0.0
+        val intersection = tokensA.intersect(tokensB).size
+        val union = tokensA.union(tokensB).size
+        return if (union == 0) 0.0 else intersection.toDouble() / union
+    }
 
     private fun textBridgeScore(left: String, right: String): Double {
         val leftNorm = normalizeAlphaNumeric(left)
@@ -151,6 +200,7 @@ object MerchantRenameMatcher {
         val merchantName: String,
         val transactionCount: Int,
         val sample: MerchantSample,
+        val smsBody: String? = null,
     )
 
     data class MerchantSample(

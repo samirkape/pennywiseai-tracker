@@ -427,6 +427,9 @@
     <string name="merchant_rename_applying">Applying…</string>
     <string name="merchant_rename_fuzzy_progress">%1$d of %2$d</string>
     <string name="merchant_rename_open_transaction_cd">Open transaction for review</string>
+    <string name="merchant_rename_undo_message">Renamed %1$d transaction(s). Undo to revert.</string>
+    <string name="merchant_rename_undo_action">Undo</string>
+    <string name="merchant_rename_undo_done">Merchant rename reverted</string>
 
     <plurals name="subs_active_subscription_count">
         <item quantity="one">%d active subscription</item>

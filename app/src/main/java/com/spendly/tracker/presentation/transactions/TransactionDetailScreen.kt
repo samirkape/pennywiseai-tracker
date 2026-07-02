@@ -454,6 +454,7 @@ fun TransactionDetailScreen(
     val bulkCategorySaveConfirmParams by viewModel.bulkCategorySaveConfirm.collectAsStateWithLifecycle()
     val bulkCategoryPreviewRows by viewModel.bulkCategoryPreviewRows.collectAsStateWithLifecycle()
     val bulkCategoryUndoSnackCount by viewModel.bulkCategoryUndoSnackCount.collectAsStateWithLifecycle()
+    val merchantRenameUndoCount by viewModel.merchantRenameUndoCount.collectAsStateWithLifecycle()
 
     // Split state
     val splits by viewModel.splits.collectAsStateWithLifecycle()
@@ -522,6 +523,26 @@ fun TransactionDetailScreen(
             else -> { /* dismissed without undo */ }
         }
         viewModel.clearBulkCategoryUndoSnack()
+    }
+
+    LaunchedEffect(merchantRenameUndoCount) {
+        val n = merchantRenameUndoCount ?: return@LaunchedEffect
+        val message = resources.getString(R.string.merchant_rename_undo_message, n)
+        val undoAction = resources.getString(R.string.merchant_rename_undo_action)
+        val undoDone = resources.getString(R.string.merchant_rename_undo_done)
+        when (
+            snackbarHostState.showSnackbar(
+                message = message,
+                actionLabel = undoAction,
+                duration = SnackbarDuration.Long,
+            )
+        ) {
+            SnackbarResult.ActionPerformed -> {
+                viewModel.undoMerchantRenameSuspend()
+                snackbarHostState.showSnackbar(undoDone)
+            }
+            else -> viewModel.clearMerchantRenameUndoSnack()
+        }
     }
 
     LaunchedEffect(transactionId) {

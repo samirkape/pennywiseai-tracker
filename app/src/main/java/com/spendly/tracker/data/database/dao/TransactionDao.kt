@@ -299,6 +299,17 @@ interface TransactionDao {
     """)
     suspend fun getActiveTransactionsForMerchant(merchantName: String, excludeId: Long): List<TransactionEntity>
 
+    @Query("""
+        SELECT sms_body FROM transactions
+        WHERE is_deleted = 0
+        AND merchant_name = :merchantName
+        AND sms_body IS NOT NULL
+        AND sms_body != ''
+        ORDER BY date_time DESC
+        LIMIT 1
+    """)
+    suspend fun getRepresentativeSmsBodyForMerchant(merchantName: String): String?
+
     @Query("UPDATE transactions SET merchant_name = :newMerchantName, updated_at = :updatedAt WHERE id = :transactionId")
     suspend fun updateMerchantNameById(
         transactionId: Long,

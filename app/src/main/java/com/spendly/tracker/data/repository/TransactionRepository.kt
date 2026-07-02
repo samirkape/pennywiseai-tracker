@@ -75,6 +75,28 @@ class TransactionRepository @Inject constructor(
     private val bulkCategoryUndoStack = ArrayDeque<List<Pair<Long, String>>>()
     private val undoLock = Any()
 
+    // Undo stack for merchant rename operations: each entry is (transactionId → oldMerchantName)
+    private val merchantRenameUndoStack = ArrayDeque<List<Pair<Long, String>>>()
+    private val merchantRenameUndoLock = Any()
+
+    fun rememberMerchantRenameUndo(pairs: List<Pair<Long, String>>) {
+        if (pairs.isEmpty()) return
+        synchronized(merchantRenameUndoLock) {
+            merchantRenameUndoStack.addFirst(pairs)
+            while (merchantRenameUndoStack.size > 3) merchantRenameUndoStack.removeLast()
+        }
+    }
+
+    suspend fun undoLastMerchantRename(): Int {
+        val pairs = synchronized(merchantRenameUndoLock) {
+            merchantRenameUndoStack.removeFirstOrNull()
+        } ?: return 0
+        for ((id, oldName) in pairs) {
+            transactionDao.updateMerchantNameById(id, oldName, LocalDateTime.now())
+        }
+        return pairs.size
+    }
+
     suspend fun captureBulkCategoryUndoSnapshot(
         merchantName: String,
         excludeId: Long,
@@ -363,11 +385,13 @@ class TransactionRepository @Inject constructor(
         originalMerchant: String,
         newMerchantName: String,
         excludeTransactionId: Long,
+        originalSmsBody: String? = null,
     ): List<TransactionRenameCandidate> {
         val merchantMatches = findSimilarMerchantMatches(
             originalMerchant,
             newMerchantName,
             excludeTransactionId,
+            originalSmsBody,
         )
         return merchantMatches.flatMap { match ->
             transactionDao.getActiveTransactionsForMerchant(
@@ -399,6 +423,7 @@ class TransactionRepository @Inject constructor(
         originalMerchant: String,
         newMerchantName: String,
         excludeTransactionId: Long,
+        originalSmsBody: String? = null,
     ): List<MerchantRenameMatch> {
         val newTrim = newMerchantName.trim()
         val tokens = buildRenameSearchTokens(originalMerchant, newMerchantName)
@@ -423,12 +448,14 @@ class TransactionRepository @Inject constructor(
                     dateTime = LocalDateTime.now(),
                     category = "",
                 ),
+                smsBody = transactionDao.getRepresentativeSmsBodyForMerchant(merchant),
             )
         }
         return MerchantRenameMatcher.findCandidates(
             originalMerchant = originalMerchant,
             newMerchantName = newMerchantName,
             merchantDetails = merchantDetails,
+            originalSmsBody = originalSmsBody,
         )
     }
 
