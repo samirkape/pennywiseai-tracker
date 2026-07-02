@@ -15,6 +15,7 @@ import com.pennywiseai.tracker.data.database.entity.ProfileEntity
 import com.pennywiseai.tracker.data.database.entity.TransactionEntity
 import com.pennywiseai.tracker.data.manager.InAppUpdateManager
 import com.pennywiseai.tracker.data.manager.InAppReviewManager
+import com.pennywiseai.tracker.data.manager.PremiumManager
 import com.pennywiseai.tracker.data.currency.CurrencyConversionService
 import com.pennywiseai.tracker.data.preferences.UserPreferencesRepository
 import com.pennywiseai.tracker.presentation.common.buildProfileAccountKeys
@@ -76,6 +77,7 @@ class HomeViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val inAppUpdateManager: InAppUpdateManager,
     private val inAppReviewManager: InAppReviewManager,
+    private val premiumManager: PremiumManager,
     private val smsScanManager: SmsScanManager,
     private val categoryRepository: CategoryRepository,
     @ApplicationContext private val context: Context
@@ -88,6 +90,7 @@ class HomeViewModel @Inject constructor(
         private const val TAG = "BreakdownCalc"
     }
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+    val isPremium: StateFlow<Boolean> = premiumManager.isPremium
 
     // Selected date for the "daily spends" section — defaults to today
     private val _selectedDate = MutableStateFlow(LocalDate.now())

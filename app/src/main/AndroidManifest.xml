@@ -32,6 +32,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Pennywisecompose">
 
+        <!-- AdMob App ID (test ID — replace before release) -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="@string/admob_app_id" />
+
         <!-- GPU acceleration for LiteRT-LM (optional) -->
         <uses-native-library android:name="libOpenCL.so" android:required="false" />
 

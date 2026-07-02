@@ -67,7 +67,9 @@ import com.pennywiseai.tracker.ui.components.PennyWiseEmptyState
 import com.pennywiseai.tracker.ui.components.PayPeriodSalarySuggestionDialog
 import com.pennywiseai.tracker.ui.components.SmsParsingProgressDialog
 import com.pennywiseai.tracker.ui.components.cards.GroupCard
+import com.pennywiseai.tracker.ui.components.BannerAdView
 import com.pennywiseai.tracker.ui.components.cards.HomeHeroPager
+import com.pennywiseai.tracker.core.Constants
 import com.pennywiseai.tracker.ui.screens.payperiod.PayPeriodExplorerContent
 import com.pennywiseai.tracker.ui.components.cards.TransactionItem
 import com.pennywiseai.tracker.ui.components.cards.formatStatAmount
@@ -122,6 +124,7 @@ fun HomeScreen(
     onNavigateToPayPeriodExplorer: (Long, Long) -> Unit = { _, _ -> },
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val isPremium by viewModel.isPremium.collectAsState()
     val transactionsPeriod = defaultTimePeriodNavParam(uiState.useFinancialMonth)
     val deletedTransaction by viewModel.deletedTransaction.collectAsState()
     val smsScanWorkInfo by viewModel.smsScanWorkInfo.collectAsState()
@@ -440,6 +443,16 @@ fun HomeScreen(
                             )
                         }
                     }
+                }
+            }
+
+            // Banner ad — shown only when not premium and ads are enabled
+            if (Constants.Ads.ENABLED && !isPremium) {
+                item(key = "banner_ad") {
+                    BannerAdView(
+                        adUnitId = Constants.Ads.HOME_BANNER_UNIT_ID,
+                        modifier = Modifier.padding(horizontal = Dimensions.Padding.content, vertical = Spacing.xs)
+                    )
                 }
             }
 

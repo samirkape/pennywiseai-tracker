@@ -26,6 +26,7 @@ import com.pennywiseai.tracker.data.backup.ExportResult
 import com.pennywiseai.tracker.data.backup.ImportResult
 import com.pennywiseai.tracker.data.backup.ImportStrategy
 import com.pennywiseai.tracker.R
+import com.pennywiseai.tracker.data.manager.PremiumManager
 import com.pennywiseai.tracker.data.manager.SmsScanManager
 import com.pennywiseai.tracker.data.repository.SalaryMonthOverrideRepository
 import com.pennywiseai.tracker.data.repository.TransactionRepository
@@ -53,7 +54,8 @@ class SettingsViewModel @Inject constructor(
     private val backupExporter: BackupExporter,
     private val backupImporter: BackupImporter,
     private val salaryMonthOverrideRepository: SalaryMonthOverrideRepository,
-    private val smsScanManager: SmsScanManager
+    private val smsScanManager: SmsScanManager,
+    private val premiumManager: PremiumManager
 ) : ViewModel() {
     
     private val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
@@ -83,6 +85,9 @@ class SettingsViewModel @Inject constructor(
     
     private var currentDownloadId: Long? = null
     
+    // Premium state
+    val isPremium: StateFlow<Boolean> = premiumManager.isPremium
+
     // Developer mode state
     val isDeveloperModeEnabled = userPreferencesRepository.isDeveloperModeEnabled
     
@@ -719,6 +724,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             userPreferencesRepository.updateBaseCurrency(currency)
         }
+    }
+
+    fun purchasePremium(activity: android.app.Activity) {
+        premiumManager.launchPurchaseFlow(activity)
     }
 }
 

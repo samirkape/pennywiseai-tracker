@@ -90,6 +90,7 @@ fun SettingsScreen(
     appLockViewModel: com.pennywiseai.tracker.ui.viewmodel.AppLockViewModel = hiltViewModel(),
     permissionViewModel: com.pennywiseai.tracker.ui.viewmodel.PermissionViewModel = hiltViewModel()
 ) {
+    val isPremium by settingsViewModel.isPremium.collectAsStateWithLifecycle()
     val themeUiState by themeViewModel.themeUiState.collectAsStateWithLifecycle()
     val appLockUiState by appLockViewModel.uiState.collectAsStateWithLifecycle()
     val smsScanMonths by settingsViewModel.smsScanMonths.collectAsStateWithLifecycle(initialValue = 3)
@@ -174,6 +175,32 @@ fun SettingsScreen(
                 .padding(bottom = Dimensions.Component.bottomBarHeight + Spacing.md),
             verticalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
+            // ── Premium ──
+            SectionHeaderV2(title = "Premium")
+            SettingsGroup {
+                if (isPremium) {
+                    SettingsNavItem(
+                        icon = Icons.Default.Star,
+                        iconBgColor = amber_light,
+                        iconTint = amber_dark,
+                        title = "Spendly Premium",
+                        subtitle = "Ads removed — thank you for your support!",
+                        onClick = {},
+                        position = ItemPosition.SINGLE
+                    )
+                } else {
+                    SettingsNavItem(
+                        icon = Icons.Default.Star,
+                        iconBgColor = amber_light,
+                        iconTint = amber_dark,
+                        title = "Remove Ads",
+                        subtitle = "One-time purchase to go ad-free forever",
+                        onClick = { settingsViewModel.purchasePremium(context as android.app.Activity) },
+                        position = ItemPosition.SINGLE
+                    )
+                }
+            }
+
             // ── Appearance ──
             SectionHeaderV2(title = "Appearance")
             SettingsGroup {

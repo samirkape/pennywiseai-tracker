@@ -271,6 +271,12 @@ dependencies {
     // Google Play In-App Reviews (only for standard flavor)
     "standardImplementation"(libs.review)
     "standardImplementation"(libs.review.ktx)
+
+    // Google Mobile Ads (only for standard flavor)
+    "standardImplementation"(libs.google.mobile.ads)
+
+    // Google Play Billing (only for standard flavor)
+    "standardImplementation"(libs.billing.ktx)
     
     testImplementation(libs.junit)
     testImplementation(libs.androidx.room.testing)

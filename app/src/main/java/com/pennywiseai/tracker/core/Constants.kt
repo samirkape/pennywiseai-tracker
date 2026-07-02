@@ -91,6 +91,17 @@ object Constants {
     }
 
     /**
+     * Ads & Premium
+     */
+    object Ads {
+        const val ENABLED = true
+        // Test banner unit ID — replace with real ID before release
+        const val HOME_BANNER_UNIT_ID = "ca-app-pub-3940256099942544/6300978111"
+        // Product ID configured in Google Play Console
+        const val PREMIUM_PRODUCT_ID = "remove_ads"
+    }
+
+    /**
      * External Links
      */
     object Links {

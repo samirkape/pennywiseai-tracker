@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">Spendly</string>
+    <!-- AdMob App ID — test ID, replace with real ID before release -->
+    <string name="admob_app_id" translatable="false">ca-app-pub-3940256099942544~3347511713</string>
     <!-- User-facing product name; not overridden by debug (unlike app_name). -->
     <string name="brand_display_name">Spendly</string>
     <!-- Formatted: first arg is app display name (e.g. Spendly) -->

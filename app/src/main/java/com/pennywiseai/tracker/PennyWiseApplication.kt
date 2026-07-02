@@ -5,6 +5,8 @@ import android.app.Application
 import android.os.Bundle
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.pennywiseai.tracker.data.manager.AdManager
+import com.pennywiseai.tracker.data.manager.PremiumManager
 import com.pennywiseai.tracker.data.manager.SmsScanManager
 import com.pennywiseai.tracker.data.preferences.UserPreferencesRepository
 import com.pennywiseai.tracker.data.repository.AppLockRepository
@@ -35,6 +37,12 @@ class PennyWiseApplication : Application(), Configuration.Provider {
     @Inject
     lateinit var smsScanManager: SmsScanManager
 
+    @Inject
+    lateinit var adManager: AdManager
+
+    @Inject
+    lateinit var premiumManager: PremiumManager
+
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var activityReferences = 0
     private var isInForeground = false
@@ -56,6 +64,8 @@ class PennyWiseApplication : Application(), Configuration.Provider {
         super.onCreate()
         registerActivityLifecycleCallbacks(AppLockLifecycleObserver())
         scheduleHistoricalCcLinkerBackfill()
+        adManager.initialize()
+        premiumManager.connect()
     }
 
     /**

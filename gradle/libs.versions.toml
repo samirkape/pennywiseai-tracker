@@ -32,6 +32,7 @@ opencsv = "5.12.0"
 pdfboxAndroid = "2.0.27.0"
 review = "2.0.2"
 reviewKtx = "2.0.2"
+billing = "7.1.1"
 roomVersion = "2.8.4"
 litertlm = "0.+"
 visionInternalVkp = "18.2.3"
@@ -93,6 +94,8 @@ opencsv = { module = "com.opencsv:opencsv", version.ref = "opencsv" }
 pdfbox-android = { module = "com.tom-roush:pdfbox-android", version.ref = "pdfboxAndroid" }
 review = { module = "com.google.android.play:review", version.ref = "review" }
 review-ktx = { module = "com.google.android.play:review-ktx", version.ref = "reviewKtx" }
+google-mobile-ads = { module = "com.google.android.gms:play-services-ads", version = "23.6.0" }
+billing-ktx = { module = "com.android.billingclient:billing-ktx", version.ref = "billing" }
 litertlm-android = { module = "com.google.ai.edge.litertlm:litertlm-android", version.ref = "litertlm" }
 vision-internal-vkp = { group = "com.google.mlkit", name = "vision-internal-vkp", version.ref = "visionInternalVkp" }
 
