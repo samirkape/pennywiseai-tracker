@@ -632,7 +632,8 @@ fun HomeScreen(
                 .align(Alignment.BottomEnd)
                 .padding(
                     end = Dimensions.Padding.content,
-                    bottom = if (windowSizeInfo.useNavigationRail) Dimensions.Padding.content else 96.dp,
+                    bottom = if (windowSizeInfo.useNavigationRail) Dimensions.Padding.content
+                             else 96.dp + if (Constants.Ads.ENABLED && !isPremium) 54.dp else 0.dp,
                 )
                 .combinedClickable(
                     role = Role.Button,
