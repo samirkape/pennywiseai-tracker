@@ -310,7 +310,8 @@ fun HomeScreen(
             contentPadding = PaddingValues(
                 // Must match full top inset: pulling this up clips the in-list brand title under status bar / clip.
                 top = paddingValues.calculateTopPadding(),
-                bottom = windowSizeInfo.bottomNavBarPadding + 96.dp
+                bottom = windowSizeInfo.bottomNavBarPadding + 96.dp +
+                    if (Constants.Ads.ENABLED && !isPremium) 50.dp else 0.dp
             ),
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
@@ -384,16 +385,6 @@ fun HomeScreen(
                             )
                         }
                     }
-                }
-            }
-
-            // Banner ad — shown only when not premium and ads are enabled
-            if (Constants.Ads.ENABLED && !isPremium) {
-                item(key = "banner_ad") {
-                    BannerAdView(
-                        adUnitId = Constants.Ads.HOME_BANNER_UNIT_ID,
-                        modifier = Modifier.padding(horizontal = Dimensions.Padding.content, vertical = Spacing.xs)
-                    )
                 }
             }
 
@@ -619,7 +610,20 @@ fun HomeScreen(
 
 
         }
-        
+
+        // Fixed bottom banner ad — non-intrusive, anchored above the navigation bar
+        if (Constants.Ads.ENABLED && !isPremium) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(bottom = windowSizeInfo.bottomNavBarPadding)
+                    .background(MaterialTheme.colorScheme.surface)
+            ) {
+                BannerAdView(adUnitId = Constants.Ads.HOME_BANNER_UNIT_ID)
+            }
+        }
+
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
