@@ -88,6 +88,8 @@ class SettingsViewModel @Inject constructor(
     
     // Premium state
     val isPremium: StateFlow<Boolean> = premiumManager.isPremium
+    val purchaseError: StateFlow<String?> = premiumManager.purchaseError
+    val isPurchasing: StateFlow<Boolean> = premiumManager.isPurchasing
 
     // Developer mode state
     val isDeveloperModeEnabled = userPreferencesRepository.isDeveloperModeEnabled
@@ -765,6 +767,10 @@ class SettingsViewModel @Inject constructor(
 
     fun purchasePremium(activity: android.app.Activity) {
         premiumManager.launchPurchaseFlow(activity)
+    }
+
+    fun clearPurchaseError() {
+        premiumManager.clearError()
     }
 }
 

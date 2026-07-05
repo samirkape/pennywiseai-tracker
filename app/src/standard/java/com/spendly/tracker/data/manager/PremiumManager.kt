@@ -3,6 +3,7 @@ package com.spendly.tracker.data.manager
 import android.app.Activity
 import android.content.Context
 import android.util.Log
+import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
 import com.android.billingclient.api.BillingFlowParams
@@ -25,6 +26,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 @Singleton
 class PremiumManager @Inject constructor(
@@ -36,11 +39,22 @@ class PremiumManager @Inject constructor(
     private val _isPremium = MutableStateFlow(prefs.getBoolean(KEY_IS_PREMIUM, false))
     val isPremium: StateFlow<Boolean> = _isPremium
 
+    // Null = idle, non-null = error message to show once
+    private val _purchaseError = MutableStateFlow<String?>(null)
+    val purchaseError: StateFlow<String?> = _purchaseError
+
+    private val _isPurchasing = MutableStateFlow(false)
+    val isPurchasing: StateFlow<Boolean> = _isPurchasing
+
     private var productDetails: ProductDetails? = null
+    private var isConnected = false
 
     private val purchasesUpdatedListener = PurchasesUpdatedListener { billingResult, purchases ->
-        if (billingResult.responseCode == BillingClient.BillingResponseCode.OK && purchases != null) {
-            purchases.forEach { handlePurchase(it) }
+        _isPurchasing.value = false
+        when (billingResult.responseCode) {
+            BillingClient.BillingResponseCode.OK -> purchases?.forEach { handlePurchase(it) }
+            BillingClient.BillingResponseCode.USER_CANCELED -> { /* user dismissed, no feedback needed */ }
+            else -> _purchaseError.value = "Purchase failed (${billingResult.debugMessage})"
         }
     }
 
@@ -53,17 +67,37 @@ class PremiumManager @Inject constructor(
         billingClient.startConnection(object : BillingClientStateListener {
             override fun onBillingSetupFinished(billingResult: BillingResult) {
                 if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
+                    isConnected = true
                     scope.launch {
                         queryExistingPurchases()
                         loadProductDetails()
                     }
+                } else {
+                    Log.w(TAG, "Billing setup failed: ${billingResult.debugMessage}")
                 }
             }
 
             override fun onBillingServiceDisconnected() {
+                isConnected = false
                 Log.w(TAG, "Billing service disconnected")
             }
         })
+    }
+
+    private suspend fun ensureConnected(): Boolean {
+        if (isConnected && billingClient.isReady) return true
+        return suspendCoroutine { cont ->
+            billingClient.startConnection(object : BillingClientStateListener {
+                override fun onBillingSetupFinished(result: BillingResult) {
+                    isConnected = result.responseCode == BillingClient.BillingResponseCode.OK
+                    cont.resume(isConnected)
+                }
+                override fun onBillingServiceDisconnected() {
+                    isConnected = false
+                    cont.resume(false)
+                }
+            })
+        }
     }
 
     private suspend fun loadProductDetails() {
@@ -80,6 +114,9 @@ class PremiumManager @Inject constructor(
         val result = billingClient.queryProductDetails(params)
         if (result.billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
             productDetails = result.productDetailsList?.firstOrNull()
+            if (productDetails == null) {
+                Log.w(TAG, "Product '${Constants.Ads.PREMIUM_PRODUCT_ID}' not found in Play Console")
+            }
         }
     }
 
@@ -96,18 +133,38 @@ class PremiumManager @Inject constructor(
     }
 
     fun launchPurchaseFlow(activity: Activity) {
-        val details = productDetails ?: run {
-            Log.w(TAG, "Product details not loaded yet")
-            scope.launch { loadProductDetails() }
-            return
+        if (_isPurchasing.value) return
+        _isPurchasing.value = true
+        scope.launch {
+            if (!ensureConnected()) {
+                _isPurchasing.value = false
+                _purchaseError.value = "Could not connect to Google Play. Check your connection and try again."
+                return@launch
+            }
+            if (productDetails == null) {
+                loadProductDetails()
+            }
+            val details = productDetails
+            if (details == null) {
+                _isPurchasing.value = false
+                _purchaseError.value = "Purchase not available yet. Please try again in a moment."
+                return@launch
+            }
+            val productDetailsParams = BillingFlowParams.ProductDetailsParams.newBuilder()
+                .setProductDetails(details)
+                .build()
+            val billingFlowParams = BillingFlowParams.newBuilder()
+                .setProductDetailsParamsList(listOf(productDetailsParams))
+                .build()
+            // launchBillingFlow must run on main thread
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                billingClient.launchBillingFlow(activity, billingFlowParams)
+            }
         }
-        val productDetailsParams = BillingFlowParams.ProductDetailsParams.newBuilder()
-            .setProductDetails(details)
-            .build()
-        val billingFlowParams = BillingFlowParams.newBuilder()
-            .setProductDetailsParamsList(listOf(productDetailsParams))
-            .build()
-        billingClient.launchBillingFlow(activity, billingFlowParams)
+    }
+
+    fun clearError() {
+        _purchaseError.value = null
     }
 
     private fun handlePurchase(purchase: Purchase) {
@@ -117,7 +174,7 @@ class PremiumManager @Inject constructor(
             setPremium(true)
             if (!purchase.isAcknowledged) {
                 scope.launch {
-                    val params = com.android.billingclient.api.AcknowledgePurchaseParams.newBuilder()
+                    val params = AcknowledgePurchaseParams.newBuilder()
                         .setPurchaseToken(purchase.purchaseToken)
                         .build()
                     billingClient.acknowledgePurchase(params)

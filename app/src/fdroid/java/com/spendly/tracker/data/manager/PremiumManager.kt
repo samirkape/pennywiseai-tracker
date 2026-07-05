@@ -12,10 +12,12 @@ import javax.inject.Singleton
 class PremiumManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    // F-Droid builds are always ad-free
     val isPremium: StateFlow<Boolean> = MutableStateFlow(true)
+    val purchaseError: StateFlow<String?> = MutableStateFlow(null)
+    val isPurchasing: StateFlow<Boolean> = MutableStateFlow(false)
 
     fun connect() {}
     fun launchPurchaseFlow(activity: Activity) {}
+    fun clearError() {}
     fun cleanup() {}
 }

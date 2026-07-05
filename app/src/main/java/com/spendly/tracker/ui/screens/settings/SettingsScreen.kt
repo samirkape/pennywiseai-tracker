@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.activity.compose.LocalActivity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -93,6 +94,9 @@ fun SettingsScreen(
     permissionViewModel: com.spendly.tracker.ui.viewmodel.PermissionViewModel = hiltViewModel()
 ) {
     val isPremium by settingsViewModel.isPremium.collectAsStateWithLifecycle()
+    val isPurchasing by settingsViewModel.isPurchasing.collectAsStateWithLifecycle()
+    val purchaseError by settingsViewModel.purchaseError.collectAsStateWithLifecycle()
+    val activity = LocalActivity.current
     val themeUiState by themeViewModel.themeUiState.collectAsStateWithLifecycle()
     val appLockUiState by appLockViewModel.uiState.collectAsStateWithLifecycle()
     val smsScanMonths by settingsViewModel.smsScanMonths.collectAsStateWithLifecycle(initialValue = 3)
@@ -196,12 +200,16 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                     )
                 } else {
                     SettingsNavItem(
-                        icon = Icons.Default.Star,
+                        icon = if (isPurchasing) Icons.Default.HourglassBottom else Icons.Default.Star,
                         iconBgColor = amber_light,
                         iconTint = amber_dark,
                         title = "Remove Ads",
-                        subtitle = "One-time purchase to go ad-free forever",
-                        onClick = { settingsViewModel.purchasePremium(context as android.app.Activity) },
+                        subtitle = if (isPurchasing) "Opening store…" else "One-time purchase to go ad-free forever",
+                        onClick = {
+                            if (!isPurchasing) {
+                                settingsViewModel.purchasePremium(activity as android.app.Activity)
+                            }
+                        },
                         position = ItemPosition.SINGLE
                     )
                 }
@@ -808,6 +816,18 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                 TextButton(onClick = { settingsViewModel.dismissPostRestoreScanPrompt() }) {
                     Text("Dismiss")
                 }
+            }
+        )
+    }
+
+    // Show purchase error
+    purchaseError?.let { error ->
+        AlertDialog(
+            onDismissRequest = { settingsViewModel.clearPurchaseError() },
+            title = { Text("Purchase unavailable") },
+            text = { Text(error) },
+            confirmButton = {
+                TextButton(onClick = { settingsViewModel.clearPurchaseError() }) { Text("OK") }
             }
         )
     }
