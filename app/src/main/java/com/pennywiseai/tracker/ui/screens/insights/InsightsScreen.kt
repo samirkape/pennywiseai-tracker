@@ -17,14 +17,24 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Autorenew
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CompareArrows
+import androidx.compose.material.icons.filled.EventAvailable
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Store
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -692,6 +702,18 @@ private fun insightIcon(type: InsightType): ImageVector = when (type) {
     InsightType.MERCHANT_JUMP -> Icons.Default.Store
     InsightType.RECURRING_RATIO -> Icons.Default.Autorenew
     InsightType.SAVINGS_WIN -> Icons.Default.CheckCircle
+    InsightType.TOP_CATEGORIES -> Icons.Default.Category
+    InsightType.LARGEST_EXPENSE -> Icons.Default.Warning
+    InsightType.WEEKEND_SPEND -> Icons.Default.WbSunny
+    InsightType.INCOME_VS_EXPENSE -> Icons.Default.ShowChart
+    InsightType.INVESTMENT_RATIO -> Icons.Default.TrendingUp
+    InsightType.NEW_MERCHANTS -> Icons.Default.Explore
+    InsightType.MERCHANT_LOYALTY -> Icons.Default.Favorite
+    InsightType.TRANSACTION_FREQUENCY -> Icons.Default.Timeline
+    InsightType.MONTHLY_COMPARISON -> Icons.Default.CompareArrows
+    InsightType.ZERO_SPEND_DAYS -> Icons.Default.EventAvailable
+    InsightType.PEAK_SPEND_DAY -> Icons.Default.CalendarToday
+    InsightType.SPEND_SPLIT -> Icons.Default.PieChart
 }
 
 @Composable
@@ -702,6 +724,18 @@ private fun insightColor(type: InsightType): Color = when (type) {
     InsightType.SAVINGS_WIN -> MaterialTheme.colorScheme.success
     InsightType.PACE -> MaterialTheme.colorScheme.warning
     InsightType.ANOMALY -> MaterialTheme.colorScheme.error
+    InsightType.TOP_CATEGORIES -> MaterialTheme.colorScheme.primary
+    InsightType.LARGEST_EXPENSE -> MaterialTheme.colorScheme.error
+    InsightType.WEEKEND_SPEND -> MaterialTheme.colorScheme.tertiary
+    InsightType.INCOME_VS_EXPENSE -> MaterialTheme.colorScheme.success
+    InsightType.INVESTMENT_RATIO -> MaterialTheme.colorScheme.success
+    InsightType.NEW_MERCHANTS -> MaterialTheme.colorScheme.secondary
+    InsightType.MERCHANT_LOYALTY -> MaterialTheme.colorScheme.primary
+    InsightType.TRANSACTION_FREQUENCY -> MaterialTheme.colorScheme.tertiary
+    InsightType.MONTHLY_COMPARISON -> MaterialTheme.colorScheme.tertiary
+    InsightType.ZERO_SPEND_DAYS -> MaterialTheme.colorScheme.success
+    InsightType.PEAK_SPEND_DAY -> MaterialTheme.colorScheme.warning
+    InsightType.SPEND_SPLIT -> MaterialTheme.colorScheme.secondary
 }
 
 private fun insightLabel(type: InsightType): String = when (type) {
@@ -711,6 +745,18 @@ private fun insightLabel(type: InsightType): String = when (type) {
     InsightType.PACE -> "Spending pace"
     InsightType.RECURRING_RATIO -> "Recurring spend"
     InsightType.SAVINGS_WIN -> "Savings win"
+    InsightType.TOP_CATEGORIES -> "Top categories"
+    InsightType.LARGEST_EXPENSE -> "Big expense"
+    InsightType.WEEKEND_SPEND -> "Weekend patterns"
+    InsightType.INCOME_VS_EXPENSE -> "Cash flow"
+    InsightType.INVESTMENT_RATIO -> "Investments"
+    InsightType.NEW_MERCHANTS -> "New discoveries"
+    InsightType.MERCHANT_LOYALTY -> "Merchant loyalty"
+    InsightType.TRANSACTION_FREQUENCY -> "Activity"
+    InsightType.MONTHLY_COMPARISON -> "Month comparison"
+    InsightType.ZERO_SPEND_DAYS -> "No-spend days"
+    InsightType.PEAK_SPEND_DAY -> "Peak spend day"
+    InsightType.SPEND_SPLIT -> "Spend timing"
 }
 
 private fun breakdownTitle(type: InsightType): String = when (type) {
@@ -720,12 +766,24 @@ private fun breakdownTitle(type: InsightType): String = when (type) {
     InsightType.PACE -> "Spend pattern"
     InsightType.RECURRING_RATIO -> "Recurring merchants"
     InsightType.SAVINGS_WIN -> "Savings breakdown"
+    InsightType.TOP_CATEGORIES -> "Top categories"
+    InsightType.LARGEST_EXPENSE -> "Expense context"
+    InsightType.WEEKEND_SPEND -> "Daily averages"
+    InsightType.INCOME_VS_EXPENSE -> "Money flow"
+    InsightType.INVESTMENT_RATIO -> "Top investments"
+    InsightType.NEW_MERCHANTS -> "New merchants"
+    InsightType.MERCHANT_LOYALTY -> "Visit frequency"
+    InsightType.TRANSACTION_FREQUENCY -> "Activity"
+    InsightType.MONTHLY_COMPARISON -> "Period comparison"
+    InsightType.ZERO_SPEND_DAYS -> "Activity"
+    InsightType.PEAK_SPEND_DAY -> "Spending by weekday"
+    InsightType.SPEND_SPLIT -> "Period split"
 }
 
 private data class BreakdownItem(val label: String, val valueLabel: String, val amountLabel: String, val metric: Float)
 
 private fun parseBreakdownItems(topItems: String, type: InsightType): List<BreakdownItem> {
-    return topItems.split("|").take(5).mapNotNull { raw ->
+    return topItems.split("|").take(7).mapNotNull { raw ->
         val parts = raw.split(":")
         if (parts.size < 2) return@mapNotNull null
         val label = parts[0]
@@ -735,20 +793,18 @@ private fun parseBreakdownItems(topItems: String, type: InsightType): List<Break
                 // Format: "Category:Percentage%:₹Amount"
                 val currentAmount = parts.getOrNull(2)?.stripToFloat() ?: 0f
                 val percentage = parts[1].stripToFloat()
-                // Calculate previous month amount and growth delta
                 val previousAmount = if (percentage > 0) currentAmount / (1 + percentage / 100) else currentAmount
                 val delta = currentAmount - previousAmount
                 val sign = if (delta >= 0) "+" else ""
                 "${sign}₹${delta.toInt()}"
             }
-            InsightType.SAVINGS_WIN -> {
-                // Format: "Category:↓percentage%:₹Amount" (amount is already the delta)
-                parts.getOrNull(2) ?: valueLabel
-            }
+            InsightType.SAVINGS_WIN -> parts.getOrNull(2) ?: valueLabel
+            InsightType.SPEND_SPLIT -> parts.getOrNull(2) ?: valueLabel
             else -> valueLabel
         }
         val metric: Float = when (type) {
             InsightType.SAVINGS_WIN -> parts.getOrNull(2)?.stripToFloat() ?: 0f
+            InsightType.SPEND_SPLIT -> parts.getOrNull(2)?.stripToFloat() ?: 0f
             else -> parts.getOrNull(1)?.stripToFloat() ?: 0f
         }
         BreakdownItem(label, valueLabel, amountLabel, metric)

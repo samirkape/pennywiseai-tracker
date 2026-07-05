@@ -12,6 +12,7 @@ import com.pennywiseai.tracker.utils.CurrencyFormatter
 import kotlinx.coroutines.flow.first
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.YearMonth
@@ -103,11 +104,22 @@ class ComputeInsightsUseCase @Inject constructor(
 
         return listOfNotNull(
             generatePaceInsight(expenses, anchorMonth, dateRange),
+            generateMonthlyComparisonInsight(expenses, anchorMonth, dateRange, previousDateRange),
             generateTopGrowingCategoryInsight(expenses, anchorMonth, dateRange, previousDateRange),
+            generateTopCategoriesInsight(expenses, anchorMonth, dateRange),
             generateTopMerchantsInsight(expenses, anchorMonth, dateRange),
+            generateLargestExpenseInsight(expenses, anchorMonth, dateRange),
             generateRecurringRatioInsight(expenses, anchorMonth, dateRange),
             generateSavingsWinInsight(expenses, anchorMonth, dateRange, previousDateRange),
-            generateTopCategoriesInsight(expenses, anchorMonth, dateRange)
+            generateWeekendSpendInsight(expenses, anchorMonth, dateRange),
+            generatePeakSpendDayInsight(expenses, anchorMonth, dateRange),
+            generateZeroSpendDaysInsight(expenses, anchorMonth, dateRange),
+            generateNewMerchantsInsight(expenses, anchorMonth, dateRange, previousDateRange),
+            generateMerchantLoyaltyInsight(expenses, anchorMonth, dateRange),
+            generateTransactionFrequencyInsight(expenses, anchorMonth, dateRange, previousDateRange),
+            generateSpendSplitInsight(expenses, anchorMonth, dateRange),
+            generateIncomeVsExpenseInsight(transactions, anchorMonth, dateRange),
+            generateInvestmentRatioInsight(transactions, anchorMonth, dateRange),
         )
     }
 
@@ -166,7 +178,7 @@ class ComputeInsightsUseCase @Inject constructor(
         if (expenses.size < 10) return null
 
         val mean = expenses.sumOf { it.amount }.divide(BigDecimal(expenses.size), 2, RoundingMode.HALF_UP)
-        val threshold = mean.multiply(BigDecimal(5)) // 5x mean is definitely an anomaly
+        val threshold = mean.multiply(BigDecimal(5))
 
         val largeTxn = expenses.firstOrNull { it.amount > threshold } ?: return null
 
@@ -199,26 +211,20 @@ class ComputeInsightsUseCase @Inject constructor(
 
         if (thisMonthExpenses.isEmpty() || lastMonthExpenses.isEmpty()) return null
 
-        // Group by category and sum
         val thisMonthByCategory = thisMonthExpenses.groupingBy { it.category }.fold(BigDecimal.ZERO) { acc, txn -> acc + txn.amount }
         val lastMonthByCategory = lastMonthExpenses.groupingBy { it.category }.fold(BigDecimal.ZERO) { acc, txn -> acc + txn.amount }
 
-        // Find top 5 categories with growth, sorted by growth percentage
         val topGrowingCategories = thisMonthByCategory
             .mapNotNull { (category, thisMonthTotal) ->
                 val lastMonthTotal = lastMonthByCategory[category] ?: BigDecimal.ZERO
                 val growth = if (lastMonthTotal > BigDecimal.ZERO) {
                     ((thisMonthTotal - lastMonthTotal) / lastMonthTotal * BigDecimal(100)).toInt()
                 } else if (thisMonthTotal > BigDecimal.ZERO) {
-                    100 // New category
+                    100
                 } else {
                     0
                 }
-                if (growth > 0) {
-                    Triple(category, growth, thisMonthTotal.toInt())
-                } else {
-                    null
-                }
+                if (growth > 0) Triple(category, growth, thisMonthTotal.toInt()) else null
             }
             .sortedByDescending { it.second }
             .take(5)
@@ -250,10 +256,8 @@ class ComputeInsightsUseCase @Inject constructor(
         if (expenses.size < 5) return null
 
         val thisMonthExpenses = periodExpenses(expenses, dateRange)
-
         if (thisMonthExpenses.isEmpty()) return null
 
-        // Group by merchant and sum, get top 5
         val topMerchants = thisMonthExpenses
             .groupingBy { it.merchantName }
             .fold(BigDecimal.ZERO) { acc, txn -> acc + txn.amount }
@@ -289,10 +293,8 @@ class ComputeInsightsUseCase @Inject constructor(
         if (expenses.size < 5) return null
 
         val thisMonthExpenses = periodExpenses(expenses, dateRange)
-
         if (thisMonthExpenses.isEmpty()) return null
 
-        // Count transactions with same merchant appearing multiple times (simple recurring detection)
         val merchantCounts = thisMonthExpenses.groupingBy { it.merchantName }.eachCount()
         val recurringTransactions = thisMonthExpenses.filter { merchantCounts[it.merchantName] ?: 0 > 1 }
         val recurringMerchants = merchantCounts.filter { it.value > 1 }.toList().sortedByDescending { it.second }.take(5)
@@ -302,11 +304,9 @@ class ComputeInsightsUseCase @Inject constructor(
 
         val recurringPercent = if (totalAmount > BigDecimal.ZERO) {
             (recurringAmount / totalAmount * BigDecimal(100)).toInt()
-        } else {
-            0
-        }
+        } else 0
 
-        if (recurringPercent < 10) return null // Only show if meaningful
+        if (recurringPercent < 10) return null
 
         val recurringData = recurringMerchants.joinToString("|") { "${it.first}:${it.second}x" }
 
@@ -317,9 +317,7 @@ class ComputeInsightsUseCase @Inject constructor(
             primaryValue = "$recurringPercent%",
             secondaryText = "₹${recurringAmount.toInt()} of ₹${totalAmount.toInt()} from ${recurringMerchants.size} merchants",
             confidence = InsightConfidence.MEDIUM,
-            metadata = periodMetadata(dateRange) + mapOf(
-                "topItems" to recurringData
-            )
+            metadata = periodMetadata(dateRange) + mapOf("topItems" to recurringData)
         )
     }
 
@@ -336,21 +334,17 @@ class ComputeInsightsUseCase @Inject constructor(
 
         if (thisMonthExpenses.isEmpty() || lastMonthExpenses.isEmpty()) return null
 
-        // Group by category
         val thisMonthByCategory = thisMonthExpenses.groupingBy { it.category }.fold(BigDecimal.ZERO) { acc, txn -> acc + txn.amount }
         val lastMonthByCategory = lastMonthExpenses.groupingBy { it.category }.fold(BigDecimal.ZERO) { acc, txn -> acc + txn.amount }
 
-        // Find categories with savings (decrease), top 5
         val categoriesWithSavings = thisMonthByCategory
             .mapNotNull { (category, thisMonthTotal) ->
                 val lastMonthTotal = lastMonthByCategory[category] ?: BigDecimal.ZERO
-                val savings = lastMonthTotal - thisMonthTotal // Positive = savings
+                val savings = lastMonthTotal - thisMonthTotal
                 if (savings > BigDecimal.ZERO) {
                     val decreasePercent = (savings / lastMonthTotal * BigDecimal(100)).toInt()
                     Pair(Pair(category, decreasePercent), savings)
-                } else {
-                    null
-                }
+                } else null
             }
             .sortedByDescending { it.second }
             .take(5)
@@ -382,10 +376,8 @@ class ComputeInsightsUseCase @Inject constructor(
         if (expenses.size < 5) return null
 
         val thisMonthExpenses = periodExpenses(expenses, dateRange)
-
         if (thisMonthExpenses.isEmpty()) return null
 
-        // Get top 5 categories by spending
         val topCategories = thisMonthExpenses
             .groupingBy { it.category }
             .fold(BigDecimal.ZERO) { acc, txn -> acc + txn.amount }
@@ -402,7 +394,7 @@ class ComputeInsightsUseCase @Inject constructor(
 
         return SmartInsight(
             id = "top_categories_${anchorMonth.year}_${anchorMonth.monthValue}",
-            type = InsightType.ANOMALY, // Using ANOMALY type as placeholder for top categories
+            type = InsightType.TOP_CATEGORIES,
             title = "Your top categories this period",
             primaryValue = "₹${topCategory.second.toInt()}",
             secondaryText = "${topCategory.first} at $topCategoryPercent% of ₹${totalSpent.toInt()}",
@@ -411,6 +403,404 @@ class ComputeInsightsUseCase @Inject constructor(
                 "category" to topCategory.first,
                 "topItems" to categoriesData
             )
+        )
+    }
+
+    // ─── NEW INSIGHTS ──────────────────────────────────────────────────────────
+
+    private fun generateLargestExpenseInsight(
+        expenses: List<TransactionEntity>,
+        anchorMonth: YearMonth,
+        dateRange: Pair<LocalDate, LocalDate>,
+    ): SmartInsight? {
+        val thisMonthExpenses = periodExpenses(expenses, dateRange)
+        if (thisMonthExpenses.size < 3) return null
+
+        val largest = thisMonthExpenses.maxByOrNull { it.amount } ?: return null
+        val avg = thisMonthExpenses.sumOf { it.amount }
+            .divide(BigDecimal(thisMonthExpenses.size), 2, RoundingMode.HALF_UP)
+
+        if (largest.amount < avg.multiply(BigDecimal(2))) return null
+
+        val timesAvg = largest.amount.divide(avg, 1, RoundingMode.HALF_UP)
+
+        return SmartInsight(
+            id = "largest_expense_${anchorMonth.year}_${anchorMonth.monthValue}",
+            type = InsightType.LARGEST_EXPENSE,
+            title = "Biggest single expense",
+            primaryValue = "₹${largest.amount.toInt()}",
+            secondaryText = "at ${largest.merchantName} — ${timesAvg}x your avg transaction",
+            confidence = InsightConfidence.HIGH,
+            metadata = periodMetadata(dateRange) + mapOf(
+                "merchant" to largest.merchantName,
+                "category" to largest.category
+            )
+        )
+    }
+
+    private fun generateWeekendSpendInsight(
+        expenses: List<TransactionEntity>,
+        anchorMonth: YearMonth,
+        dateRange: Pair<LocalDate, LocalDate>,
+    ): SmartInsight? {
+        val thisMonthExpenses = periodExpenses(expenses, dateRange)
+        if (thisMonthExpenses.size < 6) return null
+
+        val weekendExpenses = thisMonthExpenses.filter {
+            it.dateTime.dayOfWeek == DayOfWeek.SATURDAY || it.dateTime.dayOfWeek == DayOfWeek.SUNDAY
+        }
+        val weekdayExpenses = thisMonthExpenses.filter {
+            it.dateTime.dayOfWeek != DayOfWeek.SATURDAY && it.dateTime.dayOfWeek != DayOfWeek.SUNDAY
+        }
+        if (weekendExpenses.isEmpty() || weekdayExpenses.isEmpty()) return null
+
+        var weekendDays = 0L; var weekdayDays = 0L
+        var cur = dateRange.first
+        while (!cur.isAfter(dateRange.second)) {
+            if (cur.dayOfWeek == DayOfWeek.SATURDAY || cur.dayOfWeek == DayOfWeek.SUNDAY) weekendDays++
+            else weekdayDays++
+            cur = cur.plusDays(1)
+        }
+
+        val weekendDailyAvg = weekendExpenses.sumOf { it.amount }
+            .divide(BigDecimal(weekendDays.coerceAtLeast(1)), 2, RoundingMode.HALF_UP)
+        val weekdayDailyAvg = weekdayExpenses.sumOf { it.amount }
+            .divide(BigDecimal(weekdayDays.coerceAtLeast(1)), 2, RoundingMode.HALF_UP)
+
+        if (weekdayDailyAvg == BigDecimal.ZERO) return null
+
+        val diff = ((weekendDailyAvg - weekdayDailyAvg) / weekdayDailyAvg * BigDecimal(100)).toInt()
+        val absDiff = Math.abs(diff)
+        if (absDiff < 10) return null
+
+        val direction = if (diff > 0) "higher on weekends" else "lower on weekends"
+        val dayItems = "Weekends:₹${weekendDailyAvg.toInt()}|Weekdays:₹${weekdayDailyAvg.toInt()}"
+
+        return SmartInsight(
+            id = "weekend_spend_${anchorMonth.year}_${anchorMonth.monthValue}",
+            type = InsightType.WEEKEND_SPEND,
+            title = "Weekend vs weekday spending",
+            primaryValue = "$absDiff% $direction",
+            secondaryText = "Weekend ₹${weekendDailyAvg.toInt()}/day vs ₹${weekdayDailyAvg.toInt()}/day weekdays",
+            confidence = InsightConfidence.MEDIUM,
+            metadata = periodMetadata(dateRange) + mapOf("topItems" to dayItems)
+        )
+    }
+
+    private fun generatePeakSpendDayInsight(
+        expenses: List<TransactionEntity>,
+        anchorMonth: YearMonth,
+        dateRange: Pair<LocalDate, LocalDate>,
+    ): SmartInsight? {
+        val thisMonthExpenses = periodExpenses(expenses, dateRange)
+        if (thisMonthExpenses.size < 7) return null
+
+        val byDayOfWeek = thisMonthExpenses
+            .groupingBy { it.dateTime.dayOfWeek }
+            .fold(BigDecimal.ZERO) { acc, txn -> acc + txn.amount }
+            .toList()
+            .sortedByDescending { it.second }
+
+        if (byDayOfWeek.isEmpty()) return null
+
+        val peakDay = byDayOfWeek.first()
+        val lowestDay = byDayOfWeek.last()
+
+        val dayNames = byDayOfWeek.joinToString("|") {
+            val name = it.first.name.lowercase().replaceFirstChar { c -> c.uppercase() }.take(3)
+            "$name:₹${it.second.toInt()}"
+        }
+        val peakDayName = peakDay.first.name.lowercase().replaceFirstChar { it.uppercase() }
+        val lowestDayName = lowestDay.first.name.lowercase().replaceFirstChar { it.uppercase() }
+
+        return SmartInsight(
+            id = "peak_spend_day_${anchorMonth.year}_${anchorMonth.monthValue}",
+            type = InsightType.PEAK_SPEND_DAY,
+            title = "Peak spending day of week",
+            primaryValue = peakDayName,
+            secondaryText = "₹${peakDay.second.toInt()} total — lowest on $lowestDayName",
+            confidence = InsightConfidence.MEDIUM,
+            metadata = periodMetadata(dateRange) + mapOf("topItems" to dayNames)
+        )
+    }
+
+    private fun generateZeroSpendDaysInsight(
+        expenses: List<TransactionEntity>,
+        anchorMonth: YearMonth,
+        dateRange: Pair<LocalDate, LocalDate>,
+    ): SmartInsight? {
+        val thisMonthExpenses = periodExpenses(expenses, dateRange)
+        if (thisMonthExpenses.isEmpty()) return null
+
+        val today = LocalDate.now()
+        val effectiveEnd = if (today.isBefore(dateRange.second)) today else dateRange.second
+        val totalDays = ChronoUnit.DAYS.between(dateRange.first, effectiveEnd) + 1
+        if (totalDays < 7) return null
+
+        val daysWithSpend = thisMonthExpenses.map { it.dateTime.toLocalDate() }.toSet().size
+        val zeroSpendDays = (totalDays - daysWithSpend).toInt()
+        if (zeroSpendDays == 0) return null
+
+        val zeroSpendPercent = (zeroSpendDays.toFloat() / totalDays * 100).toInt()
+
+        return SmartInsight(
+            id = "zero_spend_days_${anchorMonth.year}_${anchorMonth.monthValue}",
+            type = InsightType.ZERO_SPEND_DAYS,
+            title = "No-spend days this period",
+            primaryValue = "$zeroSpendDays days",
+            secondaryText = "$zeroSpendPercent% of the period — $daysWithSpend days with spending",
+            confidence = InsightConfidence.MEDIUM,
+            metadata = periodMetadata(dateRange)
+        )
+    }
+
+    private fun generateNewMerchantsInsight(
+        expenses: List<TransactionEntity>,
+        anchorMonth: YearMonth,
+        dateRange: Pair<LocalDate, LocalDate>,
+        previousDateRange: Pair<LocalDate, LocalDate>,
+    ): SmartInsight? {
+        val thisMonthExpenses = periodExpenses(expenses, dateRange)
+        val lastMonthExpenses = periodExpenses(expenses, previousDateRange)
+        if (thisMonthExpenses.isEmpty()) return null
+
+        val previousMerchants = lastMonthExpenses.map { it.merchantName }.toSet()
+        val newMerchants = thisMonthExpenses
+            .filter { it.merchantName !in previousMerchants }
+            .groupingBy { it.merchantName }
+            .fold(BigDecimal.ZERO) { acc, txn -> acc + txn.amount }
+            .toList()
+            .sortedByDescending { it.second }
+
+        if (newMerchants.isEmpty()) return null
+
+        val topNew = newMerchants.take(5)
+        val merchantData = topNew.joinToString("|") { "${it.first}:₹${it.second.toInt()}" }
+        val totalNewSpend = newMerchants.sumOf { it.second }
+
+        return SmartInsight(
+            id = "new_merchants_${anchorMonth.year}_${anchorMonth.monthValue}",
+            type = InsightType.NEW_MERCHANTS,
+            title = "New merchants discovered",
+            primaryValue = "${newMerchants.size} new",
+            secondaryText = "₹${totalNewSpend.toInt()} at places not visited last period",
+            confidence = InsightConfidence.HIGH,
+            metadata = periodMetadata(dateRange) + mapOf("topItems" to merchantData)
+        )
+    }
+
+    private fun generateMerchantLoyaltyInsight(
+        expenses: List<TransactionEntity>,
+        anchorMonth: YearMonth,
+        dateRange: Pair<LocalDate, LocalDate>,
+    ): SmartInsight? {
+        val thisMonthExpenses = periodExpenses(expenses, dateRange)
+        if (thisMonthExpenses.size < 5) return null
+
+        val merchantCounts = thisMonthExpenses
+            .groupingBy { it.merchantName }
+            .eachCount()
+            .toList()
+            .sortedByDescending { it.second }
+            .take(5)
+
+        val topMerchant = merchantCounts.firstOrNull() ?: return null
+        if (topMerchant.second < 3) return null
+
+        val merchantAmounts = thisMonthExpenses
+            .filter { it.merchantName == topMerchant.first }
+            .sumOf { it.amount }
+
+        val countData = merchantCounts.joinToString("|") { "${it.first}:${it.second}x" }
+
+        return SmartInsight(
+            id = "merchant_loyalty_${anchorMonth.year}_${anchorMonth.monthValue}",
+            type = InsightType.MERCHANT_LOYALTY,
+            title = "Your most visited merchant",
+            primaryValue = "${topMerchant.second} visits",
+            secondaryText = "${topMerchant.first} — ₹${merchantAmounts.toInt()} total this period",
+            confidence = InsightConfidence.HIGH,
+            metadata = periodMetadata(dateRange) + mapOf(
+                "merchant" to topMerchant.first,
+                "topItems" to countData
+            )
+        )
+    }
+
+    private fun generateTransactionFrequencyInsight(
+        expenses: List<TransactionEntity>,
+        anchorMonth: YearMonth,
+        dateRange: Pair<LocalDate, LocalDate>,
+        previousDateRange: Pair<LocalDate, LocalDate>,
+    ): SmartInsight? {
+        val thisMonthExpenses = periodExpenses(expenses, dateRange)
+        val lastMonthExpenses = periodExpenses(expenses, previousDateRange)
+        if (thisMonthExpenses.size < 5) return null
+
+        val thisDays = ChronoUnit.DAYS.between(dateRange.first, dateRange.second) + 1
+        val lastDays = ChronoUnit.DAYS.between(previousDateRange.first, previousDateRange.second) + 1
+
+        val thisFreq = thisMonthExpenses.size.toFloat() / thisDays
+        val lastFreq = if (lastMonthExpenses.isNotEmpty()) lastMonthExpenses.size.toFloat() / lastDays else 0f
+
+        val change = if (lastFreq > 0) ((thisFreq - lastFreq) / lastFreq * 100).toInt() else 0
+        val freqStr = String.format("%.1f", thisFreq)
+        val absChange = Math.abs(change)
+        val direction = if (change > 0) "↑" else "↓"
+
+        return SmartInsight(
+            id = "txn_frequency_${anchorMonth.year}_${anchorMonth.monthValue}",
+            type = InsightType.TRANSACTION_FREQUENCY,
+            title = "Transaction frequency",
+            primaryValue = "$freqStr txns/day",
+            secondaryText = if (absChange > 5 && lastFreq > 0)
+                "$direction$absChange% vs last period • ${thisMonthExpenses.size} total transactions"
+            else
+                "${thisMonthExpenses.size} total transactions this period",
+            confidence = InsightConfidence.MEDIUM,
+            metadata = periodMetadata(dateRange)
+        )
+    }
+
+    private fun generateSpendSplitInsight(
+        expenses: List<TransactionEntity>,
+        anchorMonth: YearMonth,
+        dateRange: Pair<LocalDate, LocalDate>,
+    ): SmartInsight? {
+        val thisMonthExpenses = periodExpenses(expenses, dateRange)
+        if (thisMonthExpenses.size < 8) return null
+
+        val midDay = dateRange.first.plusDays(ChronoUnit.DAYS.between(dateRange.first, dateRange.second) / 2)
+        val firstHalf = thisMonthExpenses.filter { !it.dateTime.toLocalDate().isAfter(midDay) }
+        val secondHalf = thisMonthExpenses.filter { it.dateTime.toLocalDate().isAfter(midDay) }
+
+        if (firstHalf.isEmpty() || secondHalf.isEmpty()) return null
+
+        val firstHalfTotal = firstHalf.sumOf { it.amount }
+        val secondHalfTotal = secondHalf.sumOf { it.amount }
+        val totalSpend = firstHalfTotal + secondHalfTotal
+        if (totalSpend == BigDecimal.ZERO) return null
+
+        val firstPercent = (firstHalfTotal / totalSpend * BigDecimal(100)).toInt()
+        val secondPercent = 100 - firstPercent
+        val bigger = if (firstPercent > secondPercent) "first half" else "second half"
+        val biggerPct = maxOf(firstPercent, secondPercent)
+
+        val splitData = "First half:$firstPercent%:₹${firstHalfTotal.toInt()}|Second half:$secondPercent%:₹${secondHalfTotal.toInt()}"
+
+        return SmartInsight(
+            id = "spend_split_${anchorMonth.year}_${anchorMonth.monthValue}",
+            type = InsightType.SPEND_SPLIT,
+            title = "Spending distribution",
+            primaryValue = "$biggerPct% in $bigger",
+            secondaryText = "₹${firstHalfTotal.toInt()} first half vs ₹${secondHalfTotal.toInt()} second half",
+            confidence = InsightConfidence.MEDIUM,
+            metadata = periodMetadata(dateRange) + mapOf("topItems" to splitData)
+        )
+    }
+
+    private fun generateMonthlyComparisonInsight(
+        expenses: List<TransactionEntity>,
+        anchorMonth: YearMonth,
+        dateRange: Pair<LocalDate, LocalDate>,
+        previousDateRange: Pair<LocalDate, LocalDate>,
+    ): SmartInsight? {
+        val thisMonthExpenses = periodExpenses(expenses, dateRange)
+        val lastMonthExpenses = periodExpenses(expenses, previousDateRange)
+        if (thisMonthExpenses.isEmpty() || lastMonthExpenses.isEmpty()) return null
+
+        val thisTotal = thisMonthExpenses.sumOf { it.amount }
+        val lastTotal = lastMonthExpenses.sumOf { it.amount }
+        if (lastTotal == BigDecimal.ZERO) return null
+
+        val change = ((thisTotal - lastTotal) / lastTotal * BigDecimal(100)).setScale(1, RoundingMode.HALF_UP)
+        val isIncrease = thisTotal > lastTotal
+        val changeStr = "${if (isIncrease) "↑" else "↓"}${change.abs()}%"
+
+        return SmartInsight(
+            id = "monthly_comparison_${anchorMonth.year}_${anchorMonth.monthValue}",
+            type = InsightType.MONTHLY_COMPARISON,
+            title = "Month-over-month total",
+            primaryValue = changeStr,
+            secondaryText = "₹${thisTotal.toInt()} this period vs ₹${lastTotal.toInt()} last period",
+            confidence = InsightConfidence.HIGH,
+            metadata = periodMetadata(dateRange)
+        )
+    }
+
+    private fun generateIncomeVsExpenseInsight(
+        transactions: List<TransactionEntity>,
+        anchorMonth: YearMonth,
+        dateRange: Pair<LocalDate, LocalDate>,
+    ): SmartInsight? {
+        val start = dateRange.first.atStartOfDay()
+        val endExclusive = dateRange.second.plusDays(1).atStartOfDay()
+        val periodTxns = transactions.filter { !it.dateTime.isBefore(start) && it.dateTime.isBefore(endExclusive) }
+
+        val income = periodTxns.filter { it.transactionType == TransactionType.INCOME }.sumOf { it.amount }
+        val expenseTotal = periodTxns.filter {
+            it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT
+        }.sumOf { it.amount }
+
+        if (income == BigDecimal.ZERO) return null
+
+        val savings = income - expenseTotal
+        val savingsPercent = (savings / income * BigDecimal(100)).toInt()
+
+        val breakdown = "Income:₹${income.toInt()}|Expenses:₹${expenseTotal.toInt()}|Saved:₹${savings.toInt().coerceAtLeast(0)}"
+
+        return SmartInsight(
+            id = "income_vs_expense_${anchorMonth.year}_${anchorMonth.monthValue}",
+            type = InsightType.INCOME_VS_EXPENSE,
+            title = if (savings >= BigDecimal.ZERO) "You're saving this period" else "Spending exceeds income",
+            primaryValue = if (savings >= BigDecimal.ZERO) "Saved ₹${savings.toInt()}" else "Over by ₹${(-savings).toInt()}",
+            secondaryText = if (savingsPercent >= 0) "$savingsPercent% of income saved" else "₹${income.toInt()} income, ₹${expenseTotal.toInt()} spent",
+            confidence = InsightConfidence.HIGH,
+            metadata = periodMetadata(dateRange) + mapOf("topItems" to breakdown)
+        )
+    }
+
+    private fun generateInvestmentRatioInsight(
+        transactions: List<TransactionEntity>,
+        anchorMonth: YearMonth,
+        dateRange: Pair<LocalDate, LocalDate>,
+    ): SmartInsight? {
+        val start = dateRange.first.atStartOfDay()
+        val endExclusive = dateRange.second.plusDays(1).atStartOfDay()
+        val periodTxns = transactions.filter { !it.dateTime.isBefore(start) && it.dateTime.isBefore(endExclusive) }
+
+        val investments = periodTxns.filter { it.transactionType == TransactionType.INVESTMENT }
+        if (investments.isEmpty()) return null
+
+        val investmentTotal = investments.sumOf { it.amount }
+        val outflows = periodTxns.filter {
+            it.transactionType == TransactionType.EXPENSE ||
+            it.transactionType == TransactionType.CREDIT ||
+            it.transactionType == TransactionType.INVESTMENT
+        }.sumOf { it.amount }
+
+        if (outflows == BigDecimal.ZERO) return null
+
+        val investPercent = (investmentTotal / outflows * BigDecimal(100)).toInt()
+        val uniqueFunds = investments.distinctBy { it.merchantName }.size
+
+        val topInvestments = investments
+            .groupingBy { it.merchantName }
+            .fold(BigDecimal.ZERO) { acc, txn -> acc + txn.amount }
+            .toList()
+            .sortedByDescending { it.second }
+            .take(5)
+
+        val investData = topInvestments.joinToString("|") { "${it.first}:₹${it.second.toInt()}" }
+
+        return SmartInsight(
+            id = "investment_ratio_${anchorMonth.year}_${anchorMonth.monthValue}",
+            type = InsightType.INVESTMENT_RATIO,
+            title = "Investment allocation",
+            primaryValue = "$investPercent% invested",
+            secondaryText = "₹${investmentTotal.toInt()} across $uniqueFunds funds/instruments",
+            confidence = InsightConfidence.HIGH,
+            metadata = periodMetadata(dateRange) + mapOf("topItems" to investData)
         )
     }
 }

@@ -1192,7 +1192,7 @@ class TransactionsViewModel @Inject constructor(
 
         // By default, hide transactions excluded from tracking; show them only when opted in.
         // "Excluded" type filter needs the full list so excluded-only rows are visible.
-        val excludedBaseFlow = if (includeExcluded || typeFilter == TransactionTypeFilter.EXCLUDED) {
+        val excludedBaseFlow = if (includeExcluded || typeFilter == TransactionTypeFilter.EXCLUDED || searchQuery.isNotBlank()) {
             baseFlow
         } else {
             baseFlow.map { txs -> txs.filter { !it.isExcludedFromTracking } }
