@@ -18,8 +18,8 @@ A web-based tool for testing and reporting SMS parsing issues for the PennyWise 
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/sarim2000/pennywiseai-tracker.git
-   cd pennywiseai-tracker/pennywise-web/server
+   git clone https://github.com/sarim2000/spendly-tracker.git
+   cd spendly-tracker/pennywise-web/server
    ```
 
 2. **Set up environment variables**

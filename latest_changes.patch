@@ -1,0 +1,1218 @@
+Subject: [PATCH] Changes
+---
+Index: .idea/codeStyles/Project.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/codeStyles/Project.xml b/.idea/codeStyles/Project.xml
+--- a/.idea/codeStyles/Project.xml	(revision ea8e7b2ad0c50763c9ce2bebff6a3f3b94a2cc94)
++++ b/.idea/codeStyles/Project.xml	(date 1781445067929)
+@@ -98,7 +98,6 @@
+                   <XML_NAMESPACE>http://schemas.android.com/apk/res/android</XML_NAMESPACE>
+                 </AND>
+               </match>
+-              <order>ANDROID_ATTRIBUTE_ORDER</order>
+             </rule>
+           </section>
+           <section>
+Index: app/src/main/java/com/pennywiseai/tracker/data/backup/BackupModels.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/java/com/pennywiseai/tracker/data/backup/BackupModels.kt b/app/src/main/java/com/pennywiseai/tracker/data/backup/BackupModels.kt
+--- a/app/src/main/java/com/pennywiseai/tracker/data/backup/BackupModels.kt	(revision ea8e7b2ad0c50763c9ce2bebff6a3f3b94a2cc94)
++++ b/app/src/main/java/com/pennywiseai/tracker/data/backup/BackupModels.kt	(date 1781450987828)
+@@ -89,7 +89,13 @@
+     
+     @SerializedName("total_receipts")
+     val totalReceipts: Int = 0,
+-    
++
++    @SerializedName("total_loans")
++    val totalLoans: Int = 0,
++
++    @SerializedName("total_transaction_groups")
++    val totalTransactionGroups: Int = 0,
++
+     @SerializedName("date_range")
+     val dateRange: DateRange?
+ )
+@@ -161,7 +167,13 @@
+     val salaryMonthOverrides: List<SalaryMonthOverrideEntity> = emptyList(),
+     
+     @SerializedName("transaction_receipts")
+-    val transactionReceipts: List<TransactionReceiptEntity> = emptyList()
++    val transactionReceipts: List<TransactionReceiptEntity> = emptyList(),
++
++    @SerializedName("loans")
++    val loans: List<LoanEntity> = emptyList(),
++
++    @SerializedName("transaction_groups")
++    val transactionGroups: List<TransactionGroupEntity> = emptyList()
+ )
+ 
+ /**
+@@ -178,7 +190,10 @@
+     val developer: DeveloperPreferences,
+     
+     @SerializedName("app")
+-    val app: AppPreferences
++    val app: AppPreferences,
++
++    @SerializedName("security")
++    val security: SecurityPreferences = SecurityPreferences()
+ )
+ 
+ /**
+@@ -189,7 +204,34 @@
+     val isDarkThemeEnabled: Boolean?,
+     
+     @SerializedName("is_dynamic_color_enabled")
+-    val isDynamicColorEnabled: Boolean
++    val isDynamicColorEnabled: Boolean,
++
++    @SerializedName("theme_style")
++    val themeStyle: String? = null,
++
++    @SerializedName("accent_color")
++    val accentColor: String? = null,
++
++    @SerializedName("is_amoled_mode")
++    val isAmoledMode: Boolean = false,
++
++    @SerializedName("app_font")
++    val appFont: String? = null,
++
++    @SerializedName("blur_effects_enabled")
++    val blurEffectsEnabled: Boolean = true,
++
++    @SerializedName("nav_bar_style")
++    val navBarStyle: String? = null,
++
++    @SerializedName("analytics_chart_type")
++    val analyticsChartType: String? = null,
++
++    @SerializedName("compact_analytics_cards")
++    val compactAnalyticsCards: Boolean = true,
++
++    @SerializedName("cover_style")
++    val coverStyle: String? = null
+ )
+ 
+ /**
+@@ -201,7 +243,10 @@
+     
+     @SerializedName("sms_scan_months")
+     val smsScanMonths: Int,
+-    
++
++    @SerializedName("sms_scan_all_time")
++    val smsScanAllTime: Boolean = true,
++
+     @SerializedName("last_scan_timestamp")
+     val lastScanTimestamp: Long?,
+     
+@@ -234,7 +279,63 @@
+     val hasShownReviewPrompt: Boolean,
+     
+     @SerializedName("last_review_prompt_time")
+-    val lastReviewPromptTime: Long?
++    val lastReviewPromptTime: Long?,
++
++    @SerializedName("base_currency")
++    val baseCurrency: String? = null,
++
++    @SerializedName("unified_currency_mode")
++    val unifiedCurrencyMode: Boolean = false,
++
++    @SerializedName("display_currency")
++    val displayCurrency: String? = null,
++
++    @SerializedName("monthly_budget_limit")
++    val monthlyBudgetLimit: String? = null,
++
++    @SerializedName("balance_hidden")
++    val balanceHidden: Boolean = false,
++
++    @SerializedName("user_name")
++    val userName: String? = null,
++
++    @SerializedName("profile_image_uri")
++    val profileImageUri: String? = null,
++
++    @SerializedName("profile_background_color")
++    val profileBackgroundColor: Int = 0,
++
++    @SerializedName("has_completed_onboarding")
++    val hasCompletedOnboarding: Boolean = false,
++
++    @SerializedName("main_account_key")
++    val mainAccountKey: String? = null,
++
++    @SerializedName("month_start_day")
++    val monthStartDay: Int = 1,
++
++    @SerializedName("use_financial_month")
++    val useFinancialMonth: Boolean = true,
++
++    @SerializedName("use_fixed_budget_period_end")
++    val useFixedBudgetPeriodEnd: Boolean = false,
++
++    @SerializedName("budget_period_end_day")
++    val budgetPeriodEndDay: Int = 31,
++
++    @SerializedName("dismissed_salary_suggestions")
++    val dismissedSalarySuggestions: String? = null
++)
++
++/**
++ * Security-related preferences
++ */
++data class SecurityPreferences(
++    @SerializedName("app_lock_enabled")
++    val appLockEnabled: Boolean = false,
++
++    @SerializedName("app_lock_timeout_minutes")
++    val appLockTimeoutMinutes: Int = 1
+ )
+ 
+ /**
+Index: app/src/main/java/com/pennywiseai/tracker/data/database/dao/LoanDao.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/java/com/pennywiseai/tracker/data/database/dao/LoanDao.kt b/app/src/main/java/com/pennywiseai/tracker/data/database/dao/LoanDao.kt
+--- a/app/src/main/java/com/pennywiseai/tracker/data/database/dao/LoanDao.kt	(revision ea8e7b2ad0c50763c9ce2bebff6a3f3b94a2cc94)
++++ b/app/src/main/java/com/pennywiseai/tracker/data/database/dao/LoanDao.kt	(date 1781450939315)
+@@ -13,6 +13,9 @@
+     @Insert
+     suspend fun insertLoan(loan: LoanEntity): Long
+ 
++    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
++    suspend fun insertLoanForRestore(loan: LoanEntity): Long
++
+     @Update
+     suspend fun updateLoan(loan: LoanEntity)
+ 
+Index: app/src/main/java/com/pennywiseai/tracker/data/database/dao/TransactionGroupDao.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/java/com/pennywiseai/tracker/data/database/dao/TransactionGroupDao.kt b/app/src/main/java/com/pennywiseai/tracker/data/database/dao/TransactionGroupDao.kt
+--- a/app/src/main/java/com/pennywiseai/tracker/data/database/dao/TransactionGroupDao.kt	(revision ea8e7b2ad0c50763c9ce2bebff6a3f3b94a2cc94)
++++ b/app/src/main/java/com/pennywiseai/tracker/data/database/dao/TransactionGroupDao.kt	(date 1781450942760)
+@@ -12,6 +12,9 @@
+     @Insert
+     suspend fun insertGroup(group: TransactionGroupEntity): Long
+ 
++    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
++    suspend fun insertGroupForRestore(group: TransactionGroupEntity): Long
++
+     @Update
+     suspend fun updateGroup(group: TransactionGroupEntity)
+ 
+Index: .idea/vcs.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/vcs.xml b/.idea/vcs.xml
+--- a/.idea/vcs.xml	(revision ea8e7b2ad0c50763c9ce2bebff6a3f3b94a2cc94)
++++ b/.idea/vcs.xml	(date 1781495566148)
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <project version="4">
+   <component name="VcsDirectoryMappings">
+-    <mapping directory="$PROJECT_DIR$" vcs="Git" />
++    <mapping directory="" vcs="Git" />
+   </component>
+ </project>
+\ No newline at end of file
+Index: .idea/misc.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/misc.xml b/.idea/misc.xml
+--- a/.idea/misc.xml	(revision ea8e7b2ad0c50763c9ce2bebff6a3f3b94a2cc94)
++++ b/.idea/misc.xml	(date 1781495590750)
+@@ -1,6 +1,7 @@
++<?xml version="1.0" encoding="UTF-8"?>
+ <project version="4">
+   <component name="ExternalStorageConfigurationManager" enabled="true" />
+-  <component name="ProjectRootManager" version="2" languageLevel="JDK_21" default="true" project-jdk-name="jbr-21" project-jdk-type="JavaSDK">
++  <component name="ProjectRootManager" version="2" languageLevel="JDK_21" project-jdk-name="jbr-21" project-jdk-type="JavaSDK">
+     <output url="file://$PROJECT_DIR$/build/classes" />
+   </component>
+   <component name="ProjectType">
+Index: app/src/main/java/com/pennywiseai/tracker/presentation/home/HomeViewModel.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/java/com/pennywiseai/tracker/presentation/home/HomeViewModel.kt b/app/src/main/java/com/pennywiseai/tracker/presentation/home/HomeViewModel.kt
+--- a/app/src/main/java/com/pennywiseai/tracker/presentation/home/HomeViewModel.kt	(revision ea8e7b2ad0c50763c9ce2bebff6a3f3b94a2cc94)
++++ b/app/src/main/java/com/pennywiseai/tracker/presentation/home/HomeViewModel.kt	(date 1781447422672)
+@@ -27,6 +27,7 @@
+ import com.pennywiseai.tracker.data.database.entity.LoanEntity
+ import com.pennywiseai.tracker.data.database.entity.TransactionType
+ import com.pennywiseai.tracker.data.repository.LoanRepository
++import com.pennywiseai.tracker.data.repository.BudgetRepository
+ import com.pennywiseai.tracker.data.repository.SubscriptionRepository
+ import com.pennywiseai.tracker.data.repository.TransactionGroupRepository
+ import com.pennywiseai.tracker.data.repository.SalaryMonthOverrideRepository
+@@ -67,6 +68,7 @@
+     private val transactionRepository: TransactionRepository,
+     private val transactionGroupRepository: TransactionGroupRepository,
+     private val subscriptionRepository: SubscriptionRepository,
++    private val budgetRepository: BudgetRepository,
+     private val accountBalanceRepository: AccountBalanceRepository,
+     private val loanRepository: LoanRepository,
+     private val llmRepository: LlmRepository,
+@@ -852,6 +854,86 @@
+                 _uiState.value = _uiState.value.copy(activeSubscriptionCount = list.size)
+             }
+         }
++
++        // Load budget progress for hero card
++        launch {
++            budgetRepository.getCurrentBudgets()
++                .flatMapLatest { budgets ->
++                    val budget = budgets.firstOrNull { it.includeAllCategories } ?: budgets.firstOrNull()
++                    if (budget == null) {
++                        flowOf(null)
++                    } else {
++                        budgetRepository.getBudgetSpending(budget).map { spending -> budget to spending }
++                    }
++                }
++                .collect { pair ->
++                    if (pair == null) {
++                        _uiState.value = _uiState.value.copy(hasBudget = false)
++                    } else {
++                        val (budget, spending) = pair
++                        val isOver = spending.remaining < BigDecimal.ZERO
++                        _uiState.value = _uiState.value.copy(
++                            hasBudget = true,
++                            monthBudgetLimit = budget.limitAmount,
++                            monthBudgetRemaining = spending.remaining,
++                            overBudgetCategory = if (isOver) budget.name else null,
++                            overBudgetSpent = spending.totalSpent,
++                            overBudgetLimit = budget.limitAmount,
++                        )
++                    }
++                }
++        }
++
++        // Load upcoming subscription (nearest renewing within 7 days)
++        launch {
++            subscriptionRepository.getUpcomingSubscriptions(7).collect { upcoming ->
++                val today = LocalDate.now()
++                val nearest = upcoming
++                    .filter { it.nextPaymentDate != null && !it.nextPaymentDate!!.isBefore(today) }
++                    .minByOrNull { it.nextPaymentDate!! }
++                val daysAway = nearest?.nextPaymentDate?.let {
++                    java.time.temporal.ChronoUnit.DAYS.between(today, it).toInt().coerceAtLeast(0)
++                } ?: 0
++                _uiState.value = _uiState.value.copy(
++                    upcomingSubscription = nearest,
++                    upcomingSubscriptionDaysAway = daysAway,
++                )
++            }
++        }
++
++        // Load weekly spend bar chart data and nudge insight
++        launch {
++            val monday = now.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
++            val lastMonday = monday.minusWeeks(1)
++            val lastSunday = monday.minusDays(1)
++            combine(
++                dailySpendingTotalsFlow(monday, now),
++                dailySpendingTotalsFlow(lastMonday, lastSunday),
++            ) { thisWeek, lastWeek -> thisWeek to lastWeek }
++                .collect { (thisWeek, lastWeek) ->
++                    val weekTotal = thisWeek.values.fold(BigDecimal.ZERO) { a, b -> a + b }
++                    val lastWeekTotal = lastWeek.values.fold(BigDecimal.ZERO) { a, b -> a + b }
++                    val delta = if (lastWeekTotal > BigDecimal.ZERO) {
++                        ((weekTotal - lastWeekTotal).toDouble() / lastWeekTotal.toDouble() * 100).toInt()
++                    } else 0
++                    val barData = (0..6).map { i ->
++                        val day = monday.plusDays(i.toLong())
++                        if (!day.isAfter(now)) thisWeek[day] ?: BigDecimal.ZERO else BigDecimal.ZERO
++                    }
++                    val daysLeftInMonth = now.lengthOfMonth() - now.dayOfMonth
++                    val nudge: String? = when {
++                        delta > 30 -> "Your spending this week is $delta% higher than last week. $daysLeftInMonth days remain in the month."
++                        delta > 15 -> "You're trending higher than last week. Consider reviewing recent expenses."
++                        else -> null
++                    }
++                    _uiState.value = _uiState.value.copy(
++                        weeklySpendTotal = weekTotal,
++                        weeklySpendDeltaPercent = delta,
++                        weeklyBarData = barData,
++                        nudgeInsight = nudge,
++                    )
++                }
++        }
+         } // end dataLoadingJob
+     }
+     
+@@ -1598,6 +1680,22 @@
+     val topCategorySubLabel: String = "",
+     val dailyAverageLabel: String = "",
+     val paceLabel: String = "",
++    // Budget progress (hero card)
++    val hasBudget: Boolean = false,
++    val monthBudgetLimit: BigDecimal = BigDecimal.ZERO,
++    val monthBudgetRemaining: BigDecimal = BigDecimal.ZERO,
++    val overBudgetCategory: String? = null,
++    val overBudgetSpent: BigDecimal = BigDecimal.ZERO,
++    val overBudgetLimit: BigDecimal = BigDecimal.ZERO,
++    // Upcoming subscription
++    val upcomingSubscription: com.pennywiseai.tracker.data.database.entity.SubscriptionEntity? = null,
++    val upcomingSubscriptionDaysAway: Int = 0,
++    // Weekly spend chart
++    val weeklySpendTotal: BigDecimal = BigDecimal.ZERO,
++    val weeklySpendDeltaPercent: Int = 0,
++    val weeklyBarData: List<BigDecimal> = emptyList(),
++    // Behavioral nudge
++    val nudgeInsight: String? = null,
+ )
+ 
+ data class LoanSummary(
+Index: app/src/main/java/com/pennywiseai/tracker/presentation/home/HomeScreen.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/java/com/pennywiseai/tracker/presentation/home/HomeScreen.kt b/app/src/main/java/com/pennywiseai/tracker/presentation/home/HomeScreen.kt
+--- a/app/src/main/java/com/pennywiseai/tracker/presentation/home/HomeScreen.kt	(revision ea8e7b2ad0c50763c9ce2bebff6a3f3b94a2cc94)
++++ b/app/src/main/java/com/pennywiseai/tracker/presentation/home/HomeScreen.kt	(date 1781447493738)
+@@ -67,6 +67,12 @@
+ import com.pennywiseai.tracker.ui.components.PayPeriodSalarySuggestionDialog
+ import com.pennywiseai.tracker.ui.components.SmsParsingProgressDialog
+ import com.pennywiseai.tracker.ui.components.cards.GroupCard
++import com.pennywiseai.tracker.ui.components.cards.HomeBehavioralNudgeCard
++import com.pennywiseai.tracker.ui.components.cards.HomeMonthSummaryCard
++import com.pennywiseai.tracker.ui.components.cards.HomeOverBudgetAlertCard
++import com.pennywiseai.tracker.ui.components.cards.HomeSavingsGoalCard
++import com.pennywiseai.tracker.ui.components.cards.HomeUpcomingSubscriptionCard
++import com.pennywiseai.tracker.ui.components.cards.HomeWeeklySpendCard
+ import com.pennywiseai.tracker.ui.components.cards.HomeHeroPager
+ import com.pennywiseai.tracker.ui.screens.payperiod.PayPeriodExplorerContent
+ import com.pennywiseai.tracker.ui.components.cards.TransactionItem
+@@ -338,18 +344,13 @@
+             ),
+             verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+         ) {
+-            // 1. Hero spend (0ms)
++            // ── 1. Hero (MonthSummaryCard) ──────────────────────────────
+             item {
+                 val visible = remember { mutableStateOf(hasAnimated) }
+-                LaunchedEffect(Unit) {
+-                    if (!hasAnimated) { delay(0); visible.value = true }
+-                }
++                LaunchedEffect(Unit) { if (!hasAnimated) { delay(0); visible.value = true } }
+                 AnimatedVisibility(
+                     visible = visible.value,
+-                    enter = fadeIn(tween(300)) + slideInVertically(
+-                        initialOffsetY = { slideOffsetPx },
+-                        animationSpec = tween(300)
+-                    )
++                    enter = fadeIn(tween(300)) + slideInVertically(initialOffsetY = { slideOffsetPx }, animationSpec = tween(300)),
+                 ) {
+                     Column(
+                         modifier = Modifier
+@@ -368,218 +369,148 @@
+                                 modifier = Modifier.fillMaxWidth()
+                             )
+                         } else {
+-                            val loan = uiState.loanSummary
+-                            val loanSubtitle = loan?.let { ls ->
+-                                when {
+-                                    ls.totalLentRemaining > java.math.BigDecimal.ZERO &&
+-                                        ls.totalBorrowedRemaining > java.math.BigDecimal.ZERO ->
+-                                        "${ls.activeLoans.size} active"
+-                                    ls.totalLentRemaining > java.math.BigDecimal.ZERO ->
+-                                        CurrencyFormatter.formatCurrency(ls.totalLentRemaining, uiState.selectedCurrency)
+-                                    else ->
+-                                        CurrencyFormatter.formatCurrency(ls.totalBorrowedRemaining, uiState.selectedCurrency)
+-                                }
+-                            }
+-                            HomeHeroPager(
+-                                modifier = Modifier.fillMaxWidth(),
+-                            blurEffects = blurEffects,
+-                            hazeState = hazeStateHero,
+-                            monthlyChange = uiState.monthlyChange,
+-                            monthlyChangePercent = uiState.monthlyChangePercent,
+-                            currency = uiState.selectedCurrency,
+-                            currentMonthExpenses = uiState.currentMonthExpenses,
+-                            currentMonthIncome = uiState.currentMonthIncome,
+-                            currentMonthTotal = uiState.currentMonthTotal,
+-                            currentMonthInvestment = uiState.currentMonthInvestment,
+-                            spendingHistory = uiState.spendingHistory,
+-                            lastMonthSpendingHistory = uiState.lastMonthSpendingHistory,
+-                            periodDayLabel = uiState.periodDayLabel,
+-                            availableCurrencies = uiState.availableCurrencies,
+-                            isUnifiedMode = uiState.isUnifiedMode,
+-                            spendingPeriodLabel = uiState.spendingPeriodLabel,
+-                            useFinancialMonth = uiState.useFinancialMonth,
+-                            onToggleSpendingMode = { viewModel.toggleSpendingMonthMode() },
+-                            onCurrencySelect = { viewModel.selectCurrency(it) },
+-                            onNavigateToTransactions = { onNavigateToTransactions(transactionsPeriod) },
+-                            onNavigateToInvestmentTransactions = {
+-                                onNavigateToInvestmentTransactions(transactionsPeriod)
+-                            },
+-                            onNavigateToBudgets = onNavigateToBudgets,
+-                            onShowBreakdown = { viewModel.showBreakdownDialog() },
+-                            onOpenPayPeriodSettings = onNavigateToPayPeriodSettings,
+-                            onSpendSoFarClick = if (
+-                                uiState.payPeriodStartEpochDay >= 0L &&
+-                                uiState.payPeriodEndEpochDay >= 0L
+-                            ) {
+-                                { showSpendTimelineSheet = true }
+-                            } else {
+-                                null
+-                            },
+-                            moreStatsIncomeText = formatStatAmount(uiState.currentMonthIncome, uiState.selectedCurrency),
+-                            moreStatsIncomeSubLabel = uiState.incomeTodayLabel,
+-                            moreStatsTopCategoryName = uiState.topCategoryName,
+-                            moreStatsTopCategorySubLabel = uiState.topCategorySubLabel,
+-                            moreStatsPaceText = uiState.dailyAverageLabel,
+-                            moreStatsPaceSubLabel = uiState.paceLabel,
+-                            moreStatsLoanLabel = if (loan != null) "Lent/Borrowed" else null,
+-                            moreStatsLoanText = loanSubtitle,
+-                            onMoreStatsIncomeClick = { onNavigateToTransactions(transactionsPeriod) },
+-                            onMoreStatsTopCategoryClick = { onNavigateToTransactions(transactionsPeriod) },
+-                            onMoreStatsPaceClick = onNavigateToAnalytics,
+-                            onMoreStatsLoanClick = if (loan != null) onNavigateToLoans else null,
+-                            moreStatsSubscriptionsLabel = stringResource(R.string.home_more_stats_subscriptions),
+-                            moreStatsSubscriptionsValue = if (uiState.activeSubscriptionCount > 0) {
+-                                stringResource(
+-                                    R.string.home_more_stats_subscriptions_active,
+-                                    uiState.activeSubscriptionCount,
+-                                )
+-                            } else {
+-                                stringResource(R.string.home_more_stats_subscriptions_hint)
+-                            },
+-                            onMoreStatsSubscriptionsClick = onNavigateToSubscriptions,
++                            val now = java.time.LocalDate.now()
++                            val monthName = now.month.getDisplayName(
++                                java.time.format.TextStyle.FULL, java.util.Locale.getDefault()
++                            )
++                            HomeMonthSummaryCard(
++                                currency = uiState.selectedCurrency,
++                                monthSpent = uiState.currentMonthExpenses,
++                                budgetLimit = uiState.monthBudgetLimit,
++                                hasBudget = uiState.hasBudget,
++                                monthlyChangePercent = uiState.monthlyChangePercent,
++                                periodLabel = "This month · $monthName",
++                                dayLabel = uiState.periodDayLabel,
++                                paceText = uiState.paceLabel,
++                                isOverBudget = uiState.hasBudget && uiState.currentMonthExpenses > uiState.monthBudgetLimit,
++                                modifier = Modifier.fillMaxWidth(),
+                             )
+                         }
+                     }
+                 }
+             }
+ 
+-            // 2. Feed header — day zone (20ms)
+-            item {
+-                val visible = remember { mutableStateOf(hasAnimated) }
+-                LaunchedEffect(Unit) {
+-                    if (!hasAnimated) { delay(20); visible.value = true }
+-                }
+-                AnimatedVisibility(
+-                    visible = visible.value,
+-                    enter = fadeIn(tween(300)) + slideInVertically(
+-                        initialOffsetY = { slideOffsetPx },
+-                        animationSpec = tween(300)
+-                    )
+-                ) {
+-                    HomeFeedDateNavigator(
+-                        uiState = uiState,
+-                        transactionsPeriod = transactionsPeriod,
+-                        onNavigateToTransactions = onNavigateToTransactions,
+-                        onNavigateDateBy = viewModel::navigateDateBy,
+-                        onNavigateToDate = viewModel::navigateToDate,
+-                        getDailyExpensesForMonth = viewModel::getDailyExpensesForMonth,
+-                        getDailyExpensesBetween = viewModel::getDailyExpensesBetween,
+-                        modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
+-                    )
+-                }
+-            }
+-
+-            if (uiState.isLoading) {
+-                item {
+-                    val visible = remember { mutableStateOf(hasAnimated) }
+-                    LaunchedEffect(Unit) {
+-                        if (!hasAnimated) { delay(100); visible.value = true }
+-                    }
+-                    AnimatedVisibility(
+-                        visible = visible.value,
+-                        enter = fadeIn(tween(300)) + slideInVertically(
+-                            initialOffsetY = { slideOffsetPx },
+-                            animationSpec = tween(300)
+-                        )
+-                    ) {
+-                        Column(
+-                            modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
+-                            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+-                        ) {
+-                            repeat(5) {
+-                                TransactionItemSkeleton()
+-                            }
+-                        }
+-                    }
+-                }
+-            } else if (uiState.recentItems.isEmpty()) {
++            // ── 2. Savings goal (conditional — show if income > expenses) ──
++            val showSavingsGoal = uiState.isBalanceReady &&
++                uiState.currentMonthIncome > java.math.BigDecimal.ZERO &&
++                uiState.currentMonthIncome > uiState.currentMonthExpenses
++            if (showSavingsGoal) {
+                 item {
+                     val visible = remember { mutableStateOf(hasAnimated) }
+-                    LaunchedEffect(Unit) {
+-                        if (!hasAnimated) { delay(100); visible.value = true }
+-                    }
++                    LaunchedEffect(Unit) { if (!hasAnimated) { delay(50); visible.value = true } }
+                     AnimatedVisibility(
+                         visible = visible.value,
+-                        enter = fadeIn(tween(300)) + slideInVertically(
+-                            initialOffsetY = { slideOffsetPx },
+-                            animationSpec = tween(300)
+-                        )
++                        enter = fadeIn(tween(300)) + slideInVertically(initialOffsetY = { slideOffsetPx }, animationSpec = tween(300)),
+                     ) {
+-                        PennyWiseEmptyState(
+-                            icon = Icons.Default.Sync,
+-                            headline = stringResource(R.string.home_feed_empty_today_headline),
+-                            description = stringResource(R.string.home_feed_empty_today_description),
+-                            actionLabel = "Scan Now",
+-                            onAction = { viewModel.scanSmsMessages() },
+-                            modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
+-                            ghostContent = {
+-                                Column(
+-                                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+-                                ) {
+-                                    repeat(3) {
+-                                        TransactionItemSkeleton()
+-                                    }
+-                                }
+-                            }
+-                        )
+-                    }
+-                }
+-            } else {
+-                item {
+-                    val visible = remember { mutableStateOf(hasAnimated) }
+-                    LaunchedEffect(Unit) {
+-                        if (!hasAnimated) { delay(100); visible.value = true }
+-                    }
+-                    AnimatedVisibility(
+-                        visible = visible.value,
+-                        enter = fadeIn(tween(300)) + slideInVertically(
+-                            initialOffsetY = { slideOffsetPx },
+-                            animationSpec = tween(300)
+-                        )
+-                    ) {
+-                        val profileAccountKeys = remember(uiState.accountBalances) {
+-                            buildProfileAccountKeys(uiState.accountBalances)
+-                        }
+-                        // Grouped feed card — all transactions in a single card with dividers
+-                        com.pennywiseai.tracker.ui.components.cards.PennyWiseCardV2(
+-                            modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
+-                            contentPadding = 0.dp
++                        HomeSavingsGoalCard(
++                            currency = uiState.selectedCurrency,
++                            savedAmount = (uiState.currentMonthIncome - uiState.currentMonthExpenses)
++                                .coerceAtLeast(java.math.BigDecimal.ZERO),
++                            goalAmount = uiState.currentMonthIncome,
++                            modifier = Modifier
++                                .fillMaxWidth()
++                                .padding(horizontal = Dimensions.Padding.content),
++                        )
++                    }
++                }
++            }
++
++            // ── 3. Recent transactions (Today) ──────────────────────────────
++            item {
++                val visible = remember { mutableStateOf(hasAnimated) }
++                LaunchedEffect(Unit) { if (!hasAnimated) { delay(100); visible.value = true } }
++                AnimatedVisibility(
++                    visible = visible.value,
++                    enter = fadeIn(tween(300)) + slideInVertically(initialOffsetY = { slideOffsetPx }, animationSpec = tween(300)),
++                ) {
++                    val now = java.time.LocalDate.now()
++                    val sectionLabel = when {
++                        uiState.selectedDate == now -> "Today"
++                        uiState.selectedDate == now.minusDays(1) -> "Yesterday"
++                        else -> uiState.selectedDate.format(
++                            java.time.format.DateTimeFormatter.ofPattern("MMM d")
++                        )
++                    }
++                    val profileAccountKeys = remember(uiState.accountBalances) {
++                        buildProfileAccountKeys(uiState.accountBalances)
++                    }
++                    PennyWiseCardV2(
++                        modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
++                        contentPadding = 0.dp,
++                    ) {
++                        // Header
++                        Row(
++                            modifier = Modifier
++                                .fillMaxWidth()
++                                .padding(horizontal = 16.dp, vertical = 12.dp),
++                            horizontalArrangement = Arrangement.SpaceBetween,
++                            verticalAlignment = Alignment.CenterVertically,
+                         ) {
+-                            uiState.recentItems.forEachIndexed { index, item ->
++                            Text(
++                                text = sectionLabel.uppercase(),
++                                style = MaterialTheme.typography.labelSmall,
++                                fontWeight = FontWeight.Medium,
++                                color = MaterialTheme.colorScheme.onSurfaceVariant,
++                                letterSpacing = 0.04.sp,
++                            )
++                            TextButton(
++                                onClick = { onNavigateToTransactions(transactionsPeriod) },
++                                contentPadding = PaddingValues(horizontal = 0.dp),
++                            ) {
++                                Text(
++                                    text = "View all",
++                                    style = MaterialTheme.typography.labelMedium,
++                                    color = MaterialTheme.colorScheme.primary,
++                                    fontWeight = FontWeight.Medium,
++                                )
++                            }
++                        }
++                        if (uiState.isLoading) {
++                            Column(
++                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
++                                verticalArrangement = Arrangement.spacedBy(Spacing.sm),
++                            ) {
++                                repeat(3) { com.pennywiseai.tracker.ui.components.skeleton.TransactionItemSkeleton() }
++                            }
++                        } else if (uiState.recentItems.isEmpty()) {
++                            Box(
++                                modifier = Modifier
++                                    .fillMaxWidth()
++                                    .padding(horizontal = 16.dp, vertical = 24.dp),
++                                contentAlignment = Alignment.Center,
++                            ) {
++                                Text(
++                                    text = stringResource(R.string.home_feed_empty_today_headline),
++                                    style = MaterialTheme.typography.bodyMedium,
++                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
++                                )
++                            }
++                        } else {
++                            uiState.recentItems.take(3).forEachIndexed { index, item ->
+                                 when (item) {
+                                     is HomeRecentItem.SingleTransaction -> TransactionItem(
+                                         transaction = item.transaction,
+                                         convertedAmount = item.convertedAmount,
+-                                        displayCurrency = if (uiState.isUnifiedMode) {
+-                                            uiState.selectedCurrency
+-                                        } else {
+-                                            null
+-                                        },
++                                        displayCurrency = if (uiState.isUnifiedMode) uiState.selectedCurrency else null,
+                                         profileAccountKeys = profileAccountKeys,
+                                         flat = true,
+                                         categoryForIconFallback = item.transaction.category,
+                                         categoryIconKey = item.categoryIconKey,
+                                         onClick = { onTransactionClick(item.transaction.id) },
+-                                        onExcludeToggle = {
+-                                            viewModel.toggleExcludedFromTracking(item.transaction)
+-                                        },
++                                        onExcludeToggle = { viewModel.toggleExcludedFromTracking(item.transaction) },
+                                         onDelete = { viewModel.deleteTransaction(item.transaction) },
+                                     )
+                                     is HomeRecentItem.GroupItem -> GroupCard(
+                                         group = item.group,
+                                         transactions = item.transactions,
+                                         convertedAmounts = item.convertedAmounts,
+-                                        displayCurrency = if (uiState.isUnifiedMode) {
+-                                            uiState.selectedCurrency
+-                                        } else {
+-                                            null
+-                                        },
++                                        displayCurrency = if (uiState.isUnifiedMode) uiState.selectedCurrency else null,
+                                         flat = true,
+                                         useCategoryIconFallback = true,
+                                         onClick = { onGroupClick(item.group.id) },
+                                     )
+                                 }
+-                                if (index < uiState.recentItems.size - 1) {
++                                if (index < uiState.recentItems.take(3).size - 1) {
+                                     HorizontalDivider(
+                                         modifier = Modifier.padding(horizontal = 16.dp),
+                                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+@@ -592,6 +523,92 @@
+                 }
+             }
+ 
++            // ── 4. Upcoming subscription (conditional) ──────────────────────
++            uiState.upcomingSubscription?.let { sub ->
++                item {
++                    val visible = remember { mutableStateOf(hasAnimated) }
++                    LaunchedEffect(Unit) { if (!hasAnimated) { delay(150); visible.value = true } }
++                    AnimatedVisibility(
++                        visible = visible.value,
++                        enter = fadeIn(tween(300)) + slideInVertically(initialOffsetY = { slideOffsetPx }, animationSpec = tween(300)),
++                    ) {
++                        HomeUpcomingSubscriptionCard(
++                            subscription = sub,
++                            daysAway = uiState.upcomingSubscriptionDaysAway,
++                            modifier = Modifier
++                                .fillMaxWidth()
++                                .padding(horizontal = Dimensions.Padding.content),
++                        )
++                    }
++                }
++            }
++
++            // ── 5. Weekly spend summary ──────────────────────────────────────
++            if (uiState.weeklyBarData.size == 7) {
++                item {
++                    val visible = remember { mutableStateOf(hasAnimated) }
++                    LaunchedEffect(Unit) { if (!hasAnimated) { delay(200); visible.value = true } }
++                    AnimatedVisibility(
++                        visible = visible.value,
++                        enter = fadeIn(tween(300)) + slideInVertically(initialOffsetY = { slideOffsetPx }, animationSpec = tween(300)),
++                    ) {
++                        val todayIndex = java.time.LocalDate.now().dayOfWeek.value - 1 // 0=Mon, 6=Sun
++                        HomeWeeklySpendCard(
++                            currency = uiState.selectedCurrency,
++                            weeklyTotal = uiState.weeklySpendTotal,
++                            weeklyDeltaPercent = uiState.weeklySpendDeltaPercent,
++                            barData = uiState.weeklyBarData,
++                            todayDayIndex = todayIndex,
++                            onTap = onNavigateToAnalytics,
++                            modifier = Modifier
++                                .fillMaxWidth()
++                                .padding(horizontal = Dimensions.Padding.content),
++                        )
++                    }
++                }
++            }
++
++            // ── 6. Over-budget alert (conditional) ──────────────────────────
++            uiState.overBudgetCategory?.let { category ->
++                item {
++                    val visible = remember { mutableStateOf(hasAnimated) }
++                    LaunchedEffect(Unit) { if (!hasAnimated) { delay(250); visible.value = true } }
++                    AnimatedVisibility(
++                        visible = visible.value,
++                        enter = fadeIn(tween(300)) + slideInVertically(initialOffsetY = { slideOffsetPx }, animationSpec = tween(300)),
++                    ) {
++                        HomeOverBudgetAlertCard(
++                            currency = uiState.selectedCurrency,
++                            budgetName = category,
++                            spent = uiState.overBudgetSpent,
++                            limit = uiState.overBudgetLimit,
++                            modifier = Modifier
++                                .fillMaxWidth()
++                                .padding(horizontal = Dimensions.Padding.content),
++                        )
++                    }
++                }
++            }
++
++            // ── 7. Behavioral nudge (conditional) ───────────────────────────
++            uiState.nudgeInsight?.let { insight ->
++                item {
++                    val visible = remember { mutableStateOf(hasAnimated) }
++                    LaunchedEffect(Unit) { if (!hasAnimated) { delay(300); visible.value = true } }
++                    AnimatedVisibility(
++                        visible = visible.value,
++                        enter = fadeIn(tween(300)) + slideInVertically(initialOffsetY = { slideOffsetPx }, animationSpec = tween(300)),
++                    ) {
++                        HomeBehavioralNudgeCard(
++                            insight = insight,
++                            modifier = Modifier
++                                .fillMaxWidth()
++                                .padding(horizontal = Dimensions.Padding.content),
++                        )
++                    }
++                }
++            }
++
+ 
+         }
+         
+Index: app/src/main/java/com/pennywiseai/tracker/data/preferences/UserPreferencesRepository.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/java/com/pennywiseai/tracker/data/preferences/UserPreferencesRepository.kt b/app/src/main/java/com/pennywiseai/tracker/data/preferences/UserPreferencesRepository.kt
+--- a/app/src/main/java/com/pennywiseai/tracker/data/preferences/UserPreferencesRepository.kt	(revision ea8e7b2ad0c50763c9ce2bebff6a3f3b94a2cc94)
++++ b/app/src/main/java/com/pennywiseai/tracker/data/preferences/UserPreferencesRepository.kt	(date 1781450949469)
+@@ -765,6 +765,13 @@
+         }
+     }
+ 
++    /** Bulk-restore dismissed salary suggestions (used by backup restore). */
++    suspend fun setDismissedSalarySuggestions(suggestions: Set<String>) {
++        context.dataStore.edit { preferences ->
++            preferences[PreferencesKeys.DISMISSED_SALARY_SUGGESTIONS] = suggestions.joinToString("|")
++        }
++    }
++
+ }
+ 
+ data class UserPreferences(
+Index: app/src/main/java/com/pennywiseai/tracker/data/backup/BackupExporter.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/java/com/pennywiseai/tracker/data/backup/BackupExporter.kt b/app/src/main/java/com/pennywiseai/tracker/data/backup/BackupExporter.kt
+--- a/app/src/main/java/com/pennywiseai/tracker/data/backup/BackupExporter.kt	(revision ea8e7b2ad0c50763c9ce2bebff6a3f3b94a2cc94)
++++ b/app/src/main/java/com/pennywiseai/tracker/data/backup/BackupExporter.kt	(date 1781451031511)
+@@ -77,6 +77,8 @@
+         val bankNotifications = database.bankNotificationDao().getAllNotifications().first()
+         val salaryMonthOverrides = database.salaryMonthOverrideDao().getAllOverrides().first()
+         val transactionReceipts = database.transactionReceiptDao().getAllReceipts()
++        val loans = database.loanDao().getAllLoans().first()
++        val transactionGroups = database.transactionGroupDao().getAllGroups().first()
+ 
+         // Get preferences from repository
+         val prefs = userPreferencesRepository.userPreferences.first()
+@@ -86,7 +88,22 @@
+         val lastReviewPromptTime = userPreferencesRepository.getLastReviewPromptTime().first()
+         val lastScanTimestamp = userPreferencesRepository.getLastScanTimestamp().first()
+         val lastScanPeriod = userPreferencesRepository.getLastScanPeriod().first()
+-        
++        val smsScanAllTime = userPreferencesRepository.smsScanAllTime.first()
++        val baseCurrency = userPreferencesRepository.baseCurrency.first()
++        val unifiedCurrencyMode = userPreferencesRepository.unifiedCurrencyMode.first()
++        val displayCurrency = userPreferencesRepository.displayCurrency.first()
++        val monthlyBudgetLimit = userPreferencesRepository.monthlyBudgetLimit.first()
++        val isBalanceHidden = userPreferencesRepository.isBalanceHidden.first()
++        val analyticsChartType = userPreferencesRepository.getAnalyticsChartType().first()
++        val compactAnalyticsCards = userPreferencesRepository.compactAnalyticsCardsEnabled.first()
++        val isAppLockEnabled = userPreferencesRepository.isAppLockEnabled.first()
++        val appLockTimeoutMinutes = userPreferencesRepository.appLockTimeoutMinutes.first()
++        val monthStartDay = userPreferencesRepository.monthStartDay.first()
++        val useFinancialMonth = userPreferencesRepository.useFinancialMonth.first()
++        val useFixedBudgetPeriodEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
++        val budgetPeriodEndDay = userPreferencesRepository.budgetPeriodEndDay.first()
++        val dismissedSalarySuggestions = userPreferencesRepository.dismissedSalarySuggestions.first()
++
+         // Calculate statistics
+         val dateRange = if (transactions.isNotEmpty()) {
+             val sorted = transactions.sortedBy { it.dateTime }
+@@ -121,7 +138,9 @@
+         val exportedBankNotifications = if (privacy == ExportPrivacy.FULL) bankNotifications else emptyList()
+         val exportedRuleApplications = if (privacy == ExportPrivacy.FULL) ruleApplications else emptyList()
+         val exportedSalaryMonthOverrides = if (privacy == ExportPrivacy.FULL) salaryMonthOverrides else emptyList()
+-        
++        val exportedLoans = if (privacy == ExportPrivacy.FULL) loans else emptyList()
++        val exportedTransactionGroups = if (privacy == ExportPrivacy.FULL) transactionGroups else emptyList()
++
+         return PennyWiseBackup(
+             metadata = BackupMetadata(
+                 exportId = UUID.randomUUID().toString(),
+@@ -142,6 +161,8 @@
+                     totalTransactionSplits = exportedTransactionSplits.size,
+                     totalBankNotifications = exportedBankNotifications.size,
+                     totalReceipts = transactionReceipts.size,
++                    totalLoans = exportedLoans.size,
++                    totalTransactionGroups = exportedTransactionGroups.size,
+                     dateRange = dateRange
+                 )
+             ),
+@@ -163,16 +184,28 @@
+                 transactionSplits = exportedTransactionSplits,
+                 bankNotifications = exportedBankNotifications,
+                 salaryMonthOverrides = exportedSalaryMonthOverrides,
+-                transactionReceipts = transactionReceipts
++                transactionReceipts = transactionReceipts,
++                loans = exportedLoans,
++                transactionGroups = exportedTransactionGroups
+             ),
+             preferences = PreferencesSnapshot(
+                 theme = ThemePreferences(
+                     isDarkThemeEnabled = prefs.isDarkThemeEnabled,
+-                    isDynamicColorEnabled = prefs.isDynamicColorEnabled
++                    isDynamicColorEnabled = prefs.isDynamicColorEnabled,
++                    themeStyle = prefs.themeStyle.name,
++                    accentColor = prefs.accentColor.name,
++                    isAmoledMode = prefs.isAmoledMode,
++                    appFont = prefs.appFont.name,
++                    blurEffectsEnabled = prefs.blurEffectsEnabled,
++                    navBarStyle = prefs.navBarStyle.name,
++                    analyticsChartType = analyticsChartType,
++                    compactAnalyticsCards = compactAnalyticsCards,
++                    coverStyle = prefs.coverStyle.name
+                 ),
+                 sms = SmsPreferences(
+                     hasSkippedSmsPermission = prefs.hasSkippedSmsPermission,
+                     smsScanMonths = prefs.smsScanMonths,
++                    smsScanAllTime = smsScanAllTime,
+                     lastScanTimestamp = lastScanTimestamp,
+                     lastScanPeriod = lastScanPeriod
+                 ),
+@@ -184,7 +217,27 @@
+                     hasShownScanTutorial = prefs.hasShownScanTutorial,
+                     firstLaunchTime = firstLaunchTime,
+                     hasShownReviewPrompt = hasShownReviewPrompt,
+-                    lastReviewPromptTime = lastReviewPromptTime
++                    lastReviewPromptTime = lastReviewPromptTime,
++                    baseCurrency = baseCurrency,
++                    unifiedCurrencyMode = unifiedCurrencyMode,
++                    displayCurrency = displayCurrency,
++                    monthlyBudgetLimit = monthlyBudgetLimit?.toPlainString(),
++                    balanceHidden = isBalanceHidden,
++                    userName = prefs.userName,
++                    profileImageUri = prefs.profileImageUri,
++                    profileBackgroundColor = prefs.profileBackgroundColor,
++                    hasCompletedOnboarding = prefs.hasCompletedOnboarding,
++                    mainAccountKey = prefs.mainAccountKey,
++                    monthStartDay = monthStartDay,
++                    useFinancialMonth = useFinancialMonth,
++                    useFixedBudgetPeriodEnd = useFixedBudgetPeriodEnd,
++                    budgetPeriodEndDay = budgetPeriodEndDay,
++                    dismissedSalarySuggestions = dismissedSalarySuggestions
++                        .joinToString("|").ifEmpty { null }
++                ),
++                security = SecurityPreferences(
++                    appLockEnabled = isAppLockEnabled,
++                    appLockTimeoutMinutes = appLockTimeoutMinutes
+                 )
+             )
+         )
+Index: app/src/main/java/com/pennywiseai/tracker/data/backup/BackupImporter.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/java/com/pennywiseai/tracker/data/backup/BackupImporter.kt b/app/src/main/java/com/pennywiseai/tracker/data/backup/BackupImporter.kt
+--- a/app/src/main/java/com/pennywiseai/tracker/data/backup/BackupImporter.kt	(revision ea8e7b2ad0c50763c9ce2bebff6a3f3b94a2cc94)
++++ b/app/src/main/java/com/pennywiseai/tracker/data/backup/BackupImporter.kt	(date 1781451120755)
+@@ -94,6 +94,15 @@
+             try {
+                 clearAllDataForRestore()
+                 
++                // Import loans and groups BEFORE transactions so FK references in
++                // transactions (loanId / groupId) resolve correctly.
++                backup.database.loans.forEach { loan ->
++                    database.loanDao().insertLoanForRestore(loan)
++                }
++                backup.database.transactionGroups.forEach { group ->
++                    database.transactionGroupDao().insertGroupForRestore(group)
++                }
++
+                 // Import all data
+                 backup.database.categories.forEach { category ->
+                     database.categoryDao().insertCategoryForRestore(category)
+@@ -102,7 +111,10 @@
+                 
+                 importTransactionsForRestore(backup.database.transactions)
+                 importedTransactions = backup.database.transactions.size
+-                
++
++                // Receipts reference transaction IDs — restore after transactions.
++                database.transactionReceiptDao().insertReceipts(backup.database.transactionReceipts)
++
+                 backup.database.cards.forEach { card ->
+                     database.cardDao().insertCard(card)
+                 }
+@@ -239,6 +251,10 @@
+         
+         return database.withTransaction {
+             try {
++                // Import loans and groups FIRST so we can remap IDs when inserting transactions.
++                val oldToNewLoanIdMap = importLoansWithMerge(backup.database.loans)
++                val oldToNewGroupIdMap = importGroupsWithMerge(backup.database.transactionGroups)
++
+                 // Get existing data for duplicate checking
+                 val existingTransactions = database.transactionDao()
+                     .getAllTransactions().first()
+@@ -260,15 +276,19 @@
+                     }
+                 }
+                 
+-                // Import transactions (skip duplicates by hash)
++                // Import transactions (skip duplicates by hash), remapping loan/group IDs
+                 // Build mapping from old transaction IDs to new IDs for split/application imports
+                 val oldToNewTransactionIdMap = mutableMapOf<Long, Long>()
+                 
+                 backup.database.transactions.forEach { transaction ->
+                     if (!existingTransactionHashes.contains(transaction.transactionHash)) {
+                         val oldId = transaction.id
+-                        val newTransaction = transaction.copy(id = 0)
+-                        val newId = database.transactionDao().insertTransaction(newTransaction)
++                        val remappedTransaction = transaction.copy(
++                            id = 0,
++                            loanId = transaction.loanId?.let { oldToNewLoanIdMap[it] ?: it },
++                            groupId = transaction.groupId?.let { oldToNewGroupIdMap[it] ?: it }
++                        )
++                        val newId = database.transactionDao().insertTransaction(remappedTransaction)
+                         // Track old ID -> new ID mapping directly from insert result
+                         if (oldId != 0L) {
+                             oldToNewTransactionIdMap[oldId] = newId
+@@ -283,7 +303,10 @@
+                         skippedDuplicates++
+                     }
+                 }
+-                
++
++                // Import receipts, remapping transaction IDs
++                importReceiptsWithMerge(backup.database.transactionReceipts, oldToNewTransactionIdMap)
++
+                 // Import other entities with duplicate checking
+                 importCardsWithMerge(backup.database.cards)
+                 importAccountBalancesWithMerge(backup.database.accountBalances)
+@@ -450,7 +473,67 @@
+             }
+         }
+     }
+-    
++
++    /**
++     * Import loans with merge semantics.
++     * Returns a map of old loan ID -> new loan ID for transaction ID remapping.
++     */
++    private suspend fun importLoansWithMerge(loans: List<LoanEntity>): Map<Long, Long> {
++        val oldToNewIdMap = mutableMapOf<Long, Long>()
++        val existingLoans = database.loanDao().getAllLoans().first()
++        // Merge key: person_name + direction (case-insensitive)
++        val existingKeys = existingLoans.associateBy { "${it.personName.lowercase()}_${it.direction}" }
++
++        loans.forEach { loan ->
++            val key = "${loan.personName.lowercase()}_${loan.direction}"
++            val existing = existingKeys[key]
++            if (existing != null) {
++                // Map old ID -> existing local ID so transaction references stay valid
++                oldToNewIdMap[loan.id] = existing.id
++            } else {
++                val newId = database.loanDao().insertLoan(loan.copy(id = 0))
++                oldToNewIdMap[loan.id] = newId
++            }
++        }
++        return oldToNewIdMap
++    }
++
++    /**
++     * Import transaction groups with merge semantics.
++     * Returns a map of old group ID -> new group ID for transaction ID remapping.
++     */
++    private suspend fun importGroupsWithMerge(groups: List<TransactionGroupEntity>): Map<Long, Long> {
++        val oldToNewIdMap = mutableMapOf<Long, Long>()
++        val existingGroups = database.transactionGroupDao().getAllGroups().first()
++        val existingByName = existingGroups.associateBy { it.name.lowercase() }
++
++        groups.forEach { group ->
++            val existing = existingByName[group.name.lowercase()]
++            if (existing != null) {
++                oldToNewIdMap[group.id] = existing.id
++            } else {
++                val newId = database.transactionGroupDao().insertGroup(group.copy(id = 0))
++                oldToNewIdMap[group.id] = newId
++            }
++        }
++        return oldToNewIdMap
++    }
++
++    /**
++     * Import transaction receipts, remapping transaction IDs.
++     * Skips receipts whose transaction no longer exists in the local DB.
++     */
++    private suspend fun importReceiptsWithMerge(
++        receipts: List<TransactionReceiptEntity>,
++        oldToNewTransactionIdMap: Map<Long, Long>
++    ) {
++        receipts.forEach { receipt ->
++            val newTransactionId = oldToNewTransactionIdMap[receipt.transactionId] ?: receipt.transactionId
++            database.transactionReceiptDao().insertReceipt(receipt.copy(id = 0, transactionId = newTransactionId))
++        }
++    }
++
++
+     /**
+      * Import user preferences
+      */
+@@ -460,10 +543,37 @@
+             userPreferencesRepository.updateDarkTheme(it)
+         }
+         userPreferencesRepository.updateDynamicColor(preferences.theme.isDynamicColorEnabled)
+-        
++        preferences.theme.themeStyle?.let { name ->
++            runCatching { com.pennywiseai.tracker.data.preferences.ThemeStyle.valueOf(name) }
++                .getOrNull()?.let { userPreferencesRepository.updateThemeStyle(it) }
++        }
++        preferences.theme.accentColor?.let { name ->
++            runCatching { com.pennywiseai.tracker.data.preferences.AccentColor.valueOf(name) }
++                .getOrNull()?.let { userPreferencesRepository.updateAccentColor(it) }
++        }
++        userPreferencesRepository.updateAmoledMode(preferences.theme.isAmoledMode)
++        preferences.theme.appFont?.let { name ->
++            runCatching { com.pennywiseai.tracker.data.preferences.AppFont.valueOf(name) }
++                .getOrNull()?.let { userPreferencesRepository.updateAppFont(it) }
++        }
++        userPreferencesRepository.updateBlurEffectsEnabled(preferences.theme.blurEffectsEnabled)
++        preferences.theme.navBarStyle?.let { name ->
++            runCatching { com.pennywiseai.tracker.data.preferences.NavBarStyle.valueOf(name) }
++                .getOrNull()?.let { userPreferencesRepository.updateNavBarStyle(it) }
++        }
++        preferences.theme.analyticsChartType?.let {
++            userPreferencesRepository.saveAnalyticsChartType(it)
++        }
++        userPreferencesRepository.setCompactAnalyticsCardsEnabled(preferences.theme.compactAnalyticsCards)
++        preferences.theme.coverStyle?.let { name ->
++            runCatching { com.pennywiseai.tracker.data.preferences.CoverStyle.valueOf(name) }
++                .getOrNull()?.let { userPreferencesRepository.updateCoverStyle(it) }
++        }
++
+         // SMS preferences
+         userPreferencesRepository.updateHasSkippedSmsPermission(preferences.sms.hasSkippedSmsPermission)
+         userPreferencesRepository.updateSmsScanMonths(preferences.sms.smsScanMonths)
++        userPreferencesRepository.updateSmsScanAllTime(preferences.sms.smsScanAllTime)
+         preferences.sms.lastScanTimestamp?.let {
+             userPreferencesRepository.updateLastScanTimestamp(it)
+         }
+@@ -486,5 +596,33 @@
+         preferences.app.lastReviewPromptTime?.let {
+             userPreferencesRepository.updateLastReviewPromptTime(it)
+         }
++        preferences.app.baseCurrency?.let { userPreferencesRepository.updateBaseCurrency(it) }
++        userPreferencesRepository.setUnifiedCurrencyMode(preferences.app.unifiedCurrencyMode)
++        preferences.app.displayCurrency?.let { userPreferencesRepository.setDisplayCurrency(it) }
++        preferences.app.monthlyBudgetLimit?.let { limitStr ->
++            runCatching { java.math.BigDecimal(limitStr) }.getOrNull()?.let {
++                userPreferencesRepository.updateMonthlyBudgetLimit(it)
++            }
++        }
++        userPreferencesRepository.setBalanceHidden(preferences.app.balanceHidden)
++        preferences.app.userName?.let { userPreferencesRepository.updateUserName(it) }
++        userPreferencesRepository.updateProfileImageUri(preferences.app.profileImageUri)
++        userPreferencesRepository.updateProfileBackgroundColor(preferences.app.profileBackgroundColor)
++        userPreferencesRepository.updateHasCompletedOnboarding(preferences.app.hasCompletedOnboarding)
++        userPreferencesRepository.updateMainAccountKey(preferences.app.mainAccountKey)
++        userPreferencesRepository.updateMonthStartDay(preferences.app.monthStartDay)
++        userPreferencesRepository.updateUseFinancialMonth(preferences.app.useFinancialMonth)
++        userPreferencesRepository.setUseFixedBudgetPeriodEnd(preferences.app.useFixedBudgetPeriodEnd)
++        userPreferencesRepository.updateBudgetPeriodEndDay(preferences.app.budgetPeriodEndDay)
++        preferences.app.dismissedSalarySuggestions?.let { raw ->
++            val tokens = raw.split('|').filter { it.isNotBlank() }.toSet()
++            if (tokens.isNotEmpty()) {
++                userPreferencesRepository.setDismissedSalarySuggestions(tokens)
++            }
++        }
++
++        // Security preferences
++        userPreferencesRepository.setAppLockEnabled(preferences.security.appLockEnabled)
++        userPreferencesRepository.setAppLockTimeoutMinutes(preferences.security.appLockTimeoutMinutes)
+     }
+ }
+\ No newline at end of file

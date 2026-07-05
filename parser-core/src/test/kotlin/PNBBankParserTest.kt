@@ -1,10 +1,10 @@
-package com.pennywiseai.parser.core.bank
+package com.spendly.parser.core.bank
 
-import com.pennywiseai.parser.core.TransactionType
-import com.pennywiseai.parser.core.bank.PNBBankParser
-import com.pennywiseai.parser.core.test.ExpectedTransaction
-import com.pennywiseai.parser.core.test.ParserTestCase
-import com.pennywiseai.parser.core.test.ParserTestUtils
+import com.spendly.parser.core.TransactionType
+import com.spendly.parser.core.bank.PNBBankParser
+import com.spendly.parser.core.test.ExpectedTransaction
+import com.spendly.parser.core.test.ParserTestCase
+import com.spendly.parser.core.test.ParserTestUtils
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull

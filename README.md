@@ -1,14 +1,14 @@
 <a name="top"></a>
-[![PennyWise AI Banner](banner.png)](https://github.com/sarim2000/pennywiseai-tracker)
-[![GitHub stars](https://img.shields.io/github/stars/sarim2000/pennywiseai-tracker?style=social)](https://github.com/sarim2000/pennywiseai-tracker)
+[![PennyWise AI Banner](banner.png)](https://github.com/sarim2000/spendly-tracker)
+[![GitHub stars](https://img.shields.io/github/stars/sarim2000/spendly-tracker?style=social)](https://github.com/sarim2000/spendly-tracker)
 [![License](https://img.shields.io/badge/license-AGPL%20v3-blue)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-12+-3DDC84)](https://developer.android.com/about/versions/12)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF)](https://kotlinlang.org/)
 [![Privacy](https://img.shields.io/badge/AI-100%25_On--Device-FF6B6B)](https://developers.google.com/mediapipe)
-[![Downloads](https://img.shields.io/badge/Downloads-100+-green)](https://play.google.com/store/apps/details?id=com.pennywiseai.tracker)
-[![F-Droid](https://img.shields.io/f-droid/v/com.pennywiseai.tracker?color=1976d2)](https://f-droid.org/packages/com.pennywiseai.tracker/)
-[![GitHub release](https://img.shields.io/github/v/release/sarim2000/pennywiseai-tracker)](https://github.com/sarim2000/pennywiseai-tracker/releases)
-[![GitHub last commit](https://img.shields.io/github/last-commit/sarim2000/pennywiseai-tracker)](https://github.com/sarim2000/pennywiseai-tracker/commits)
+[![Downloads](https://img.shields.io/badge/Downloads-100+-green)](https://play.google.com/store/apps/details?id=com.spendly.tracker)
+[![F-Droid](https://img.shields.io/f-droid/v/com.spendly.tracker?color=1976d2)](https://f-droid.org/packages/com.spendly.tracker/)
+[![GitHub release](https://img.shields.io/github/v/release/sarim2000/spendly-tracker)](https://github.com/sarim2000/spendly-tracker/releases)
+[![GitHub last commit](https://img.shields.io/github/last-commit/sarim2000/spendly-tracker)](https://github.com/sarim2000/spendly-tracker/commits)
 [![Discord](https://img.shields.io/badge/Discord-Join_Community-5865F2)](https://discord.gg/H3xWeMWjKQ)
 
 ## PennyWise AI — Free & Open‑Source, private SMS‑powered expense tracker
@@ -18,19 +18,19 @@ Turn bank SMS into a clean, searchable money timeline with on-device AI assistan
 
 ⭐ **Star us on GitHub — join 300+ supporters!**
 
-[![Share](https://img.shields.io/badge/share-000000?logo=x&logoColor=white)](https://x.com/intent/tweet?text=Check%20out%20PennyWise%20AI%20-%20Privacy-first%20expense%20tracker%20with%20on-device%20AI:%20https://github.com/sarim2000/pennywiseai-tracker%20%23Android%20%23PrivacyFirst%20%23OnDeviceAI)
-[![Share](https://img.shields.io/badge/share-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/sarim2000/pennywiseai-tracker)
-[![Share](https://img.shields.io/badge/share-FF4500?logo=reddit&logoColor=white)](https://www.reddit.com/submit?title=PennyWise%20AI%20-%20Privacy-first%20expense%20tracker&url=https://github.com/sarim2000/pennywiseai-tracker)
-[![Share](https://img.shields.io/badge/share-0088CC?logo=telegram&logoColor=white)](https://t.me/share/url?url=https://github.com/sarim2000/pennywiseai-tracker&text=Check%20out%20PennyWise%20AI)
+[![Share](https://img.shields.io/badge/share-000000?logo=x&logoColor=white)](https://x.com/intent/tweet?text=Check%20out%20PennyWise%20AI%20-%20Privacy-first%20expense%20tracker%20with%20on-device%20AI:%20https://github.com/sarim2000/spendly-tracker%20%23Android%20%23PrivacyFirst%20%23OnDeviceAI)
+[![Share](https://img.shields.io/badge/share-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/sarim2000/spendly-tracker)
+[![Share](https://img.shields.io/badge/share-FF4500?logo=reddit&logoColor=white)](https://www.reddit.com/submit?title=PennyWise%20AI%20-%20Privacy-first%20expense%20tracker&url=https://github.com/sarim2000/spendly-tracker)
+[![Share](https://img.shields.io/badge/share-0088CC?logo=telegram&logoColor=white)](https://t.me/share/url?url=https://github.com/sarim2000/spendly-tracker&text=Check%20out%20PennyWise%20AI)
 
 ## Overview
 
 Your bank already texts you every transaction — PennyWise turns those SMS into a private, zero-setup expense tracker with on-device AI. No accounts, no cloud, no effort.
 
-<a href="https://play.google.com/store/apps/details?id=com.pennywiseai.tracker">
+<a href="https://play.google.com/store/apps/details?id=com.spendly.tracker">
   <img src="https://img.shields.io/badge/GET_IT_ON-Google_Play-00875F?style=for-the-badge&logo=google-play&logoColor=white" alt="Get it on Google Play" />
 </a>
-<a href="https://f-droid.org/packages/com.pennywiseai.tracker">
+<a href="https://f-droid.org/packages/com.spendly.tracker">
   <img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="80">
 </a>
 
@@ -141,7 +141,7 @@ Supporting **90+ banks** across **18 countries** with **multi-currency** capabil
 ### 🇰🇪 Kenya (1 service) - KES Ksh
 - **M-PESA** - Mobile money service
 
-More banks being added regularly! [Request your bank →](https://github.com/sarim2000/pennywiseai-tracker/issues/new?template=bank_support_request.md)
+More banks being added regularly! [Request your bank →](https://github.com/sarim2000/spendly-tracker/issues/new?template=bank_support_request.md)
 
 ## Privacy First
 
@@ -191,8 +191,8 @@ All AI processing happens on your device using MediaPipe's Qwen 2.5 model — no
 
 ```bash
 # Clone repository
-git clone https://github.com/sarim2000/pennywiseai-tracker.git
-cd pennywiseai-tracker
+git clone https://github.com/sarim2000/spendly-tracker.git
+cd spendly-tracker
 
 # Build APK
 ./gradlew assembleDebug
@@ -219,7 +219,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 ## Community & Support
 
 - **Discord**: Join the community, share feedback, and get help — [Join Discord](https://discord.gg/H3xWeMWjKQ)
-- **Issues**: Report bugs or request features — [Open an issue](https://github.com/sarim2000/pennywiseai-tracker/issues)
+- **Issues**: Report bugs or request features — [Open an issue](https://github.com/sarim2000/spendly-tracker/issues)
 
 ## Contributing
 
@@ -246,8 +246,8 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
 <table>
   <tbody>
     <tr>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/Lucifer1590"><img src="https://avatars.githubusercontent.com/Lucifer1590?v=4&s=100" width="100px;" alt="Lucifer1590"/><br /><sub><b>Lucifer1590</b></sub></a><br /><a href="#community-Lucifer1590" title="Community Management">👥</a> <a href="https://github.com/sarim2000/pennywiseai-tracker/issues?q=author%3ALucifer1590" title="Bug reports">🐛</a> <a href="#userTesting-Lucifer1590" title="User Testing">📓</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/akshaynexus"><img src="https://avatars.githubusercontent.com/akshaynexus?v=4&s=100" width="100px;" alt="akshaynexus"/><br /><sub><b>akshaynexus</b></sub></a><br /><a href="https://github.com/sarim2000/pennywiseai-tracker/commits?author=akshaynexus" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/Lucifer1590"><img src="https://avatars.githubusercontent.com/Lucifer1590?v=4&s=100" width="100px;" alt="Lucifer1590"/><br /><sub><b>Lucifer1590</b></sub></a><br /><a href="#community-Lucifer1590" title="Community Management">👥</a> <a href="https://github.com/sarim2000/spendly-tracker/issues?q=author%3ALucifer1590" title="Bug reports">🐛</a> <a href="#userTesting-Lucifer1590" title="User Testing">📓</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/akshaynexus"><img src="https://avatars.githubusercontent.com/akshaynexus?v=4&s=100" width="100px;" alt="akshaynexus"/><br /><sub><b>akshaynexus</b></sub></a><br /><a href="https://github.com/sarim2000/spendly-tracker/commits?author=akshaynexus" title="Code">💻</a></td>
     </tr>
   </tbody>
 </table>
@@ -261,7 +261,7 @@ This project follows the [all-contributors](https://github.com/all-contributors/
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=sarim2000/pennywiseai-tracker&type=Date)](https://star-history.com/#sarim2000/pennywiseai-tracker&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=sarim2000/spendly-tracker&type=Date)](https://star-history.com/#sarim2000/spendly-tracker&Date)
 
 ## License
 
@@ -276,7 +276,7 @@ This project is licensed under AGPL v3, which means:
 ---
 
 <p align="center">
-<a href="https://github.com/sarim2000/pennywiseai-tracker/releases">Download</a> •
-<a href="https://github.com/sarim2000/pennywiseai-tracker/issues">Report Bug</a> •
-<a href="https://github.com/sarim2000/pennywiseai-tracker/issues">Request Feature</a>
+<a href="https://github.com/sarim2000/spendly-tracker/releases">Download</a> •
+<a href="https://github.com/sarim2000/spendly-tracker/issues">Report Bug</a> •
+<a href="https://github.com/sarim2000/spendly-tracker/issues">Request Feature</a>
 </p>

@@ -1,8 +1,8 @@
-import com.pennywiseai.parser.core.TransactionType
-import com.pennywiseai.parser.core.bank.IndianBankParser
-import com.pennywiseai.parser.core.test.ExpectedTransaction
-import com.pennywiseai.parser.core.test.ParserTestCase
-import com.pennywiseai.parser.core.test.ParserTestUtils
+import com.spendly.parser.core.TransactionType
+import com.spendly.parser.core.bank.IndianBankParser
+import com.spendly.parser.core.test.ExpectedTransaction
+import com.spendly.parser.core.test.ParserTestCase
+import com.spendly.parser.core.test.ParserTestUtils
 import org.junit.jupiter.api.*
 import java.math.BigDecimal
 
@@ -145,7 +145,7 @@ class IndianBankParserTest {
     @TestFactory
     fun `factory resolves indian bank`(): List<DynamicTest> {
         val cases = listOf(
-            com.pennywiseai.parser.core.test.SimpleTestCase(
+            com.spendly.parser.core.test.SimpleTestCase(
                 bankName = "Indian Bank",
                 sender = "BV-INDBNK-S",
                 currency = "INR",
@@ -160,7 +160,7 @@ class IndianBankParserTest {
                 ),
                 shouldHandle = true
             ),
-            com.pennywiseai.parser.core.test.SimpleTestCase(
+            com.spendly.parser.core.test.SimpleTestCase(
                 bankName = "Indian Bank",
                 sender = "INDBNK",
                 currency = "INR",

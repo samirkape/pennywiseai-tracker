@@ -1,0 +1,108 @@
+
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500&family=Playfair+Display:wght@600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+
+<style>
+.wrap {
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+  background: var(--color-background-tertiary);
+  border-radius: var(--border-radius-lg);
+}
+.pcard {
+  width: 320px;
+  background: #1E1E1B;
+  border: 0.5px solid rgba(255,255,255,0.09);
+  border-radius: 16px;
+  padding: 18px 18px 16px;
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+.eyebrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.period {
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+}
+.pill {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: rgba(93,168,144,0.15);
+  color: #5DA890;
+}
+.main-label {
+  font-size: 11px;
+  color: rgba(255,255,255,0.35);
+  margin-bottom: 3px;
+}
+.amount {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-weight: 600;
+  font-size: 38px;
+  color: #E4E2DB;
+  line-height: 1;
+  letter-spacing: -0.5px;
+  margin-bottom: 12px;
+}
+.amount .of {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  color: rgba(255,255,255,0.3);
+  letter-spacing: 0;
+  margin-left: 4px;
+}
+.bar-track {
+  height: 4px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: #5DA890;
+  width: 63.3%;
+}
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.footer-day {
+  font-size: 11px;
+  color: rgba(255,255,255,0.35);
+}
+.footer-remaining {
+  font-size: 11px;
+  font-weight: 500;
+  color: #5DA890;
+}
+</style>
+
+<div class="wrap">
+  <div class="pcard">
+    <div class="eyebrow">
+      <span class="period">Jun 7 – Jul 6 &nbsp;<i class="ti ti-chevron-down" style="font-size:11px; vertical-align:-1px"></i></span>
+      <span class="pill">On track</span>
+    </div>
+    <div class="main-label">Spent so far</div>
+    <div class="amount">₹34,820 <span class="of">of ₹55,000</span></div>
+    <div class="bar-track">
+      <div class="bar-fill"></div>
+    </div>
+    <div class="footer">
+      <span class="footer-day">Day 4 of 30</span>
+      <span class="footer-remaining">₹20,180 remaining</span>
+    </div>
+  </div>
+</div>

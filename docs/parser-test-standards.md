@@ -11,7 +11,7 @@ This repository provides a shared Kotlin test harness for all SMS parser impleme
 
 ## 2. Leverage `ParserTestUtils`
 
-* Import utilities from `com.pennywiseai.parser.core.test`:
+* Import utilities from `com.spendly.parser.core.test`:
   * `ExpectedTransaction`
   * `ParserTestCase`
   * `SimpleTestCase`
