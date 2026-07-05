@@ -611,15 +611,18 @@ fun HomeScreen(
 
         }
 
-        // Fixed bottom banner ad — non-intrusive, anchored above the navigation bar
+        // Fixed bottom banner ad — anchored above the navigation bar.
+        // The 2dp top divider + 4dp bottom gap provide visual separation from
+        // nav items, which is required to avoid AdMob accidental-click violations.
         if (Constants.Ads.ENABLED && !isPremium) {
-            Box(
+            Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(bottom = windowSizeInfo.bottomNavBarPadding)
+                    .padding(bottom = windowSizeInfo.bottomNavBarPadding + 4.dp)
                     .background(MaterialTheme.colorScheme.surface)
             ) {
+                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                 BannerAdView(adUnitId = Constants.Ads.HOME_BANNER_UNIT_ID)
             }
         }
