@@ -133,7 +133,7 @@ private fun Modifier.animatedOffsetModifier(
     val targetOffsetX = when {
         hasBackButton && hasActionButton -> 0.dp
         isHomeScreen -> 0.dp
-        hasBackButton -> (-26).dp
+        hasBackButton -> 0.dp
         else -> 0.dp
     }
 

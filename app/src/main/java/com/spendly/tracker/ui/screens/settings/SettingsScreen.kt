@@ -89,6 +89,7 @@ fun SettingsScreen(
     onNavigateToAppearance: () -> Unit = {},
     onNavigateToImportStatement: () -> Unit = {},
     onNavigateToPayPeriodSettings: () -> Unit = {},
+    onNavigateToSmsParserDebug: () -> Unit = {},
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     appLockViewModel: com.spendly.tracker.ui.viewmodel.AppLockViewModel = hiltViewModel(),
     permissionViewModel: com.spendly.tracker.ui.viewmodel.PermissionViewModel = hiltViewModel()
@@ -429,15 +430,6 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                     title = "Import Data",
                     subtitle = "Restore from backup — merge or overwrite",
                     onClick = { importLauncher.launch("*/*") },
-                    position = ItemPosition.MIDDLE
-                )
-                SettingsNavItem(
-                    icon = Icons.Default.Description,
-                    iconBgColor = indigo_light,
-                    iconTint = indigo_dark,
-                    title = "Import Statement",
-                    subtitle = "Import from GPay, PhonePe",
-                    onClick = onNavigateToImportStatement,
                     position = ItemPosition.BOTTOM
                 )
             }
@@ -494,6 +486,20 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                     subtitle = "Customize how merchant names appear",
                     onClick = onNavigateToMerchantAliases,
                     position = ItemPosition.BOTTOM
+                )
+            }
+
+            // ── Developer Tools ──
+            SectionHeaderV2(title = "Developer Tools")
+            SettingsGroup {
+                SettingsNavItem(
+                    icon = Icons.Default.BugReport,
+                    iconBgColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                    title = "SMS Parser Debugger",
+                    subtitle = "Paste an SMS to test how the parser reads it",
+                    onClick = onNavigateToSmsParserDebug,
+                    position = ItemPosition.SINGLE
                 )
             }
 

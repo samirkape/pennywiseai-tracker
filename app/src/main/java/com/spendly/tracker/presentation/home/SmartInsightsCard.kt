@@ -268,4 +268,9 @@ private fun InsightType.toIcon(): ImageVector = when (this) {
     InsightType.GOAL_MILESTONE        -> Icons.Outlined.EmojiEvents
     InsightType.WEEK_TREND            -> Icons.Outlined.CompareArrows
     InsightType.LOW_REMAINING         -> Icons.Outlined.Warning
+    InsightType.LOAN_REMINDER         -> Icons.Outlined.CompareArrows
+    InsightType.CREDIT_CARD_ALERT     -> Icons.Outlined.Warning
+    InsightType.DAILY_TREND           -> Icons.Outlined.BarChart
+    InsightType.BALANCE_HEALTH        -> Icons.Outlined.Lightbulb
+    InsightType.PERIOD_END            -> Icons.Outlined.TrendingUp
 }

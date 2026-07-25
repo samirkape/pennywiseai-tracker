@@ -227,6 +227,7 @@ class TransactionDetailViewModel @Inject constructor(
 
     private val _merchantRenameUndoCount = MutableStateFlow<Int?>(null)
     val merchantRenameUndoCount: StateFlow<Int?> = _merchantRenameUndoCount.asStateFlow()
+    private var merchantRenameApprovedCount = 0
 
     private val _merchantMappingCategoryHint = MutableStateFlow<String?>(null)
     val merchantMappingCategoryHint: StateFlow<String?> = _merchantMappingCategoryHint.asStateFlow()
@@ -1254,6 +1255,7 @@ class TransactionDetailViewModel @Inject constructor(
                         )
                     }
                     if (similar.isNotEmpty()) {
+                        merchantRenameApprovedCount = 0
                         _merchantRenameGrouped.value = MerchantRenameGroupedState.from(
                             newMerchantName = normalizedTransaction.merchantName,
                             candidates = similar,
@@ -1284,60 +1286,27 @@ class TransactionDetailViewModel @Inject constructor(
         _saveSuccess.value = false
     }
 
-    fun applyGroupTier(tier: com.spendly.tracker.domain.model.ConfidenceTier) {
+    fun approveCurrentCandidate() {
         val state = _merchantRenameGrouped.value ?: return
-        val group = state.groups.firstOrNull { it.tier == tier } ?: return
-        viewModelScope.launch {
-            _merchantRenameGrouped.update { s ->
-                s?.copy(groups = s.groups.map { if (it.tier == tier) it.copy(isApplying = true) else it })
-            }
-            try {
-                val snapshot = group.transactions.map { it.transactionId to it.currentMerchantName }
-                for (txn in group.transactions) {
-                    transactionRepository.updateMerchantNameForTransaction(txn.transactionId, state.newMerchantName)
-                    merchantAliasRepository.setAlias(txn.currentMerchantName, state.newMerchantName)
-                }
-                transactionRepository.rememberMerchantRenameUndo(snapshot)
-                _merchantRenameGrouped.update { s ->
-                    s?.copy(groups = s.groups.map {
-                        if (it.tier == tier) it.copy(approved = true, isApplying = false) else it
-                    })
-                }
-            } catch (e: Exception) {
-                _errorMessage.value = "Failed to rename some transactions: ${e.message}"
-                _merchantRenameGrouped.update { s ->
-                    s?.copy(groups = s.groups.map { if (it.tier == tier) it.copy(isApplying = false) else it })
-                }
-            }
-            checkAndFinishGroupedRename()
-        }
-    }
-
-    fun skipGroupTier(tier: com.spendly.tracker.domain.model.ConfidenceTier) {
-        _merchantRenameGrouped.update { s ->
-            s?.copy(groups = s.groups.map { if (it.tier == tier) it.copy(skipped = true) else it })
-        }
-        checkAndFinishGroupedRename()
-    }
-
-    fun approveCurrentFuzzyCandidate() {
-        val state = _merchantRenameGrouped.value ?: return
-        val tx = state.currentFuzzyTransaction ?: return
+        val entry = state.current ?: return
         viewModelScope.launch {
             try {
-                transactionRepository.updateMerchantNameForTransaction(tx.transactionId, state.newMerchantName)
-                merchantAliasRepository.setAlias(tx.currentMerchantName, state.newMerchantName)
-                transactionRepository.rememberMerchantRenameUndo(listOf(tx.transactionId to tx.currentMerchantName))
+                transactionRepository.updateMerchantNameForTransaction(entry.candidate.transactionId, state.newMerchantName)
+                merchantAliasRepository.setAlias(entry.candidate.currentMerchantName, state.newMerchantName)
+                transactionRepository.rememberMerchantRenameUndo(
+                    listOf(entry.candidate.transactionId to entry.candidate.currentMerchantName)
+                )
+                merchantRenameApprovedCount++
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to rename: ${e.message}"
             }
-            _merchantRenameGrouped.update { s -> s?.copy(fuzzyReviewIndex = s.fuzzyReviewIndex + 1) }
+            _merchantRenameGrouped.update { s -> s?.copy(reviewIndex = s.reviewIndex + 1) }
             checkAndFinishGroupedRename()
         }
     }
 
-    fun skipCurrentFuzzyCandidate() {
-        _merchantRenameGrouped.update { s -> s?.copy(fuzzyReviewIndex = s.fuzzyReviewIndex + 1) }
+    fun skipCurrentCandidate() {
+        _merchantRenameGrouped.update { s -> s?.copy(reviewIndex = s.reviewIndex + 1) }
         checkAndFinishGroupedRename()
     }
 
@@ -1349,7 +1318,7 @@ class TransactionDetailViewModel @Inject constructor(
     private fun checkAndFinishGroupedRename() {
         val state = _merchantRenameGrouped.value ?: return
         if (state.isComplete) {
-            val renamedCount = state.groups.filter { it.approved }.sumOf { it.count }
+            val renamedCount = merchantRenameApprovedCount
             _merchantRenameGrouped.value = null
             if (renamedCount > 0) {
                 _merchantRenameUndoCount.value = renamedCount
@@ -1773,58 +1742,29 @@ data class CategorySuggestionsState(
     val merchantName: String = ""
 )
 
-data class RenameGroup(
+data class RenameQueueEntry(
+    val candidate: TransactionRenameCandidate,
     val tier: com.spendly.tracker.domain.model.ConfidenceTier,
-    val transactions: List<TransactionRenameCandidate>,
-    val approved: Boolean = false,
-    val skipped: Boolean = false,
-    val isApplying: Boolean = false,
-) {
-    val count: Int get() = transactions.size
-    val decided: Boolean get() = approved || skipped
-    /** Up to 3 unique source merchant names for display in the sheet. */
-    val uniqueMerchantSamples: List<String>
-        get() = transactions.map { it.currentMerchantName }.distinct().take(3)
-}
+)
 
 data class MerchantRenameGroupedState(
     val newMerchantName: String,
-    val groups: List<RenameGroup>,
-    val fuzzyReviewIndex: Int = 0,
+    val queue: List<RenameQueueEntry>,
+    val reviewIndex: Int = 0,
 ) {
-    val exactGroup: RenameGroup? get() = groups.firstOrNull { it.tier == com.spendly.tracker.domain.model.ConfidenceTier.EXACT }
-    val closeGroup: RenameGroup? get() = groups.firstOrNull { it.tier == com.spendly.tracker.domain.model.ConfidenceTier.CLOSE }
-    val fuzzyGroup: RenameGroup? get() = groups.firstOrNull { it.tier == com.spendly.tracker.domain.model.ConfidenceTier.FUZZY }
-    val totalCount: Int get() = groups.sumOf { it.count }
-
-    val currentFuzzyTransaction: TransactionRenameCandidate?
-        get() = fuzzyGroup?.transactions?.getOrNull(fuzzyReviewIndex)
-
-    val isFuzzyReviewComplete: Boolean
-        get() {
-            val fg = fuzzyGroup
-            return fg == null || fuzzyReviewIndex >= fg.count
-        }
-
-    /** Sheet should auto-dismiss when all bulk tiers are decided and fuzzy review is complete. */
-    val isComplete: Boolean
-        get() {
-            val bulkDone = groups
-                .filter { it.tier != com.spendly.tracker.domain.model.ConfidenceTier.FUZZY }
-                .all { it.decided }
-            return bulkDone && isFuzzyReviewComplete
-        }
+    val totalCount: Int get() = queue.size
+    val current: RenameQueueEntry? get() = queue.getOrNull(reviewIndex)
+    val isComplete: Boolean get() = reviewIndex >= queue.size
 
     companion object {
         fun from(newMerchantName: String, candidates: List<TransactionRenameCandidate>): MerchantRenameGroupedState {
-            val groups = com.spendly.tracker.domain.model.ConfidenceTier.entries
-                .mapNotNull { tier ->
-                    val txns = candidates.filter {
-                        com.spendly.tracker.domain.model.ConfidenceTier.from(it.similarityScore) == tier
-                    }
-                    if (txns.isEmpty()) null else RenameGroup(tier = tier, transactions = txns)
-                }
-            return MerchantRenameGroupedState(newMerchantName = newMerchantName, groups = groups)
+            // EXACT first, then CLOSE, then FUZZY — higher confidence upfront
+            val queue = com.spendly.tracker.domain.model.ConfidenceTier.entries.flatMap { tier ->
+                candidates
+                    .filter { com.spendly.tracker.domain.model.ConfidenceTier.from(it.similarityScore) == tier }
+                    .map { RenameQueueEntry(candidate = it, tier = tier) }
+            }
+            return MerchantRenameGroupedState(newMerchantName = newMerchantName, queue = queue)
         }
     }
 }

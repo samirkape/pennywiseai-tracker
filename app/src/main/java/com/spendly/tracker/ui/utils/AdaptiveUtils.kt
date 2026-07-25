@@ -5,6 +5,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.spendly.tracker.core.Constants
 import com.spendly.tracker.ui.theme.Dimensions
 
 /**
@@ -34,11 +35,13 @@ data class WindowSizeInfo(val widthSizeClass: WindowWidthSizeClass) {
         }
 
     /**
-     * Bottom padding to add to scrollable content to clear the bottom navigation bar.
+     * Bottom padding to add to scrollable content to clear the bottom navigation bar
+     * and the ad banner (when ads are enabled).
      * Returns 0dp when NavigationRail is active (no bottom bar present).
      */
     val bottomNavBarPadding: Dp
-        get() = if (useNavigationRail) 0.dp else Dimensions.Component.bottomBarHeight
+        get() = if (useNavigationRail) 0.dp
+                else Dimensions.Component.bottomBarHeight + if (Constants.Ads.ENABLED) 50.dp else 0.dp
 
     /**
      * Recommended maximum width for content containers so text lines don't become

@@ -17,7 +17,12 @@ enum class InsightType {
     SUBSCRIPTION_UPCOMING,
     GOAL_MILESTONE,
     WEEK_TREND,
-    LOW_REMAINING
+    LOW_REMAINING,
+    LOAN_REMINDER,
+    CREDIT_CARD_ALERT,
+    DAILY_TREND,
+    BALANCE_HEALTH,
+    PERIOD_END,
 }
 
 enum class InsightSeverity {

@@ -1,6 +1,11 @@
 package com.spendly.tracker.presentation.transactions
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
@@ -120,11 +125,14 @@ fun TransactionsScreen(
     val pendingSelfTransferCount by viewModel.pendingSelfTransferCount.collectAsState()
     val selfTransferReview by viewModel.selfTransferReview.collectAsState()
 
+    val filterVisualizationData by viewModel.filterVisualizationData.collectAsState()
+
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showExportDialog by remember { mutableStateOf(false) }
     var showFilterSheet by rememberSaveable { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) } // Menu doesn't need saving
+    var showVisualization by rememberSaveable { mutableStateOf(false) }
     var showDateRangePicker by rememberSaveable { mutableStateOf(false) }
     val filterSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     
@@ -451,6 +459,24 @@ fun TransactionsScreen(
                     }
                 }
             }
+
+            // Chart toggle button — only show when there is visualization data.
+            if (filterVisualizationData != null) {
+                IconButton(
+                    onClick = { showVisualization = !showVisualization },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ShowChart,
+                        contentDescription = if (showVisualization) "Hide chart" else "Show chart",
+                        tint = if (showVisualization)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(Dimensions.Icon.medium)
+                    )
+                }
+            }
         }
 
         if (showFilterSheet) {
@@ -591,7 +617,28 @@ fun TransactionsScreen(
                     .padding(top = Spacing.sm)
             )
         }
-        
+
+        // Filter Visualization Panel - shown when user taps the chart icon
+        AnimatedVisibility(
+            visible = showVisualization && filterVisualizationData != null && !uiState.isLoading,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            filterVisualizationData?.let { vizData ->
+                FilterVisualizationPanel(
+                    data = vizData,
+                    modifier = Modifier
+                        .padding(horizontal = Dimensions.Padding.content)
+                        .padding(top = Spacing.sm),
+                    onCategoryClick = { categoryName ->
+                        viewModel.setCategoryFilter(categoryName)
+                        // Scroll to top so the filtered list is immediately visible
+                        scope.launch { listState.animateScrollToItem(0) }
+                    }
+                )
+            }
+        }
+
         // Transaction List
         when {
             uiState.isLoading -> {
@@ -660,6 +707,8 @@ fun TransactionsScreen(
                                         displayCurrency = if (isUnifiedMode) selectedCurrency else null,
                                         categoryDisplayAmount = categoryDisplayAmounts[transaction.id],
                                         profileAccountKeys = profileAccountKeys,
+                                        categoryForIconFallback = transaction.category,
+                                        categoryIconKey = categoriesMap[transaction.category]?.icon,
                                         onClick = { onTransactionClick(transaction.id) },
                                         onExcludeToggle = { viewModel.toggleExcludedFromTracking(transaction) },
                                         onDelete = { viewModel.deleteTransaction(transaction) }
@@ -686,6 +735,8 @@ fun TransactionsScreen(
                                 displayCurrency = if (isUnifiedMode) selectedCurrency else null,
                                 categoryDisplayAmount = categoryDisplayAmounts[transaction.id],
                                 profileAccountKeys = profileAccountKeys,
+                                categoryForIconFallback = transaction.category,
+                                categoryIconKey = categoriesMap[transaction.category]?.icon,
                                 onClick = { onTransactionClick(transaction.id) },
                                 onExcludeToggle = { viewModel.toggleExcludedFromTracking(transaction) },
                                 onDelete = { viewModel.deleteTransaction(transaction) }

@@ -611,21 +611,11 @@ fun HomeScreen(
 
         }
 
-        // Fixed bottom banner ad — anchored above the navigation bar.
-        // The 2dp top divider + 4dp bottom gap provide visual separation from
-        // nav items, which is required to avoid AdMob accidental-click violations.
-        if (Constants.Ads.ENABLED && !isPremium) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(bottom = windowSizeInfo.bottomNavBarPadding + 4.dp)
-                    .background(MaterialTheme.colorScheme.surface)
-            ) {
-                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
-                BannerAdView(adUnitId = Constants.Ads.HOME_BANNER_UNIT_ID)
-            }
-        }
+
+
+        // Banner ad is now shown globally via MainScreen overlay (above bottom nav on all screens).
+
+
 
         Surface(
             modifier = Modifier
@@ -1149,16 +1139,14 @@ private fun DayNumberStrip(
                         java.time.format.TextStyle.NARROW,
                         java.util.Locale.getDefault(),
                     ),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = 9.sp,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (isSelected) MaterialTheme.colorScheme.onSurfaceVariant
                     else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
                 )
                 Text(
                     text = date.dayOfMonth.toString(),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontSize = if (isSelected) 13.sp else 11.sp,
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = if (isSelected) 13.sp else 11.sp),
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                     color = if (isSelected) MaterialTheme.colorScheme.onSurface
                     else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
@@ -1478,8 +1466,7 @@ private fun CalendarBottomSheet(
                                         text = CurrencyFormatter.formatAbbreviated(
                                             expense!!.toDouble(), selectedCurrency
                                         ),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 8.sp,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
                                         color = expenseColor.copy(alpha = if (isSelected) 0.85f else 1f),
                                         textAlign = TextAlign.Center,
                                         maxLines = 1

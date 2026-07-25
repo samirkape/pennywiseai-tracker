@@ -292,6 +292,32 @@ private fun BudgetGroupsContent(
             }
         }
 
+        // Quick stats row below the hero
+        val overBudgetCount = summary.groups.count { it.remaining < BigDecimal.ZERO && it.totalBudget > BigDecimal.ZERO }
+        val hasSavings = summary.savingsRate > 0f || summary.netSavings > BigDecimal.ZERO
+        val hasStats = hasSavings || summary.dailyAllowance > BigDecimal.ZERO || overBudgetCount > 0
+        if (hasStats) {
+            item {
+                val visible = remember { mutableStateOf(hasAnimated) }
+                LaunchedEffect(Unit) {
+                    if (!hasAnimated) { delay(100); visible.value = true }
+                }
+                AnimatedVisibility(
+                    visible = visible.value,
+                    enter = fadeIn(tween(300)) + slideInVertically(
+                        initialOffsetY = { slideOffsetPx },
+                        animationSpec = tween(300)
+                    )
+                ) {
+                    BudgetQuickStats(
+                        summary = summary,
+                        currency = uiState.currency,
+                        overBudgetCount = overBudgetCount
+                    )
+                }
+            }
+        }
+
         if (groupCount > 0) {
             item {
                 Text(
@@ -807,7 +833,6 @@ private fun BudgetHeroTile(
     currency: String,
     modifier: Modifier = Modifier
 ) {
-    val overBudgetCount = summary.groups.count { it.remaining < BigDecimal.ZERO && it.totalBudget > BigDecimal.ZERO }
     val hasLimitBudgets = summary.totalLimitBudget > BigDecimal.ZERO
     val overallPct = if (hasLimitBudgets) {
         (summary.totalLimitSpent.toFloat() / summary.totalLimitBudget.toFloat() * 100f).coerceAtLeast(0f)
@@ -832,7 +857,6 @@ private fun BudgetHeroTile(
 
     val onHero = MaterialTheme.colorScheme.onPrimaryContainer
     val onHeroMuted = onHero.copy(alpha = 0.72f)
-    val heroDivider = onHero.copy(alpha = 0.14f)
 
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -846,27 +870,11 @@ private fun BudgetHeroTile(
                 .padding(Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Overall Budget",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = onHero
-                )
-                if (hasLimitBudgets) {
-                    Text(
-                        text = "${overallPct.toInt()}%",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier
-                            .background(color = statusColor, shape = RoundedCornerShape(50))
-                            .padding(horizontal = Spacing.sm, vertical = 2.dp)
-                    )
-                }
-            }
+            Text(
+                text = "Overall Budget",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = onHero
+            )
 
             if (hasLimitBudgets) {
                 val remainingAbs = (summary.totalLimitBudget - summary.totalLimitSpent).abs()
@@ -876,7 +884,7 @@ private fun BudgetHeroTile(
                     } else {
                         "${CurrencyFormatter.formatCurrency(summary.totalLimitBudget - summary.totalLimitSpent, currency)} remaining"
                     },
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
                     color = statusColor,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -886,7 +894,7 @@ private fun BudgetHeroTile(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(12.dp)
+                        .height(10.dp)
                         .clip(barShape)
                         .background(statusColor.copy(alpha = 0.22f))
                 ) {
@@ -905,77 +913,88 @@ private fun BudgetHeroTile(
                     color = onHeroMuted
                 )
             }
+        }
+    }
+}
 
-            val hasSavings = summary.savingsRate > 0f || summary.netSavings > BigDecimal.ZERO
-            if (hasSavings || summary.daysRemaining > 0 || summary.dailyAllowance > BigDecimal.ZERO) {
-                HorizontalDivider(color = heroDivider)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.md)
-                ) {
-                    if (hasSavings) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Net Saved",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = onHeroMuted
-                            )
-                            Text(
-                                text = CurrencyFormatter.formatCurrency(summary.netSavings, currency),
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = onHero,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "${summary.savingsRate.toInt()}% saved",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = onHeroMuted
-                            )
-                        }
-                    }
-                    if (summary.dailyAllowance > BigDecimal.ZERO) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Daily Budget",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = onHeroMuted
-                            )
-                            Text(
-                                text = CurrencyFormatter.formatCurrency(summary.dailyAllowance, currency),
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = onHero,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "${summary.daysRemaining} days left",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = onHeroMuted
-                            )
-                        }
-                    }
-                    if (overBudgetCount > 0) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Breached",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = onHeroMuted
-                            )
-                            Text(
-                                text = "$overBudgetCount",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            Text(
-                                text = if (overBudgetCount == 1) "budget over" else "budgets over",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = onHeroMuted
-                            )
-                        }
-                    }
-                }
-            }
+@Composable
+private fun BudgetQuickStats(
+    summary: BudgetOverallSummary,
+    currency: String,
+    overBudgetCount: Int,
+    modifier: Modifier = Modifier
+) {
+    val hasSavings = summary.savingsRate > 0f || summary.netSavings > BigDecimal.ZERO
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+    ) {
+        if (hasSavings) {
+            QuickStatChip(
+                label = "Net Saved",
+                value = CurrencyFormatter.formatCurrency(summary.netSavings, currency),
+                sub = "${summary.savingsRate.toInt()}% saved",
+                modifier = Modifier.weight(1f)
+            )
+        }
+        if (summary.dailyAllowance > BigDecimal.ZERO) {
+            QuickStatChip(
+                label = "Daily Budget",
+                value = CurrencyFormatter.formatCurrency(summary.dailyAllowance, currency),
+                sub = "${summary.daysRemaining} days left",
+                modifier = Modifier.weight(1f)
+            )
+        }
+        if (overBudgetCount > 0) {
+            QuickStatChip(
+                label = "Breached",
+                value = "$overBudgetCount",
+                sub = if (overBudgetCount == 1) "budget over" else "budgets over",
+                valueColor = MaterialTheme.colorScheme.error,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuickStatChip(
+    label: String,
+    value: String,
+    sub: String,
+    modifier: Modifier = Modifier,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface
+) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.sm, vertical = Spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = valueColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = sub,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

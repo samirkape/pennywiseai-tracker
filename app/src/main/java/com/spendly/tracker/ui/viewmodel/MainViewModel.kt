@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.spendly.tracker.BuildConfig
+import com.spendly.tracker.data.manager.PremiumManager
 import com.spendly.tracker.data.preferences.UserPreferencesRepository
 import com.spendly.tracker.ui.components.WhatsNewContent
 import com.spendly.tracker.ui.components.WhatsNewVersion
@@ -18,8 +19,11 @@ import javax.inject.Inject
 @HiltViewModel
 class MainViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val userPreferencesRepository: UserPreferencesRepository
+    private val userPreferencesRepository: UserPreferencesRepository,
+    premiumManager: PremiumManager
 ) : ViewModel() {
+
+    val isPremium: StateFlow<Boolean> = premiumManager.isPremium
 
     private val _whatsNewVersion = MutableStateFlow<WhatsNewVersion?>(null)
     val whatsNewVersion: StateFlow<WhatsNewVersion?> = _whatsNewVersion.asStateFlow()

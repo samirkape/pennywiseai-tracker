@@ -197,6 +197,21 @@ class HDFCBankParser : BaseIndianBankParser() {
             }
         }
 
+        // Pattern 3a: "to VPA username@bank(UPI Ref No XXXX)" — P2P debit where parens hold a ref, not a name
+        // Must be checked before the generic VPA block which would wrongly capture the ref number as a merchant.
+        if (message.contains("to VPA", ignoreCase = true)) {
+            val toVpaDebitPattern = Regex(
+                """to\s+VPA\s+([^@\s]+)@[^\s(]+\s*\(UPI\s+Ref\s+No""",
+                RegexOption.IGNORE_CASE
+            )
+            toVpaDebitPattern.find(message)?.let { match ->
+                val vpaUsername = match.groupValues[1].trim()
+                if (vpaUsername.isNotEmpty() && vpaUsername.any { it.isLetter() }) {
+                    return cleanMerchantName(vpaUsername)
+                }
+            }
+        }
+
         // Pattern 3: "VPA merchant@bank (Merchant Name)" format
         if (message.contains("VPA", ignoreCase = true)) {
             // Special case for UPI credit: "from VPA username@provider (UPI reference)" or "from VPA username@provider (UPI reference)"

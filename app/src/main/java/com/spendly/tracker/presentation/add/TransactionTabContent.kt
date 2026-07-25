@@ -557,7 +557,8 @@ fun TransactionTabContent(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(1.5.dp)
             ) {
-                // Account field with autocomplete
+                // Account field with autocomplete — hidden for cash transactions
+                if (uiState.paymentChannel != PaymentChannel.CASH) {
                 val accountInteractionSource = remember { MutableInteractionSource() }
                 ExposedDropdownMenuBox(
                     expanded = showAccountMenu,
@@ -717,6 +718,7 @@ fun TransactionTabContent(
                         }
                     }
                 }
+                } // end if (paymentChannel != CASH)
 
                 // Category field
                 ExposedDropdownMenuBox(
@@ -727,13 +729,13 @@ fun TransactionTabContent(
                     TextField(
                         value = uiState.category,
                         onValueChange = {},
+                        shape = if (uiState.paymentChannel == PaymentChannel.CASH) topShape else bottomShape,
                         label = { Text("Category", fontWeight = FontWeight.SemiBold) },
                         readOnly = true,
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
                             .menuAnchor(MenuAnchorType.PrimaryNotEditable),
-                        shape = bottomShape,
                         leadingIcon = {
                             Icon(Icons.Default.Category, contentDescription = null)
                         },

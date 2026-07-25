@@ -11,6 +11,7 @@ import com.spendly.tracker.data.manager.SmsScanManager
 import com.spendly.tracker.data.preferences.UserPreferencesRepository
 import com.spendly.tracker.data.repository.AppLockRepository
 import com.spendly.tracker.domain.usecase.CreditCardPaymentLinker
+import com.spendly.tracker.worker.DailyReminderWorker
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +65,7 @@ class PennyWiseApplication : Application(), Configuration.Provider {
         super.onCreate()
         registerActivityLifecycleCallbacks(AppLockLifecycleObserver())
         scheduleHistoricalCcLinkerBackfill()
+        DailyReminderWorker.enqueuePeriodic(this)
         adManager.initialize()
         premiumManager.connect()
     }

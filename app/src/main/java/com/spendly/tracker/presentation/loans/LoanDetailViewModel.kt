@@ -116,6 +116,13 @@ class LoanDetailViewModel @Inject constructor(
         }
     }
 
+    fun unlinkTransaction(transactionId: Long) {
+        viewModelScope.launch {
+            loanRepository.unlinkTransaction(transactionId, loanId)
+            refreshLoan()
+        }
+    }
+
     fun deleteLoan() {
         viewModelScope.launch {
             loanRepository.deleteLoan(loanId)

@@ -134,11 +134,20 @@ class SmsTransactionProcessor @Inject constructor(
             }
 
             val customCategory = merchantMappingRepository.getCategoryForMerchant(entityWithName.merchantName)
-            val entityWithMapping = if (customCategory != null) {
-                Log.d(TAG, "Found custom category mapping: ${entityWithName.merchantName} -> $customCategory")
-                entityWithName.copy(category = customCategory)
-            } else {
-                entityWithName
+            val entityWithMapping = when {
+                customCategory != null -> {
+                    Log.d(TAG, "Found custom category mapping: ${entityWithName.merchantName} -> $customCategory")
+                    entityWithName.copy(category = customCategory)
+                }
+                else -> {
+                    val historicalCategory = transactionRepository.getMajorityCategoryForMerchant(entityWithName.merchantName)
+                    if (historicalCategory != null) {
+                        Log.d(TAG, "Applied historical majority category for ${entityWithName.merchantName}: $historicalCategory")
+                        entityWithName.copy(category = historicalCategory)
+                    } else {
+                        entityWithName
+                    }
+                }
             }
 
             // Apply rule engine to the transaction

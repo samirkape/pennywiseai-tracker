@@ -17,6 +17,7 @@ class MainActivity : FragmentActivity() {
 
     companion object {
         const val EXTRA_OPEN_ADD_TRANSACTION = "com.spendly.tracker.OPEN_ADD_TRANSACTION"
+        const val EXTRA_OPEN_TRANSACTIONS = "com.spendly.tracker.OPEN_TRANSACTIONS"
     }
 
     // Transaction ID to edit when launched from notification
@@ -25,6 +26,10 @@ class MainActivity : FragmentActivity() {
 
     // Flag to navigate directly to Add Transaction when launched from a shortcut/widget
     var openAddTransaction by mutableStateOf(false)
+        private set
+
+    // Flag to navigate directly to the Transactions list when launched from the daily reminder
+    var openTransactions by mutableStateOf(false)
         private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,8 +46,10 @@ class MainActivity : FragmentActivity() {
             PennyWiseApp(
                 editTransactionId = editTransactionId,
                 openAddTransaction = openAddTransaction,
+                openTransactions = openTransactions,
                 onEditComplete = { editTransactionId = null },
-                onAddTransactionShortcutHandled = { openAddTransaction = false }
+                onAddTransactionShortcutHandled = { openAddTransaction = false },
+                onOpenTransactionsHandled = { openTransactions = false }
             )
         }
     }
@@ -62,6 +69,9 @@ class MainActivity : FragmentActivity() {
         }
         if (intent?.getBooleanExtra(EXTRA_OPEN_ADD_TRANSACTION, false) == true) {
             openAddTransaction = true
+        }
+        if (intent?.getBooleanExtra(EXTRA_OPEN_TRANSACTIONS, false) == true) {
+            openTransactions = true
         }
     }
 }

@@ -100,7 +100,10 @@ class ComputeInsightsUseCase @Inject constructor(
         dateRange: Pair<LocalDate, LocalDate>,
         previousDateRange: Pair<LocalDate, LocalDate>,
     ): List<SmartInsight> {
-        val expenses = transactions.filter { it.transactionType == TransactionType.EXPENSE }
+        val expenses = transactions.filter {
+            (it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT) &&
+                it.loanId == null
+        }
 
         return listOfNotNull(
             generatePaceInsight(expenses, anchorMonth, dateRange),

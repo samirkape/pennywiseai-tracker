@@ -109,6 +109,14 @@ interface TransactionDao {
     fun getCategoriesUsedBetweenDates(startDate: LocalDateTime, endDate: LocalDateTime): Flow<List<String>>
 
     @Query("""
+        SELECT COUNT(*) FROM transactions
+        WHERE is_deleted = 0
+        AND is_excluded_from_tracking = 0
+        AND date_time BETWEEN :startDate AND :endDate
+    """)
+    suspend fun getTransactionCountBetweenDates(startDate: LocalDateTime, endDate: LocalDateTime): Int
+
+    @Query("""
         SELECT category FROM transactions
         WHERE is_deleted = 0
         GROUP BY category
@@ -331,6 +339,20 @@ interface TransactionDao {
         excludeTransactionId: Long,
         limit: Int = 8
     ): List<String>
+
+    @Query("""
+        SELECT
+            t.category AS category,
+            COUNT(*) AS count,
+            (SELECT COUNT(*) FROM transactions
+             WHERE is_deleted = 0 AND LOWER(merchant_name) = LOWER(:merchantName)) AS total
+        FROM transactions t
+        WHERE t.is_deleted = 0 AND LOWER(t.merchant_name) = LOWER(:merchantName)
+        GROUP BY t.category
+        ORDER BY COUNT(*) DESC
+        LIMIT 1
+    """)
+    suspend fun getTopCategoryStats(merchantName: String): MerchantCategoryStats?
 
     @Query("SELECT DISTINCT currency FROM transactions WHERE is_deleted = 0 ORDER BY currency")
     fun getAllCurrencies(): Flow<List<String>>
@@ -617,6 +639,12 @@ interface TransactionDao {
 data class TransactionIdCategoryRow(
     @ColumnInfo(name = "id") val id: Long,
     @ColumnInfo(name = "category") val category: String,
+)
+
+data class MerchantCategoryStats(
+    @ColumnInfo(name = "category") val category: String,
+    @ColumnInfo(name = "count") val count: Int,
+    @ColumnInfo(name = "total") val total: Int,
 )
 
 data class BulkCategoryPreviewDaoRow(

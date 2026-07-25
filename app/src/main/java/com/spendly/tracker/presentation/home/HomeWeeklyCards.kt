@@ -121,8 +121,7 @@ fun HomeThisWeekCard(
                     Spacer(modifier = Modifier.width(2.dp))
                     Text(
                         text = "${CurrencyFormatter.formatCurrency(delta.abs(), currency)} ${if (isHigher) "more" else "less"}",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
                         fontWeight = FontWeight.Medium,
                         color = if (isHigher) MaterialTheme.colorScheme.spendRed
                                 else MaterialTheme.colorScheme.spendGreen
@@ -228,8 +227,7 @@ private fun LegendDot(color: Color, label: String) {
         }
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
-            fontSize = 10.sp,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
             color = color
         )
     }
@@ -349,7 +347,7 @@ private fun SpendingBarChart(
                 ) {
                     Text(
                         text = tooltipTexts.getOrElse(idx) { "" },
-                        fontSize = 10.sp,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                         fontWeight = FontWeight.Bold,
                         color = tooltipFg,
                         maxLines = 1,
@@ -369,8 +367,7 @@ private fun SpendingBarChart(
                     text = date.dayOfMonth.toString(),
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = if (selectedIndex == i) 11.sp else 10.sp,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = if (selectedIndex == i) 11.sp else 10.sp),
                     fontWeight = if (selectedIndex == i) FontWeight.Bold else FontWeight.Normal,
                     color = if (selectedIndex == i) MaterialTheme.colorScheme.onSurface else mutedColor
                 )

@@ -108,7 +108,28 @@ class LoanRepository @Inject constructor(
     }
 
     suspend fun unlinkTransaction(transactionId: Long, loanId: Long) {
+        val loan = loanDao.getLoanById(loanId) ?: return
+        val transaction = transactionDao.getTransactionById(transactionId)
+
+        // If this is an "original" transaction (the one that created/added to the lent amount),
+        // subtract its value from originalAmount so the loan total stays accurate.
+        val isOriginal = when (loan.direction) {
+            LoanDirection.LENT -> transaction?.transactionType == TransactionType.EXPENSE
+            LoanDirection.BORROWED -> transaction?.transactionType == TransactionType.INCOME
+        }
+
         loanDao.unlinkTransaction(transactionId)
+
+        if (isOriginal && transaction != null) {
+            val newOriginalAmount = (loan.originalAmount - transaction.amount).coerceAtLeast(BigDecimal.ZERO)
+            loanDao.updateLoan(
+                loan.copy(
+                    originalAmount = newOriginalAmount,
+                    updatedAt = LocalDateTime.now()
+                )
+            )
+        }
+
         recalculateRemaining(loanId)
     }
 
@@ -152,6 +173,9 @@ class LoanRepository @Inject constructor(
 
     suspend fun deleteLoan(loanId: Long) {
         val loan = loanDao.getLoanById(loanId) ?: return
+        loanDao.getTransactionsForLoan(loanId).first()
+            .filter { it.transactionHash.startsWith("loan_repayment_${loanId}_") }
+            .forEach { transactionDao.deleteTransactionById(it.id) }
         loanDao.unlinkAllTransactions(loanId)
         loanDao.deleteLoan(loan)
     }
@@ -166,7 +190,7 @@ class LoanRepository @Inject constructor(
             loan.copy(
                 remainingAmount = remaining,
                 status = newStatus,
-                settledAt = if (newStatus == LoanStatus.SETTLED) LocalDateTime.now() else null,
+                settledAt = if (newStatus == LoanStatus.SETTLED) loan.settledAt ?: LocalDateTime.now() else null,
                 updatedAt = LocalDateTime.now()
             )
         )

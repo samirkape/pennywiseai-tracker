@@ -265,7 +265,147 @@ class TransactionsViewModel @Inject constructor(
     
     private val _deletedTransaction = MutableStateFlow<TransactionEntity?>(null)
     val deletedTransaction: StateFlow<TransactionEntity?> = _deletedTransaction.asStateFlow()
-    
+
+    // ---------------------------------------------------------------------------
+    // Filter Visualization Data
+    // Derived from the currently visible filtered transactions. Used to render
+    // the inline chart panel in TransactionsScreen.
+    // ---------------------------------------------------------------------------
+    val filterVisualizationData: StateFlow<FilterVisualizationData?> = combine(
+        uiState,
+        selectedCurrency,
+        transactionTypeFilter,
+        selectedPeriod,
+        customDateRange
+    ) { values ->
+        @Suppress("UNCHECKED_CAST")
+        val state     = values[0] as TransactionsUiState
+        @Suppress("UNCHECKED_CAST")
+        val currency  = values[1] as String
+        @Suppress("UNCHECKED_CAST")
+        val typeFilter = values[2] as TransactionTypeFilter
+        @Suppress("UNCHECKED_CAST")
+        val period    = values[3] as TimePeriod
+        @Suppress("UNCHECKED_CAST")
+        val dateRange = values[4] as? Pair<*, *>
+        computeVisualizationData(state.transactions, currency, typeFilter)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = null
+    )
+
+    private fun computeVisualizationData(
+        transactions: List<TransactionEntity>,
+        currency: String,
+        typeFilter: TransactionTypeFilter
+    ): FilterVisualizationData? {
+        if (transactions.size < 2) return null
+
+        // Determine which transaction types count towards the category breakdown.
+        val breakdownTransactions = when (typeFilter) {
+            TransactionTypeFilter.INCOME -> transactions.filter { it.transactionType == TransactionType.INCOME }
+            TransactionTypeFilter.EXPENSE -> transactions.filter { it.transactionType == TransactionType.EXPENSE }
+            TransactionTypeFilter.CREDIT -> transactions.filter { it.transactionType == TransactionType.CREDIT }
+            TransactionTypeFilter.INVESTMENT -> transactions.filter { it.transactionType == TransactionType.INVESTMENT }
+            TransactionTypeFilter.TRANSFER, TransactionTypeFilter.CC_BILL_PAYMENT ->
+                transactions.filter { it.transactionType == TransactionType.TRANSFER }
+            TransactionTypeFilter.EXCLUDED -> transactions
+            TransactionTypeFilter.ALL -> transactions.filter {
+                it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT
+            }
+        }
+
+        val totalAmount = breakdownTransactions.fold(java.math.BigDecimal.ZERO) { acc, tx -> acc + tx.amount }
+
+        val categoryItems: List<FilterCategoryItem> = if (breakdownTransactions.isNotEmpty() && totalAmount > java.math.BigDecimal.ZERO) {
+            breakdownTransactions
+                .groupBy { it.category }
+                .mapValues { (_, txns) -> txns.fold(java.math.BigDecimal.ZERO) { acc, tx -> acc + tx.amount } }
+                .entries
+                .sortedByDescending { it.value }
+                .take(5)
+                .map { (cat, amount) ->
+                    FilterCategoryItem(
+                        name = cat,
+                        amount = amount,
+                        percentage = amount.divide(totalAmount, 4, java.math.RoundingMode.HALF_UP).toFloat(),
+                        transactionCount = breakdownTransactions.count { it.category == cat }
+                    )
+                }
+        } else emptyList()
+
+        // Build time-series trend from all visible transactions (amount summed per bucket).
+        val sortedTx = transactions.sortedBy { it.dateTime }
+        val minDate = sortedTx.first().dateTime.toLocalDate()
+        val maxDate = sortedTx.last().dateTime.toLocalDate()
+        val daysBetween = java.time.temporal.ChronoUnit.DAYS.between(minDate, maxDate)
+
+        val trendPoints: List<FilterTrendPoint> = when {
+            daysBetween <= 31 -> groupTrendByDay(sortedTx)
+            daysBetween <= 90 -> groupTrendByWeek(sortedTx)
+            else -> groupTrendByMonth(sortedTx)
+        }
+
+        val dominantTypeLabel = when (typeFilter) {
+            TransactionTypeFilter.INCOME -> "Income"
+            TransactionTypeFilter.EXPENSE -> "Spending"
+            TransactionTypeFilter.CREDIT -> "Credit Card"
+            TransactionTypeFilter.INVESTMENT -> "Investment"
+            TransactionTypeFilter.TRANSFER, TransactionTypeFilter.CC_BILL_PAYMENT -> "Transfers"
+            TransactionTypeFilter.EXCLUDED -> "Excluded"
+            TransactionTypeFilter.ALL -> "Spending"
+        }
+
+        return FilterVisualizationData(
+            categoryItems = categoryItems,
+            trendPoints = trendPoints,
+            currency = currency,
+            dominantTypeLabel = dominantTypeLabel
+        )
+    }
+
+    private fun groupTrendByDay(transactions: List<TransactionEntity>): List<FilterTrendPoint> =
+        transactions
+            .groupBy { it.dateTime.toLocalDate() }
+            .entries
+            .sortedBy { it.key }
+            .map { (date, txns) ->
+                FilterTrendPoint(
+                    dateTime = date.atStartOfDay(),
+                    amount = txns.fold(java.math.BigDecimal.ZERO) { acc, tx -> acc + tx.amount },
+                    label = date.format(java.time.format.DateTimeFormatter.ofPattern("dd MMM"))
+                )
+            }
+
+    private fun groupTrendByWeek(transactions: List<TransactionEntity>): List<FilterTrendPoint> =
+        transactions
+            .groupBy { it.dateTime.toLocalDate().with(java.time.DayOfWeek.MONDAY) }
+            .entries
+            .sortedBy { it.key }
+            .map { (weekStart, txns) ->
+                FilterTrendPoint(
+                    dateTime = weekStart.atStartOfDay(),
+                    amount = txns.fold(java.math.BigDecimal.ZERO) { acc, tx -> acc + tx.amount },
+                    label = weekStart.format(java.time.format.DateTimeFormatter.ofPattern("dd MMM"))
+                )
+            }
+
+    private fun groupTrendByMonth(transactions: List<TransactionEntity>): List<FilterTrendPoint> =
+        transactions
+            .groupBy {
+                it.dateTime.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0)
+            }
+            .entries
+            .sortedBy { it.key }
+            .map { (monthStart, txns) ->
+                FilterTrendPoint(
+                    dateTime = monthStart,
+                    amount = txns.fold(java.math.BigDecimal.ZERO) { acc, tx -> acc + tx.amount },
+                    label = monthStart.format(java.time.format.DateTimeFormatter.ofPattern("MMM yy"))
+                )
+            }
+
     // Track if initial filters have been applied to prevent resetting on back navigation
     private var hasAppliedInitialFilters = false
 

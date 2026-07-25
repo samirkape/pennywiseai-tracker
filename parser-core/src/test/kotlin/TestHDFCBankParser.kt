@@ -151,6 +151,37 @@ Avl bal INR 1,276.99""",
                 ),
             ),
 
+            // UPI credit via phone-number VPA — parentheses hold ref number, not merchant name
+            ParserTestCase(
+                name = "UPI Credit via phone-number VPA - no merchant extracted",
+                message = "HDFC Bank: Rs. 100000.00 credited to a/c XXXXXX2518 on 14-10-24 by a/c linked to VPA 8421169029@axl (UPI Ref No 428812121156).",
+                sender = "CP-HDFCBK-S",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("100000.00"),
+                    currency = "INR",
+                    type = com.spendly.parser.core.TransactionType.INCOME,
+                    accountLast4 = "2518",
+                    merchant = null,
+                    reference = "428812121156"
+                )
+            ),
+
+            // P2P UPI debit: parens contain "UPI Ref No", not a merchant name
+            // VPA_WITH_NAME would wrongly capture the ref number; dedicated pattern extracts the VPA username instead.
+            ParserTestCase(
+                name = "UPI Debit to Personal VPA - Ref Number in Parens",
+                message = "HDFC Bank: Rs 5000.00 debited from a/c **2518 on 06-06-23 to VPA niks9029@ybl(UPI Ref No 315761726827). Not you? Call on 18002586161 to report",
+                sender = "CP-HDFCBK-S",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("5000.00"),
+                    currency = "INR",
+                    type = com.spendly.parser.core.TransactionType.EXPENSE,
+                    accountLast4 = "2518",
+                    merchant = "niks9029",
+                    reference = "315761726827"
+                )
+            ),
+
             // NEFT deposit (salary/income)
             ParserTestCase(
                 name = "NEFT Credit Deposit - Income",

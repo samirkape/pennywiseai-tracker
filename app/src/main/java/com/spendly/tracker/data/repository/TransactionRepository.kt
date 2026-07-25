@@ -221,6 +221,12 @@ class TransactionRepository @Inject constructor(
         return transactionDao.getCategoriesUsedBetweenDates(start, end)
     }
 
+    suspend fun getTodayTransactionCount(): Int {
+        val start = LocalDate.now().atStartOfDay()
+        val end = LocalDate.now().atTime(23, 59, 59)
+        return transactionDao.getTransactionCountBetweenDates(start, end)
+    }
+
     /**
      * Categories previously used for this merchant (saved mapping, past transactions, tags).
      */
@@ -248,6 +254,17 @@ class TransactionRepository @Inject constructor(
      */
     suspend fun getTopCategoriesByUsage(limit: Int = 3): List<String> =
         transactionDao.getTopCategoriesByUsage(limit)
+
+    suspend fun getMajorityCategoryForMerchant(
+        merchantName: String,
+        minTransactions: Int = 3,
+        minConfidencePct: Int = 60,
+    ): String? {
+        val stats = transactionDao.getTopCategoryStats(merchantName.trim()) ?: return null
+        if (stats.total < minTransactions) return null
+        val confidence = stats.count * 100 / stats.total
+        return if (confidence >= minConfidencePct) stats.category else null
+    }
 
     fun getAllMerchants(): Flow<List<String>> =
         transactionDao.getAllMerchants()

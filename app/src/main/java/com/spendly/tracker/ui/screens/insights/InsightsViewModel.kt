@@ -9,15 +9,18 @@ import com.spendly.tracker.data.repository.TransactionRepository
 import com.spendly.tracker.domain.usecase.ComputeInsightsUseCase
 import com.spendly.tracker.domain.model.SmartInsight
 import com.spendly.tracker.presentation.common.getDateRangeForYearMonth
+import com.spendly.tracker.utils.DateRangeUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
 import javax.inject.Inject
@@ -32,10 +35,33 @@ class InsightsViewModel @Inject constructor(
     private val salaryMonthOverrideRepository: SalaryMonthOverrideRepository,
     private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
+    // Captured before getStateFlow sets the key — true means we're restoring saved state
+    // (e.g. process death), false means a fresh open that needs the correct anchor month.
+    private val wasSelectedMonthSaved = savedStateHandle.contains("selectedMonth")
+
     private val selectedMonthKey = savedStateHandle.getStateFlow(
         key = "selectedMonth",
         initialValue = YearMonth.now().toString()
     )
+
+    init {
+        if (!wasSelectedMonthSaved) {
+            viewModelScope.launch {
+                val useFinancial = userPreferencesRepository.useFinancialMonth.first()
+                if (!useFinancial) return@launch
+                val startDay = userPreferencesRepository.monthStartDay.first()
+                val useFixed = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
+                val endDay = userPreferencesRepository.budgetPeriodEndDay.first()
+                val (periodStart, _) = DateRangeUtils.calculateBudgetPeriodRange(
+                    LocalDate.now(), startDay, useFixed, endDay
+                )
+                val correctMonth = YearMonth.from(periodStart)
+                if (correctMonth != YearMonth.now()) {
+                    savedStateHandle["selectedMonth"] = correctMonth.toString()
+                }
+            }
+        }
+    }
 
     val selectedMonth: StateFlow<YearMonth> = selectedMonthKey
         .map { key -> YearMonth.parse(key) }

@@ -38,6 +38,7 @@ import com.spendly.tracker.data.repository.SalaryMonthOverrideRepository
 import com.spendly.tracker.data.manager.SmsScanManager
 import com.spendly.tracker.data.repository.TransactionRepository
 import com.spendly.tracker.data.repository.CategoryRepository
+import com.spendly.tracker.domain.usecase.ComputeInsightsUseCase
 import com.spendly.tracker.worker.OptimizedSmsReaderWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -85,6 +86,7 @@ class HomeViewModel @Inject constructor(
     private val premiumManager: PremiumManager,
     private val smsScanManager: SmsScanManager,
     private val categoryRepository: CategoryRepository,
+    private val computeInsightsUseCase: ComputeInsightsUseCase,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     
@@ -987,21 +989,94 @@ class HomeViewModel @Inject constructor(
 
     /**
      * Recomputes rule-based spending insights from the current UI state and updates [_uiState].
+     * Also fetches analytical insights from ComputeInsightsUseCase and merges them.
      * Call this after any data update that could affect insight conditions.
      */
     fun refreshInsights() {
-        _uiState.value = _uiState.value.copy(insights = computeInsights(_uiState.value))
+        // Show rule-based insights immediately (synchronous)
+        val ruleBased = computeInsights(_uiState.value)
+        _uiState.value = _uiState.value.copy(insights = ruleBased)
+        // Then enrich with analytical insights in background
+        viewModelScope.launch {
+            try {
+                val state = _uiState.value
+                val periodStart = if (state.payPeriodStartEpochDay > 0)
+                    java.time.LocalDate.ofEpochDay(state.payPeriodStartEpochDay)
+                else
+                    YearMonth.now().atDay(1)
+                val periodEnd = if (state.payPeriodEndEpochDay > 0)
+                    java.time.LocalDate.ofEpochDay(state.payPeriodEndEpochDay)
+                else
+                    YearMonth.now().atEndOfMonth()
+                val prevEnd = periodStart.minusDays(1)
+                val prevStart = periodStart.minusMonths(1)
+
+                val analyticalInsights = computeInsightsUseCase.computeForPeriod(
+                    anchorMonth = YearMonth.from(periodEnd),
+                    dateRange = periodStart to periodEnd,
+                    previousDateRange = prevStart to prevEnd,
+                )
+                    .filterNot { it.type == com.spendly.tracker.domain.model.InsightType.ANOMALY }
+                    .map { it.toHomeSpendInsight() }
+
+                val freshRuleBased = computeInsights(_uiState.value)
+                val merged = (freshRuleBased + analyticalInsights)
+                    .distinctBy { it.title }
+                    .sortedByDescending { it.severity.ordinal }
+                    .take(20)
+                _uiState.value = _uiState.value.copy(insights = merged)
+            } catch (_: Exception) {
+                // Keep rule-based insights on error
+            }
+        }
+    }
+
+    /** Converts a domain SmartInsight into a SpendInsight for the home screen card. */
+    private fun com.spendly.tracker.domain.model.SmartInsight.toHomeSpendInsight(): SpendInsight {
+        val domainType = this.type
+        val homeType = when (domainType) {
+            com.spendly.tracker.domain.model.InsightType.TOP_GROWER,
+            com.spendly.tracker.domain.model.InsightType.TOP_CATEGORIES,
+            com.spendly.tracker.domain.model.InsightType.NEW_MERCHANTS,
+            com.spendly.tracker.domain.model.InsightType.MERCHANT_JUMP,
+            com.spendly.tracker.domain.model.InsightType.MERCHANT_LOYALTY -> InsightType.CATEGORY_SPIKE
+            com.spendly.tracker.domain.model.InsightType.PACE,
+            com.spendly.tracker.domain.model.InsightType.MONTHLY_COMPARISON,
+            com.spendly.tracker.domain.model.InsightType.LARGEST_EXPENSE -> InsightType.PACE_PREDICTION
+            com.spendly.tracker.domain.model.InsightType.RECURRING_RATIO -> InsightType.SUBSCRIPTION_UPCOMING
+            com.spendly.tracker.domain.model.InsightType.SAVINGS_WIN,
+            com.spendly.tracker.domain.model.InsightType.WEEKEND_SPEND,
+            com.spendly.tracker.domain.model.InsightType.SPEND_SPLIT -> InsightType.WEEK_TREND
+            com.spendly.tracker.domain.model.InsightType.INCOME_VS_EXPENSE -> InsightType.BALANCE_HEALTH
+            com.spendly.tracker.domain.model.InsightType.INVESTMENT_RATIO -> InsightType.GOAL_MILESTONE
+            com.spendly.tracker.domain.model.InsightType.TRANSACTION_FREQUENCY,
+            com.spendly.tracker.domain.model.InsightType.ZERO_SPEND_DAYS,
+            com.spendly.tracker.domain.model.InsightType.PEAK_SPEND_DAY -> InsightType.DAILY_TREND
+            else -> InsightType.WEEK_TREND
+        }
+        val severity = when {
+            domainType == com.spendly.tracker.domain.model.InsightType.LARGEST_EXPENSE -> InsightSeverity.CAUTION
+            domainType == com.spendly.tracker.domain.model.InsightType.TOP_GROWER -> InsightSeverity.CAUTION
+            domainType == com.spendly.tracker.domain.model.InsightType.MONTHLY_COMPARISON
+                && primaryValue.startsWith("↑") -> InsightSeverity.CAUTION
+            domainType == com.spendly.tracker.domain.model.InsightType.INCOME_VS_EXPENSE
+                && primaryValue.startsWith("Over") -> InsightSeverity.ALERT
+            else -> InsightSeverity.INFO
+        }
+        val body = if (secondaryText.isNotBlank()) "$primaryValue — $secondaryText" else primaryValue
+        return SpendInsight(type = homeType, title = title, body = body, severity = severity)
     }
 
     /**
      * Derives rule-based spending insights from [state].
      * Rules are ordered by urgency: ALERT → CAUTION → INFO.
      */
-    private fun computeInsights(state: HomeUiState, maxInsights: Int = 8): List<SpendInsight> {
+    private fun computeInsights(state: HomeUiState, maxInsights: Int = 15): List<SpendInsight> {
         val insights = mutableListOf<SpendInsight>()
         val currency = state.selectedCurrency
         val currentExpenses = state.currentMonthExpenses
         val lastExpenses = state.lastMonthExpenses
+        val today = java.time.LocalDate.now()
 
         // Rule 1 — Month-over-month spend change
         if (lastExpenses > BigDecimal.ZERO && currentExpenses > BigDecimal.ZERO) {
@@ -1028,8 +1103,7 @@ class HomeViewModel @Inject constructor(
             }
         }
 
-        // Rule 2 — Subscription due today or tomorrow (takes priority over generic reminder)
-        val today = java.time.LocalDate.now()
+        // Rule 2 — Subscription due today or tomorrow
         val dueToday = state.upcomingSubscriptions.filter { it.nextPaymentDate == today }
         val dueTomorrow = state.upcomingSubscriptions.filter { it.nextPaymentDate == today.plusDays(1) }
         when {
@@ -1140,39 +1214,22 @@ class HomeViewModel @Inject constructor(
             }
         }
 
-        // Rule 6 — Spending pace projection (after at least 5 days into the period)
+        // Period epoch values used by later rules (9, 16, 18)
         val periodStart = state.payPeriodStartEpochDay
         val periodEnd = state.payPeriodEndEpochDay
         val todayEpoch = today.toEpochDay()
         val elapsedDays = (todayEpoch - periodStart).coerceAtLeast(1)
-        val totalDays = (periodEnd - periodStart).coerceAtLeast(1)
-        if (elapsedDays >= 5 && currentExpenses > BigDecimal.ZERO && lastExpenses > BigDecimal.ZERO) {
-            val dailyRate = currentExpenses.toDouble() / elapsedDays
-            val projected = BigDecimal(dailyRate * totalDays).setScale(2, java.math.RoundingMode.HALF_UP)
-            val projectedVsLast = ((projected.toDouble() - lastExpenses.toDouble()) / lastExpenses.toDouble() * 100).toInt()
-            when {
-                projectedVsLast > 15 -> insights += SpendInsight(
-                    type = InsightType.PACE_PREDICTION,
-                    title = "Spending pace is high",
-                    body = "On track for ${CurrencyFormatter.formatCurrency(projected, currency)} by period-end",
-                    severity = InsightSeverity.CAUTION
-                )
-                projectedVsLast < -10 -> insights += SpendInsight(
-                    type = InsightType.PACE_PREDICTION,
-                    title = "Spending pace is low",
-                    body = "Projected ${CurrencyFormatter.formatCurrency(projected, currency)} — less than last period",
-                    severity = InsightSeverity.INFO
-                )
-            }
-        }
 
         // Rule 7 — Investment discipline
         val investment = state.currentMonthInvestment
         if (investment > BigDecimal.ZERO && insights.none { it.type == InsightType.GOAL_MILESTONE }) {
+            val investPct = if (currentExpenses > BigDecimal.ZERO)
+                (investment.toDouble() / (currentExpenses + investment).toDouble() * 100).toInt()
+            else 0
             insights += SpendInsight(
                 type = InsightType.GOAL_MILESTONE,
                 title = "Investing this period",
-                body = "${CurrencyFormatter.formatCurrency(investment, currency)} invested — building long-term wealth",
+                body = "${CurrencyFormatter.formatCurrency(investment, currency)} invested${if (investPct > 0) " — $investPct% of total outflows" else " — building long-term wealth"}",
                 severity = InsightSeverity.INFO
             )
         }
@@ -1196,6 +1253,189 @@ class HomeViewModel @Inject constructor(
                         severity = InsightSeverity.INFO
                     )
                 }
+            }
+        }
+
+        // Rule 9 — Period end warning (last 3 days of period)
+        val daysRemaining = (periodEnd - todayEpoch).toInt()
+        if (periodEnd > 0 && daysRemaining in 1..3 && currentExpenses > BigDecimal.ZERO) {
+            val dailyAvg = currentExpenses.toDouble() / elapsedDays.coerceAtLeast(1)
+            val remaining = BigDecimal(dailyAvg * daysRemaining).setScale(2, java.math.RoundingMode.HALF_UP)
+            insights += SpendInsight(
+                type = InsightType.PERIOD_END,
+                title = "${if (daysRemaining == 1) "Last day" else "$daysRemaining days"} of period",
+                body = "~${CurrencyFormatter.formatCurrency(remaining, currency)} more at current pace",
+                severity = if (daysRemaining == 1) InsightSeverity.CAUTION else InsightSeverity.INFO
+            )
+        }
+
+        // Rule 10 — Credit card utilization
+        val highUtilCards = state.creditCards.filter { card ->
+            val limit = card.creditLimit ?: BigDecimal.ZERO
+            limit > BigDecimal.ZERO && card.balance > BigDecimal.ZERO &&
+                (card.balance.toDouble() / limit.toDouble()) > 0.70
+        }
+        if (highUtilCards.isNotEmpty()) {
+            val topCard = highUtilCards.maxByOrNull { it.balance } ?: highUtilCards.first()
+            val limit = topCard.creditLimit ?: BigDecimal.ONE
+            val utilPct = (topCard.balance.toDouble() / limit.toDouble() * 100).toInt()
+            val severity = if (utilPct >= 90) InsightSeverity.ALERT else InsightSeverity.CAUTION
+            insights += SpendInsight(
+                type = InsightType.CREDIT_CARD_ALERT,
+                title = "Credit card at $utilPct%",
+                body = "${CurrencyFormatter.formatCurrency(topCard.balance, currency)} used of ${CurrencyFormatter.formatCurrency(limit, currency)} limit",
+                severity = severity
+            )
+        }
+
+        // Rule 11 — Loan tracking (money lent out)
+        state.loanSummary?.let { loan ->
+            if (loan.totalLentRemaining > BigDecimal.ZERO) {
+                val lentCount = loan.activeLoans.count { it.direction == com.spendly.tracker.data.database.entity.LoanDirection.LENT }
+                insights += SpendInsight(
+                    type = InsightType.LOAN_REMINDER,
+                    title = "Money owed to you",
+                    body = "${CurrencyFormatter.formatCurrency(loan.totalLentRemaining, currency)} outstanding across $lentCount loan(s)",
+                    severity = InsightSeverity.INFO
+                )
+            }
+            if (loan.totalBorrowedRemaining > BigDecimal.ZERO) {
+                insights += SpendInsight(
+                    type = InsightType.LOAN_REMINDER,
+                    title = "You owe money",
+                    body = "${CurrencyFormatter.formatCurrency(loan.totalBorrowedRemaining, currency)} remaining to repay",
+                    severity = InsightSeverity.CAUTION
+                )
+            }
+        }
+
+        // Rule 12 — 7-day daily trend acceleration
+        val last7 = state.last7DaysSpend
+        if (last7.size >= 6) {
+            val recentDays = last7.takeLast(3).sumOf { it.second }
+            val earlierDays = last7.take(3).sumOf { it.second }
+            if (earlierDays > BigDecimal.ZERO) {
+                val accelPct = ((recentDays - earlierDays).toDouble() / earlierDays.toDouble() * 100).toInt()
+                when {
+                    accelPct > 60 -> insights += SpendInsight(
+                        type = InsightType.DAILY_TREND,
+                        title = "Spending accelerating",
+                        body = "Last 3 days ${accelPct}% higher than previous 3 days",
+                        severity = InsightSeverity.CAUTION
+                    )
+                    accelPct < -40 -> insights += SpendInsight(
+                        type = InsightType.DAILY_TREND,
+                        title = "Spending slowing down",
+                        body = "Last 3 days ${-accelPct}% lower than previous 3 days",
+                        severity = InsightSeverity.INFO
+                    )
+                }
+            }
+        }
+
+        // Rule 13 — No spending today (if it's past noon and no spending detected)
+        if (last7.isNotEmpty()) {
+            val todaySpend = last7.lastOrNull { it.first == today }?.second ?: BigDecimal.ZERO
+            val avgDaySpend = if (last7.isNotEmpty()) last7.sumOf { it.second }
+                .divide(BigDecimal(last7.size), 2, java.math.RoundingMode.HALF_UP)
+            else BigDecimal.ZERO
+            val hourNow = java.time.LocalTime.now().hour
+            if (todaySpend == BigDecimal.ZERO && hourNow >= 18 && avgDaySpend > BigDecimal.ZERO
+                && currentExpenses > BigDecimal.ZERO) {
+                insights += SpendInsight(
+                    type = InsightType.DAILY_TREND,
+                    title = "No spending today",
+                    body = "Great! Your avg is ${CurrencyFormatter.formatCurrency(avgDaySpend, currency)}/day",
+                    severity = InsightSeverity.INFO
+                )
+            }
+        }
+
+        // Rule 14 — Unusually high single day in last 7 days
+        if (last7.size >= 3) {
+            val avgSpend = last7.sumOf { it.second }
+                .divide(BigDecimal(last7.size), 2, java.math.RoundingMode.HALF_UP)
+            val highDay = last7.filter { it.first != today }
+                .maxByOrNull { it.second }
+            if (highDay != null && avgSpend > BigDecimal.ZERO
+                && highDay.second > avgSpend.multiply(BigDecimal(3))) {
+                val dayName = highDay.first.dayOfWeek.name.lowercase()
+                    .replaceFirstChar { it.uppercase() }
+                insights += SpendInsight(
+                    type = InsightType.DAILY_TREND,
+                    title = "Big spend on $dayName",
+                    body = "${CurrencyFormatter.formatCurrency(highDay.second, currency)} — ${(highDay.second.toDouble() / avgSpend.toDouble()).toInt()}x your daily average",
+                    severity = InsightSeverity.CAUTION
+                )
+            }
+        }
+
+        // Rule 15 — Goal with approaching deadline
+        state.activeGoals.forEach { goal ->
+            val targetDate = goal.targetDate ?: return@forEach
+            val daysToDeadline = java.time.temporal.ChronoUnit.DAYS.between(today, targetDate).toInt()
+            if (daysToDeadline in 1..14 && goal.targetAmount > BigDecimal.ZERO) {
+                val progressPct = (goal.currentAmount.toDouble() / goal.targetAmount.toDouble() * 100).toInt()
+                if (progressPct < 80) {
+                    insights += SpendInsight(
+                        type = InsightType.GOAL_MILESTONE,
+                        title = "Goal deadline in $daysToDeadline days",
+                        body = "${goal.name} is at $progressPct% — ${CurrencyFormatter.formatCurrency(goal.targetAmount - goal.currentAmount, currency)} remaining",
+                        severity = if (daysToDeadline <= 5) InsightSeverity.ALERT else InsightSeverity.CAUTION,
+                        actionLabel = "View"
+                    )
+                }
+            }
+        }
+
+        // Rule 16 — Income not tracked (expenses exist but no income recorded)
+        if (income == BigDecimal.ZERO && currentExpenses > BigDecimal.ZERO && elapsedDays >= 10) {
+            insights += SpendInsight(
+                type = InsightType.BALANCE_HEALTH,
+                title = "No income tracked",
+                body = "Add income transactions to see your savings rate and cash flow",
+                severity = InsightSeverity.INFO
+            )
+        }
+
+        // Rule 17 — High transfer-to-expense ratio (possible self-transfer noise)
+        val transfers = state.currentMonthTransfer
+        if (transfers > BigDecimal.ZERO && currentExpenses > BigDecimal.ZERO) {
+            val transferPct = (transfers.toDouble() / currentExpenses.toDouble() * 100).toInt()
+            if (transferPct > 80) {
+                insights += SpendInsight(
+                    type = InsightType.BALANCE_HEALTH,
+                    title = "Large transfers this period",
+                    body = "${CurrencyFormatter.formatCurrency(transfers, currency)} in transfers vs ${CurrencyFormatter.formatCurrency(currentExpenses, currency)} in expenses",
+                    severity = InsightSeverity.INFO
+                )
+            }
+        }
+
+        // Rule 18 — Consistent daily overspend (5+ of last 7 days above period daily avg)
+        if (last7.size >= 5 && currentExpenses > BigDecimal.ZERO && elapsedDays >= 7) {
+            val periodDailyAvg = currentExpenses.toDouble() / elapsedDays
+            val daysAboveAvg = last7.count { it.second.toDouble() > periodDailyAvg * 1.2 }
+            if (daysAboveAvg >= 5) {
+                insights += SpendInsight(
+                    type = InsightType.PACE_PREDICTION,
+                    title = "Consistently over daily average",
+                    body = "$daysAboveAvg of last 7 days exceeded your ${CurrencyFormatter.formatCurrency(BigDecimal(periodDailyAvg.toInt()), currency)}/day average",
+                    severity = InsightSeverity.CAUTION
+                )
+            }
+        }
+
+        // Rule 19 — Top spending category
+        if (state.topCategoryName.isNotBlank() && currentExpenses > BigDecimal.ZERO) {
+            val catBody = state.topCategorySubLabel.ifBlank { "Your top spending category this period" }
+            if (insights.none { it.type == InsightType.CATEGORY_SPIKE }) {
+                insights += SpendInsight(
+                    type = InsightType.CATEGORY_SPIKE,
+                    title = "Top: ${state.topCategoryName}",
+                    body = catBody,
+                    severity = InsightSeverity.INFO
+                )
             }
         }
 

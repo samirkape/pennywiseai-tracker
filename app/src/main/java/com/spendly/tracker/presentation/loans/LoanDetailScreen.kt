@@ -60,7 +60,7 @@ fun LoanDetailScreen(
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehaviorLarge.nestedScrollConnection),
-        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        containerColor = Color.Transparent,
         topBar = {
             CustomTitleTopAppBar(
                 scrollBehaviorSmall = scrollBehaviorSmall,
@@ -101,7 +101,9 @@ fun LoanDetailScreen(
                             DropdownMenuItem(
                                 text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
                                 onClick = { showMenu = false; viewModel.showDeleteDialog() },
-                                leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }
+                                leadingIcon = {
+                                    Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error)
+                                }
                             )
                         }
                     }
@@ -138,9 +140,11 @@ fun LoanDetailScreen(
         }
         val progressColor = if (isDark) income_dark else income_light
         val progress = if (loan.originalAmount > BigDecimal.ZERO) {
-            (BigDecimal.ONE - loan.remainingAmount.divide(loan.originalAmount, 2, java.math.RoundingMode.HALF_UP))
-                .toFloat().coerceIn(0f, 1f)
+            (BigDecimal.ONE - loan.remainingAmount.divide(
+                loan.originalAmount, 2, java.math.RoundingMode.HALF_UP
+            )).toFloat().coerceIn(0f, 1f)
         } else 0f
+        val totalRepaid = loan.originalAmount - loan.remainingAmount
 
         val lazyListState = rememberLazyListState()
 
@@ -160,94 +164,38 @@ fun LoanDetailScreen(
             verticalArrangement = Arrangement.spacedBy(Spacing.md),
             flingBehavior = rememberOverscrollFlingBehavior { lazyListState }
         ) {
-            // Hero card — compact layout
+            // Hero card
             item {
-                PennyWiseCardV2(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-                    ) {
-                        // Top row: avatar + name + direction badge
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.md)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(CircleShape)
-                                    .background(directionColor.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    loan.personName.take(1).uppercase(),
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = directionColor
-                                )
-                            }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    loan.personName,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    if (loan.direction == LoanDirection.LENT) "Lent" else "Borrowed",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = directionColor
-                                )
-                            }
-                        }
-
-                        // Amount
-                        Text(
-                            text = CurrencyFormatter.formatCurrency(loan.remainingAmount, loan.currency),
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (loan.status == LoanStatus.SETTLED)
-                                MaterialTheme.colorScheme.onSurfaceVariant else directionColor
-                        )
-                        Text(
-                            text = if (loan.status == LoanStatus.SETTLED) "Settled"
-                            else "remaining of ${CurrencyFormatter.formatCurrency(loan.originalAmount, loan.currency)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        // Progress bar
-                        if (loan.status == LoanStatus.ACTIVE) {
-                            LinearProgressIndicator(
-                                progress = { progress },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(6.dp)
-                                    .clip(RoundedCornerShape(3.dp)),
-                                color = progressColor,
-                                trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                            )
-                            Text(
-                                "${(progress * 100).toInt()}% repaid",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
+                LoanHeroCard(
+                    personName = loan.personName,
+                    direction = loan.direction,
+                    status = loan.status,
+                    remainingAmount = loan.remainingAmount,
+                    originalAmount = loan.originalAmount,
+                    totalRepaid = totalRepaid,
+                    currency = loan.currency,
+                    progress = progress,
+                    directionColor = directionColor,
+                    progressColor = progressColor
+                )
             }
 
-            // Transaction history
-            if (uiState.linkedTransactions.isNotEmpty()) {
-                item {
-                    Text(
-                        "History",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            // History section header
+            item {
+                Text(
+                    "History",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = Spacing.xs)
+                )
+            }
 
+            if (uiState.linkedTransactions.isEmpty()) {
+                item {
+                    EmptyHistoryState(status = loan.status)
+                }
+            } else {
                 items(uiState.linkedTransactions, key = { it.id }) { txn ->
-                    // Original transaction type matches loan direction (LENT→EXPENSE, BORROWED→INCOME)
                     val isOriginal = if (loan.direction == LoanDirection.LENT)
                         txn.transactionType == TransactionType.EXPENSE
                     else txn.transactionType == TransactionType.INCOME
@@ -255,7 +203,8 @@ fun LoanDetailScreen(
                         transaction = txn,
                         isOriginal = isOriginal,
                         loanDirection = loan.direction,
-                        onClick = { onNavigateToTransactionDetail(txn.id) }
+                        onClick = { onNavigateToTransactionDetail(txn.id) },
+                        onUnlink = { viewModel.unlinkTransaction(txn.id) }
                     )
                 }
             }
@@ -269,14 +218,10 @@ fun LoanDetailScreen(
             title = { Text("Settle Loan") },
             text = { Text("Mark this loan as settled? Any remaining balance will be forgiven.") },
             confirmButton = {
-                TextButton(onClick = { viewModel.settleLoan() }) {
-                    Text("Settle")
-                }
+                TextButton(onClick = { viewModel.settleLoan() }) { Text("Settle") }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.hideSettleDialog() }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { viewModel.hideSettleDialog() }) { Text("Cancel") }
             }
         )
     }
@@ -313,15 +258,12 @@ fun LoanDetailScreen(
                     onClick = {
                         editAmount.toBigDecimalOrNull()?.let { viewModel.updateLoanAmount(it) }
                     },
-                    enabled = editAmount.toBigDecimalOrNull()?.let { it > java.math.BigDecimal.ZERO } == true
-                ) {
-                    Text("Save")
-                }
+                    enabled = editAmount.toBigDecimalOrNull()
+                        ?.let { it > java.math.BigDecimal.ZERO } == true
+                ) { Text("Save") }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.hideEditAmountDialog() }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { viewModel.hideEditAmountDialog() }) { Text("Cancel") }
             }
         )
     }
@@ -338,9 +280,7 @@ fun LoanDetailScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.hideDeleteDialog() }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { viewModel.hideDeleteDialog() }) { Text("Cancel") }
             }
         )
     }
@@ -360,14 +300,188 @@ fun LoanDetailScreen(
 }
 
 @Composable
+private fun LoanHeroCard(
+    personName: String,
+    direction: LoanDirection,
+    status: LoanStatus,
+    remainingAmount: BigDecimal,
+    originalAmount: BigDecimal,
+    totalRepaid: BigDecimal,
+    currency: String,
+    progress: Float,
+    directionColor: Color,
+    progressColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val isSettled = status == LoanStatus.SETTLED
+    val heroBackground = if (isSettled)
+        MaterialTheme.colorScheme.surfaceVariant
+    else
+        directionColor.copy(alpha = 0.10f)
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = heroBackground,
+        tonalElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            // Avatar + name + pills row
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(directionColor.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        personName.take(1).uppercase(),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = directionColor
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        personName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Direction pill
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    color = directionColor.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(50)
+                                )
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = if (direction == LoanDirection.LENT) "Lent" else "Borrowed",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = directionColor
+                            )
+                        }
+                        // Settled badge
+                        if (isSettled) {
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(50)
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            ) {
+                                Text(
+                                    text = "Settled",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Dominant amount
+            Text(
+                text = if (isSettled) "Fully settled"
+                else CurrencyFormatter.formatCurrency(remainingAmount, currency),
+                style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
+                color = if (isSettled) MaterialTheme.colorScheme.onSurfaceVariant else directionColor
+            )
+            Text(
+                text = if (isSettled)
+                    "of ${CurrencyFormatter.formatCurrency(originalAmount, currency)}"
+                else
+                    "remaining of ${CurrencyFormatter.formatCurrency(originalAmount, currency)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // Progress bar + repaid label — active loans only
+            if (!isSettled && originalAmount > BigDecimal.ZERO) {
+                val barShape = RoundedCornerShape(50)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(10.dp)
+                        .clip(barShape)
+                        .background(progressColor.copy(alpha = 0.18f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(fraction = progress)
+                            .fillMaxHeight()
+                            .clip(barShape)
+                            .background(progressColor)
+                    )
+                }
+                val repaidLabel = if (totalRepaid > BigDecimal.ZERO)
+                    "${CurrencyFormatter.formatCurrency(totalRepaid, currency)} repaid · ${(progress * 100).toInt()}% done"
+                else
+                    "No payments recorded yet"
+                Text(
+                    repaidLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyHistoryState(
+    status: LoanStatus,
+    modifier: Modifier = Modifier
+) {
+    val message = if (status == LoanStatus.ACTIVE)
+        "No payments recorded yet — tap + to add one."
+    else
+        "No transaction history linked to this loan."
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = Spacing.xl),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
 private fun LoanTransactionItem(
     transaction: TransactionEntity,
     isOriginal: Boolean,
     loanDirection: LoanDirection,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onUnlink: () -> Unit
 ) {
     val isDark = isSystemInDarkTheme()
-    // Color reflects the actual money flow: red = money out, green = money in
     val color = when (transaction.transactionType) {
         TransactionType.EXPENSE -> if (isDark) expense_dark else expense_light
         TransactionType.INCOME -> if (isDark) income_dark else income_light
@@ -399,15 +513,20 @@ private fun LoanTransactionItem(
                         fontWeight = FontWeight.Medium
                     )
                     if (isOriginal) {
-                        SuggestionChip(
-                            onClick = {},
-                            label = { Text("Original", style = MaterialTheme.typography.labelSmall) },
-                            modifier = Modifier.height(24.dp),
-                            border = null,
-                            colors = SuggestionChipDefaults.suggestionChipColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(50)
+                                )
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                "Original",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                        )
+                        }
                     }
                 }
                 Text(
@@ -416,12 +535,29 @@ private fun LoanTransactionItem(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Text(
-                text = "${sign}${CurrencyFormatter.formatCurrency(transaction.amount, transaction.currency)}",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = color
-            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                Text(
+                    text = "$sign${CurrencyFormatter.formatCurrency(transaction.amount, transaction.currency)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = color
+                )
+                IconButton(
+                    onClick = onUnlink,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Default.LinkOff,
+                        contentDescription = "Unlink transaction",
+                        modifier = Modifier.size(Dimensions.Icon.small),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+            }
         }
     }
 }
@@ -438,6 +574,7 @@ private fun RecordPaymentBottomSheet(
     onManualPayment: (BigDecimal) -> Unit
 ) {
     var manualAmount by remember { mutableStateOf("") }
+    var useManualEntry by remember { mutableStateOf(recentUnlinkedTransactions.isEmpty()) }
     val isDark = isSystemInDarkTheme()
     val loanColor = if (isDark) loan_dark else loan_light
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -467,13 +604,25 @@ private fun RecordPaymentBottomSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            // Link existing transactions
+            // Segmented mode selector — only show when there are transactions to link
             if (recentUnlinkedTransactions.isNotEmpty()) {
-                Text(
-                    "Link existing transaction",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    SegmentedButton(
+                        selected = !useManualEntry,
+                        onClick = { useManualEntry = false },
+                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                        label = { Text("Link existing", style = MaterialTheme.typography.labelSmall) }
+                    )
+                    SegmentedButton(
+                        selected = useManualEntry,
+                        onClick = { useManualEntry = true },
+                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                        label = { Text("Enter manually", style = MaterialTheme.typography.labelSmall) }
+                    )
+                }
+            }
+
+            if (!useManualEntry && recentUnlinkedTransactions.isNotEmpty()) {
                 recentUnlinkedTransactions.take(5).forEach { txn ->
                     PennyWiseCardV2(
                         modifier = Modifier.fillMaxWidth(),
@@ -500,50 +649,42 @@ private fun RecordPaymentBottomSheet(
                         }
                     }
                 }
-
-                HorizontalDivider(modifier = Modifier.padding(vertical = Spacing.xs))
-            }
-
-            // Manual entry
-            Text(
-                if (recentUnlinkedTransactions.isNotEmpty()) "Or enter manually" else "Enter amount",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextField(
-                    value = manualAmount,
-                    onValueChange = { value ->
-                        if (value.isEmpty() || value.matches(Regex("^\\d*\\.?\\d*$"))) {
-                            manualAmount = value
-                        }
-                    },
-                    label = { Text("Amount") },
-                    prefix = { Text(CurrencyFormatter.getCurrencySymbol(currency)) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent
-                    )
-                )
-                Button(
-                    onClick = {
-                        manualAmount.toBigDecimalOrNull()?.let { onManualPayment(it) }
-                    },
-                    enabled = manualAmount.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true,
-                    shape = RoundedCornerShape(Dimensions.CornerRadius.medium),
-                    colors = ButtonDefaults.buttonColors(containerColor = loanColor)
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Add")
+                    TextField(
+                        value = manualAmount,
+                        onValueChange = { value ->
+                            if (value.isEmpty() || value.matches(Regex("^\\d*\\.?\\d*$"))) {
+                                manualAmount = value
+                            }
+                        },
+                        label = { Text("Amount") },
+                        prefix = { Text(CurrencyFormatter.getCurrencySymbol(currency)) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent
+                        )
+                    )
+                    Button(
+                        onClick = {
+                            manualAmount.toBigDecimalOrNull()?.let { onManualPayment(it) }
+                        },
+                        enabled = manualAmount.toBigDecimalOrNull()
+                            ?.let { it > BigDecimal.ZERO } == true,
+                        shape = RoundedCornerShape(Dimensions.CornerRadius.medium),
+                        colors = ButtonDefaults.buttonColors(containerColor = loanColor)
+                    ) {
+                        Text("Add")
+                    }
                 }
             }
         }

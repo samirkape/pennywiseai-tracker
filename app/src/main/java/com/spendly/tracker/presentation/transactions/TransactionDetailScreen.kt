@@ -640,10 +640,8 @@ fun TransactionDetailScreen(
     merchantRenameGrouped?.let { groupedState ->
         MerchantRenameGroupedSheet(
             state = groupedState,
-            onApplyTier = { tier -> viewModel.applyGroupTier(tier) },
-            onSkipTier = { tier -> viewModel.skipGroupTier(tier) },
-            onApproveFuzzy = { viewModel.approveCurrentFuzzyCandidate() },
-            onSkipFuzzy = { viewModel.skipCurrentFuzzyCandidate() },
+            onApprove = { viewModel.approveCurrentCandidate() },
+            onSkip = { viewModel.skipCurrentCandidate() },
             onOpenTransaction = { txId -> onNavigateToTransactionDetail(txId) },
             onDismiss = { viewModel.dismissMerchantRenameGrouped() },
         )
@@ -1272,7 +1270,10 @@ private fun TransactionReceipt(
                     ) {
                         Column(modifier = Modifier.fillMaxWidth().padding(Spacing.md)) {
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { onFindSimilar(transaction.merchantName) },
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                             ) {
@@ -1285,7 +1286,19 @@ private fun TransactionReceipt(
                                 Text(
                                     text = "Similar Items",
                                     style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = "See all",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Icon(
+                                    Icons.Default.ChevronRight,
+                                    contentDescription = "See all similar transactions",
+                                    modifier = Modifier.size(Dimensions.Icon.small),
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
                             }
                             Spacer(modifier = Modifier.height(Spacing.sm))

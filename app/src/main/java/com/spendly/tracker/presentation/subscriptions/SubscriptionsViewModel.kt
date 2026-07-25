@@ -41,7 +41,7 @@ class SubscriptionsViewModel @Inject constructor(
                 arrayOf(subscriptions, isUnified, displayCurrency, baseCurrency)
             }.collect { values ->
                 @Suppress("UNCHECKED_CAST")
-                val subscriptions = values[0] as List<SubscriptionEntity>
+                val subscriptions = (values[0] as List<SubscriptionEntity>).deduplicated()
                 val isUnified = values[1] as Boolean
                 val displayCurrency = values[2] as String
                 val baseCurrency = values[3] as String
@@ -113,6 +113,35 @@ class SubscriptionsViewModel @Inject constructor(
                 subscription.copy(updatedAt = java.time.LocalDateTime.now())
             )
         }
+    }
+
+    private fun List<SubscriptionEntity>.deduplicated(): List<SubscriptionEntity> {
+        val result = mutableListOf<SubscriptionEntity>()
+        for (sub in this) {
+            val existingIndex = result.indexOfFirst { existing ->
+                existing.amount == sub.amount &&
+                existing.currency.equals(sub.currency, ignoreCase = true) &&
+                merchantNamesOverlap(existing.merchantName, sub.merchantName)
+            }
+            if (existingIndex == -1) {
+                result.add(sub)
+            } else if (isBetterCandidate(sub, result[existingIndex])) {
+                result[existingIndex] = sub
+            }
+        }
+        return result
+    }
+
+    private fun merchantNamesOverlap(a: String, b: String): Boolean {
+        val normA = a.trim().lowercase()
+        val normB = b.trim().lowercase()
+        return normA == normB || normA.contains(normB) || normB.contains(normA)
+    }
+
+    private fun isBetterCandidate(candidate: SubscriptionEntity, current: SubscriptionEntity): Boolean {
+        if (candidate.umn != null && current.umn == null) return true
+        if (candidate.bankName != "Manual Entry" && current.bankName == "Manual Entry") return true
+        return false
     }
 }
 

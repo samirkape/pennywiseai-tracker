@@ -32,8 +32,10 @@ fun PennyWiseApp(
     appLockViewModel: AppLockViewModel = hiltViewModel(),
     editTransactionId: Long? = null,
     openAddTransaction: Boolean = false,
+    openTransactions: Boolean = false,
     onEditComplete: () -> Unit = {},
-    onAddTransactionShortcutHandled: () -> Unit = {}
+    onAddTransactionShortcutHandled: () -> Unit = {},
+    onOpenTransactionsHandled: () -> Unit = {}
 ) {
     val themeUiState by themeViewModel.themeUiState.collectAsStateWithLifecycle()
     val appLockUiState by appLockViewModel.uiState.collectAsStateWithLifecycle()
@@ -112,6 +114,16 @@ fun PennyWiseApp(
                 launchSingleTop = true
             }
             onAddTransactionShortcutHandled()
+        }
+    }
+
+    // Navigate directly to the Transactions list when requested (e.g., from the daily reminder)
+    LaunchedEffect(openTransactions) {
+        if (openTransactions) {
+            navController.navigate(com.spendly.tracker.navigation.Transactions) {
+                launchSingleTop = true
+            }
+            onOpenTransactionsHandled()
         }
     }
 

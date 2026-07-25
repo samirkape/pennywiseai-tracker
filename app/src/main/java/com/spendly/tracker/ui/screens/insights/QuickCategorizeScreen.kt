@@ -16,7 +16,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -107,7 +110,6 @@ private fun CategorizeContent(
 ) {
     val currentTransaction = transactions.firstOrNull() ?: return
     var selectedCategory by remember { mutableStateOf<String?>(null) }
-    var applyToAllByMerchant by remember { mutableStateOf(true) }
 
     Column(
         modifier = Modifier
@@ -139,7 +141,7 @@ private fun CategorizeContent(
             verticalArrangement = Arrangement.spacedBy(Spacing.sm),
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
-            items(CategoryMapping.categories.keys.filter { it != "Others" }.toList()) { category ->
+            items(CategoryMapping.categories.keys.toList()) { category ->
                 val info = CategoryMapping.categories[category]!!
                 CategorySelectChip(
                     name = category,
@@ -153,44 +155,6 @@ private fun CategorizeContent(
 
         Spacer(modifier = Modifier.height(Spacing.md))
 
-        // Bulk update toggle
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .clickable { applyToAllByMerchant = !applyToAllByMerchant }
-                .padding(Spacing.md),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(
-                checked = applyToAllByMerchant,
-                onCheckedChange = { applyToAllByMerchant = it },
-                colors = CheckboxDefaults.colors(
-                    checkedColor = MaterialTheme.colorScheme.primary,
-                    uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    checkmarkColor = MaterialTheme.colorScheme.onPrimary
-                )
-            )
-            Spacer(modifier = Modifier.width(Spacing.sm))
-            Column {
-                Text(
-                    text = "Apply to all from ${currentTransaction.merchantName}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "Future transactions will also be auto-categorized",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(Spacing.lg))
 
         // Action Buttons
         Row(
@@ -210,7 +174,7 @@ private fun CategorizeContent(
             Button(
                 onClick = {
                     selectedCategory?.let {
-                        onCategorize(currentTransaction.id, it, applyToAllByMerchant)
+                        onCategorize(currentTransaction.id, it, false)
                         selectedCategory = null
                     }
                 },
@@ -237,10 +201,11 @@ private fun TransactionCard(
     transaction: TransactionEntity,
     onSkip: () -> Unit
 ) {
+    var showSms by remember { mutableStateOf(false) }
+    val hasSms = !transaction.smsBody.isNullOrBlank()
+
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(180.dp),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -251,49 +216,98 @@ private fun TransactionCard(
             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
         )
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Column(
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(Spacing.lg),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                    .fillMaxWidth()
+                    .height(180.dp)
             ) {
-                Text(
-                    text = transaction.merchantName,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(Spacing.lg),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = transaction.merchantName,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2
+                    )
 
-                Spacer(modifier = Modifier.height(Spacing.xs))
+                    Spacer(modifier = Modifier.height(Spacing.xs))
 
-                Text(
-                    text = CurrencyFormatter.formatCurrency(transaction.amount, transaction.currency),
-                    style = MaterialTheme.typography.displaySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.ExtraBold
-                )
+                    Text(
+                        text = CurrencyFormatter.formatCurrency(transaction.amount, transaction.currency),
+                        style = MaterialTheme.typography.displaySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.ExtraBold
+                    )
 
-                Spacer(modifier = Modifier.height(Spacing.xs))
+                    Spacer(modifier = Modifier.height(Spacing.xs))
 
-                Text(
-                    text = transaction.dateTime.toLocalDate().toString(),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                )
+                    Text(
+                        text = transaction.dateTime.toLocalDate().toString(),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                    )
+                }
+
+                IconButton(
+                    onClick = onSkip,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Skip",
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
 
-            IconButton(
-                onClick = onSkip,
-                modifier = Modifier.align(Alignment.TopEnd)
-            ) {
-                Icon(
-                    Icons.Default.Close,
-                    contentDescription = "Skip",
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+            if (hasSms) {
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                 )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showSms = !showSms }
+                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Sms,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.width(Spacing.xs))
+                    Text(
+                        text = "View SMS",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        imageVector = if (showSms) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
+                }
+                AnimatedVisibility(visible = showSms) {
+                    Text(
+                        text = transaction.smsBody ?: "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = Spacing.md, end = Spacing.md, bottom = Spacing.md)
+                    )
+                }
             }
         }
     }

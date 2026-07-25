@@ -31,6 +31,7 @@ import com.spendly.tracker.utils.MerchantNameMatcher
 import com.spendly.tracker.utils.UnrecognizedSmsPrefillParser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
@@ -58,7 +59,9 @@ class AddViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val unrecognizedSmsId: Long = savedStateHandle.toRoute<AddTransaction>().unrecognizedSmsId
-    
+
+    private var isCategoryManuallySet = false
+
     // General UI State
     private val _uiState = MutableStateFlow(AddUiState())
     val uiState: StateFlow<AddUiState> = _uiState.asStateFlow()
@@ -82,6 +85,25 @@ class AddViewModel @Inject constructor(
             if (unrecognizedSmsId > 0) {
                 loadUnrecognizedSmsPrefill(unrecognizedSmsId)
             }
+        }
+        observeMerchantForCategoryPrefill()
+    }
+
+    @OptIn(FlowPreview::class)
+    private fun observeMerchantForCategoryPrefill() {
+        viewModelScope.launch {
+            _transactionUiState
+                .map { it.merchant }
+                .distinctUntilChanged()
+                .debounce(500)
+                .collect { merchant ->
+                    if (merchant.isNotBlank() && !isCategoryManuallySet) {
+                        val majority = transactionRepository.getMajorityCategoryForMerchant(merchant)
+                        if (majority != null) {
+                            _transactionUiState.update { it.copy(category = majority) }
+                        }
+                    }
+                }
         }
     }
 
@@ -225,6 +247,7 @@ class AddViewModel @Inject constructor(
     }
     
     fun updateTransactionType(type: TransactionType) {
+        isCategoryManuallySet = false
         _transactionUiState.update { currentState ->
             val newTransferKind = if (type == TransactionType.TRANSFER) {
                 currentState.transferKind?.takeIf {
@@ -313,6 +336,7 @@ class AddViewModel @Inject constructor(
     }
 
     fun updateTransactionCategory(category: String) {
+        isCategoryManuallySet = true
         _transactionUiState.update {
             it.copy(
                 category = category,

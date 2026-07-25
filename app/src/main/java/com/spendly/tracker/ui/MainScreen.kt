@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.background
+import com.spendly.tracker.ui.components.BannerAdView
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -75,6 +77,7 @@ fun MainScreen(
 
     // What's New dialog state
     val whatsNewVersion by mainViewModel.whatsNewVersion.collectAsState()
+    val isPremium by mainViewModel.isPremium.collectAsState()
 
     // Haze state for blur effects
     val hazeState = remember { HazeState() }
@@ -754,7 +757,18 @@ fun MainScreen(
                         rootNavController?.navigate(
                             com.spendly.tracker.navigation.PayPeriodSettings
                         ) { launchSingleTop = true }
+                    },
+                    onNavigateToSmsParserDebug = {
+                        navController.navigate(Constants.Routes.SMS_PARSER_DEBUG) {
+                            launchSingleTop = true
+                        }
                     }
+                )
+            }
+
+            composable(Constants.Routes.SMS_PARSER_DEBUG) {
+                com.spendly.tracker.ui.screens.settings.SmsParserDebugScreen(
+                    onNavigateBack = { navController.safePopBackStack() }
                 )
             }
 
@@ -804,13 +818,6 @@ fun MainScreen(
                 )
             }
 
-            composable("import_statement") {
-                com.spendly.tracker.presentation.statement.ImportStatementScreen(
-                    onNavigateBack = {
-                        navController.safePopBackStack()
-                    }
-                )
-            }
 
             composable("add_account") {
                 com.spendly.tracker.presentation.accounts.AddAccountScreen(
@@ -821,22 +828,32 @@ fun MainScreen(
             }
         }
 
-        // Bottom navigation — only on compact screens (medium/expanded use NavigationRail)
-        if (!useNavigationRail && baseRoute in listOf(
-                Constants.Routes.HOME,
-                Constants.Routes.BUDGETS,
-                Constants.Routes.ANALYTICS,
-                Constants.Routes.SETTINGS,
-            )
+        // Bottom navigation + banner ad overlay
+        // Column stacks from top to bottom: BannerAdView (top) → PennyWiseBottomNavigation (bottom)
+        // aligned to BottomCenter so the nav stays at the very bottom edge
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
         ) {
-            PennyWiseBottomNavigation(
-                navController = navController,
-                currentDestination = navBackStackEntry?.destination,
-                navBarStyle = themeState.navBarStyle,
-                blurEffects = themeState.blurEffectsEnabled,
-                hazeState = hazeState,
-                modifier = Modifier.align(Alignment.BottomCenter)
-            )
+            if (Constants.Ads.ENABLED && !isPremium) {
+                BannerAdView(adUnitId = Constants.Ads.HOME_BANNER_UNIT_ID)
+            }
+            if (!useNavigationRail && baseRoute in listOf(
+                    Constants.Routes.HOME,
+                    Constants.Routes.BUDGETS,
+                    Constants.Routes.ANALYTICS,
+                    Constants.Routes.SETTINGS,
+                )
+            ) {
+                PennyWiseBottomNavigation(
+                    navController = navController,
+                    currentDestination = navBackStackEntry?.destination,
+                    navBarStyle = themeState.navBarStyle,
+                    blurEffects = themeState.blurEffectsEnabled,
+                    hazeState = hazeState,
+                )
+            }
         }
 
         // Spotlight Tutorial overlay - outside Scaffold to overlay everything

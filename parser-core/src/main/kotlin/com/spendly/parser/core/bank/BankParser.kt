@@ -206,24 +206,19 @@ abstract class BankParser {
         if (PayrollCreditDetector.isPayrollCreditMessage(lowerMessage)) {
             return false
         }
-        val investmentKeywords = listOf(
+        // Long/specific phrases — substring match is safe
+        val substringKeywords = listOf(
             // Clearing corporations
-            "iccl",                         // Indian Clearing Corporation Limited
+            "iccl",
             "indian clearing corporation",
-            "nsccl",                        // NSE Clearing Corporation
+            "nsccl",
             "nse clearing",
             "clearing corporation",
-
-            // Auto-pay indicators (excluding mandate/UMRN to avoid subscription false positives)
-            "nach",                         // National Automated Clearing House
-            "ach",                          // Automated Clearing House
-            "ecs",                          // Electronic Clearing Service
 
             // Investment platforms
             "groww",
             "zerodha",
             "upstox",
-            "kite",
             "kuvera",
             "paytm money",
             "etmoney",
@@ -244,23 +239,29 @@ abstract class BankParser {
 
             // Investment types
             "mutual fund",
-            "sip",                          // Systematic Investment Plan
-            "elss",                         // Tax saving funds
-            "ipo",                          // Initial Public Offering
-            "folio",                        // Mutual fund folio
+            "elss",
+            "folio",
             "demat",
             "stockbroker",
-            "digital gold",                 // Digital Gold investments
-            "sovereign gold",               // Sovereign Gold Bonds
+            "digital gold",
+            "sovereign gold",
 
             // Stock exchanges
-            "nse",                          // National Stock Exchange
-            "bse",                          // Bombay Stock Exchange
-            "cdsl",                         // Central Depository Services
-            "nsdl"                          // National Securities Depository
+            "cdsl",
+            "nsdl"
         )
 
-        return investmentKeywords.any { lowerMessage.contains(it) }
+        // Short keywords — require word boundary to avoid matching inside other words
+        val wordKeywords = listOf(
+            "kite",   // Zerodha's app; avoid matching "kitesurf" etc.
+            "sip",    // Systematic Investment Plan; avoid matching "sipla" etc.
+            "ipo",    // Initial Public Offering
+            "nse",    // National Stock Exchange; avoid matching "license"
+            "bse"     // Bombay Stock Exchange; avoid matching "observe"
+        )
+
+        if (substringKeywords.any { lowerMessage.contains(it) }) return true
+        return wordKeywords.any { Regex("""\b${Regex.escape(it)}\b""").containsMatchIn(lowerMessage) }
     }
 
     /**

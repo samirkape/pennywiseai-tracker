@@ -78,6 +78,7 @@ object Constants {
         const val CHAT = "chat"
         const val SETTINGS = "settings"
         const val CREDIT_CARD_ANALYTICS = "credit_card_analytics"
+        const val SMS_PARSER_DEBUG = "sms_parser_debug"
     }
     
     /**
@@ -97,7 +98,7 @@ object Constants {
     object Ads {
         const val ENABLED = true
         // Test banner unit ID — replace with real ID before release
-        const val HOME_BANNER_UNIT_ID = "ca-app-pub-3940256099942544/6300978111"
+        const val HOME_BANNER_UNIT_ID = "ca-app-pub-6566505708582700/3025470778"
         // Product ID configured in Google Play Console
         const val PREMIUM_PRODUCT_ID = "remove_ads"
     }
