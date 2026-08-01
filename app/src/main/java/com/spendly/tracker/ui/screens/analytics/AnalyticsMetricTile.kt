@@ -40,7 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.spendly.tracker.ui.components.CategoryIcon
-import com.spendly.tracker.ui.components.PennyWiseCard
+import com.spendly.tracker.ui.components.SpendlyCard
 import com.spendly.tracker.ui.icons.CategoryMapping
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing

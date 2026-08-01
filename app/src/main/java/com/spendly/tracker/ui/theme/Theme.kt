@@ -137,7 +137,7 @@ val ColorScheme.cardBorder: Color
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun PennyWiseTheme(
+fun SpendlyTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
     themeStyle: ThemeStyle = ThemeStyle.DYNAMIC,

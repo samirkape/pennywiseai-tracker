@@ -31,9 +31,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.spendly.tracker.data.database.entity.UnrecognizedSmsEntity
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
-import com.spendly.tracker.ui.components.PennyWiseEmptyState
+import com.spendly.tracker.ui.components.SpendlyEmptyState
 import com.spendly.tracker.ui.components.shimmer
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing
 import dev.chrisbanes.haze.HazeState
@@ -121,7 +121,7 @@ fun UnrecognizedSmsScreen(
                         animationSpec = tween(300)
                     )
                 ) {
-                    PennyWiseCardV2(
+                    SpendlyCardV2(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
@@ -202,7 +202,7 @@ fun UnrecognizedSmsScreen(
             } else if (unrecognizedMessages.isEmpty()) {
                 // Empty State
                 item {
-                    PennyWiseEmptyState(
+                    SpendlyEmptyState(
                         icon = Icons.Outlined.MarkEmailRead,
                         headline = "All messages recognized",
                         description = "No unrecognized bank messages found"
@@ -291,7 +291,7 @@ private fun UnrecognizedSmsItem(
     onCreateRule: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = modifier.fillMaxWidth()
     ) {
         Column(
@@ -404,7 +404,7 @@ private fun UnrecognizedSmsItemSkeleton(
 ) {
     val placeholderColor = MaterialTheme.colorScheme.surfaceContainerHighest
 
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = modifier.fillMaxWidth()
     ) {
         Column(

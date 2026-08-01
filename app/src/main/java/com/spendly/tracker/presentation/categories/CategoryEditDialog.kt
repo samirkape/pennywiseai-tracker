@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.spendly.tracker.data.database.entity.CategoryEntity
 import com.spendly.tracker.ui.components.CategoryChip
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.icons.CategoryIcons
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing
@@ -60,7 +60,7 @@ fun CategoryEditDialog(
     }
 
     Dialog(onDismissRequest = onDismiss) {
-        PennyWiseCardV2(
+        SpendlyCardV2(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(Dimensions.Padding.content),
@@ -232,7 +232,7 @@ fun CategoryEditDialog(
                     }
                 }
 
-                PennyWiseCardV2(
+                SpendlyCardV2(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh

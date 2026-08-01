@@ -41,7 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.spendly.tracker.ui.components.PennyWiseCard
+import com.spendly.tracker.ui.components.SpendlyCard
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.utils.CurrencyFormatter
@@ -63,7 +63,7 @@ fun AccountSpendTile(
     val initialVisibleCount = if (compactMode) INITIAL_VISIBLE_COUNT else REGULAR_VISIBLE_COUNT
     val visibleAccounts = if (showAll) accounts else accounts.take(initialVisibleCount)
 
-    PennyWiseCard(modifier = modifier, onClick = null) {
+    SpendlyCard(modifier = modifier, onClick = null) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

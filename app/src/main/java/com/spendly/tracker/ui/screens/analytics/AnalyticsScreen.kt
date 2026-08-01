@@ -771,7 +771,7 @@ private fun EmptyAnalyticsState(
             .padding(Dimensions.Padding.content),
         contentAlignment = Alignment.Center
     ) {
-        PennyWiseEmptyState(
+        SpendlyEmptyState(
             icon = Icons.AutoMirrored.Filled.ShowChart,
             headline = "Not enough data yet",
             description = "Your spending insights will appear here after your first week of tracking",

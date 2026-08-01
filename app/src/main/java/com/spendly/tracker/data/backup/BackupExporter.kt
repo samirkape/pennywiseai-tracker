@@ -4,7 +4,7 @@ import android.content.Context
 import android.os.Build
 import com.google.gson.GsonBuilder
 import com.spendly.tracker.BuildConfig
-import com.spendly.tracker.data.database.PennyWiseDatabase
+import com.spendly.tracker.data.database.SpendlyDatabase
 import com.spendly.tracker.data.database.entity.*
 import com.spendly.tracker.data.preferences.UserPreferencesRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -20,7 +20,7 @@ import javax.inject.Singleton
 @Singleton
 class BackupExporter @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val database: PennyWiseDatabase,
+    private val database: SpendlyDatabase,
     private val userPreferencesRepository: UserPreferencesRepository
 ) {
     
@@ -57,7 +57,7 @@ class BackupExporter @Inject constructor(
     /**
      * Create backup data structure
      */
-    private suspend fun createBackup(privacy: ExportPrivacy): PennyWiseBackup {
+    private suspend fun createBackup(privacy: ExportPrivacy): SpendlyBackup {
         // Get all database data
         val transactions = database.transactionDao().getAllTransactions().first()
         val categories = database.categoryDao().getAllCategories().first()
@@ -152,7 +152,7 @@ class BackupExporter @Inject constructor(
         val exportedLoans = if (privacy == ExportPrivacy.FULL) loans else emptyList()
         val exportedTransactionGroups = if (privacy == ExportPrivacy.FULL) transactionGroups else emptyList()
 
-        return PennyWiseBackup(
+        return SpendlyBackup(
             metadata = BackupMetadata(
                 exportId = UUID.randomUUID().toString(),
                 appVersion = BuildConfig.VERSION_NAME,
@@ -276,7 +276,7 @@ class BackupExporter @Inject constructor(
         val timestamp = LocalDateTime.now().format(
             DateTimeFormatter.ofPattern("yyyy_MM_dd_HHmmss")
         )
-        val fileName = "Spendly_Backup_$timestamp.pennywisebackup"
+        val fileName = "Spendly_Backup_$timestamp.spendlybackup"
         
         return File(exportDir, fileName)
     }

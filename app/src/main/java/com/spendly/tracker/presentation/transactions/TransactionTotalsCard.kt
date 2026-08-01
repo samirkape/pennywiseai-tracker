@@ -22,7 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.spendly.tracker.ui.components.PennyWiseCard
+import com.spendly.tracker.ui.components.SpendlyCard
 import com.spendly.tracker.ui.theme.*
 import com.spendly.tracker.utils.CurrencyFormatter
 import java.math.BigDecimal
@@ -58,7 +58,7 @@ fun TransactionTotalsCard(
         label = "net_alpha"
     )
 
-    PennyWiseCard(
+    SpendlyCard(
         modifier = modifier.fillMaxWidth()
     ) {
         Column(

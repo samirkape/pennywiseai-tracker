@@ -83,6 +83,7 @@ fun SettingsScreen(
     onNavigateToRules: () -> Unit = {},
     onNavigateToBudgets: () -> Unit = {},
     onNavigateToSubscriptions: () -> Unit = {},
+    onNavigateToPrepaidExpenses: () -> Unit = {},
     onNavigateToLoans: () -> Unit = {},
     onNavigateToTransactionGroups: () -> Unit = {},
     onNavigateToExchangeRates: () -> Unit = {},
@@ -375,6 +376,15 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                     title = "Subscriptions",
                     subtitle = "Recurring bills and services you track",
                     onClick = onNavigateToSubscriptions,
+                    position = ItemPosition.MIDDLE
+                )
+                SettingsNavItem(
+                    icon = Icons.Default.Receipt,
+                    iconBgColor = cyan_light,
+                    iconTint = cyan_dark,
+                    title = "Prepaid Expenses",
+                    subtitle = "Pay once, spread the expense across months",
+                    onClick = onNavigateToPrepaidExpenses,
                     position = ItemPosition.MIDDLE
                 )
                 SettingsNavItem(
@@ -866,7 +876,7 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
         val timestamp = java.time.LocalDateTime.now().format(
             java.time.format.DateTimeFormatter.ofPattern("yyyy_MM_dd_HHmmss")
         )
-        val fileName = "Spendly_Backup_$timestamp.pennywisebackup"
+        val fileName = "Spendly_Backup_$timestamp.spendlybackup"
 
         AlertDialog(
             onDismissRequest = {

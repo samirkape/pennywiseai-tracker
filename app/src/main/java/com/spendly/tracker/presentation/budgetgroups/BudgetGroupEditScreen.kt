@@ -41,7 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.spendly.tracker.ui.components.CategoryIcon
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.icons.CategoryMapping
 import com.spendly.tracker.ui.theme.*
@@ -210,7 +210,7 @@ fun BudgetGroupEditScreen(
             item {
                 SectionHeaderV2(title = "Category Limits (optional)")
                 Spacer(modifier = Modifier.height(Spacing.xs))
-                PennyWiseCardV2(
+                SpendlyCardV2(
                     modifier = Modifier
                         .fillMaxWidth()
                         .animateContentSize(
@@ -381,7 +381,7 @@ private fun BudgetHeaderCard(
         if (isEditingAmount) amountFocusRequester.requestFocus()
     }
 
-    PennyWiseCardV2(modifier = Modifier.fillMaxWidth()) {
+    SpendlyCardV2(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,

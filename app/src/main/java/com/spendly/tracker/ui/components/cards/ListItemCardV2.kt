@@ -82,7 +82,7 @@ fun ListItemCardV2(
             Box(modifier = modifier.fillMaxWidth()) { rowContent() }
         }
     } else {
-        PennyWiseCardV2(
+        SpendlyCardV2(
             modifier = modifier.fillMaxWidth(),
             onClick = onClick,
             contentPadding = 0.dp

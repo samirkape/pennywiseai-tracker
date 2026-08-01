@@ -21,7 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.presentation.categories.CategoryEditDialog
 import com.spendly.tracker.ui.theme.*
 import com.spendly.tracker.utils.CurrencyFormatter
@@ -76,7 +76,7 @@ fun SubscriptionTabContent(
         ) {
             // Error Card
             uiState.error?.let { errorMessage ->
-                PennyWiseCardV2(
+                SpendlyCardV2(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer
@@ -100,7 +100,7 @@ fun SubscriptionTabContent(
             }
 
             // Info Card
-            PennyWiseCardV2(
+            SpendlyCardV2(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer

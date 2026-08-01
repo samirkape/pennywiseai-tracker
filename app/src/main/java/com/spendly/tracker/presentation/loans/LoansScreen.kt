@@ -27,7 +27,7 @@ import com.spendly.tracker.data.database.entity.LoanDirection
 import com.spendly.tracker.data.database.entity.LoanEntity
 import com.spendly.tracker.data.database.entity.LoanStatus
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.effects.overScrollVertical
 import com.spendly.tracker.ui.effects.rememberOverscrollFlingBehavior
 import com.spendly.tracker.ui.theme.*
@@ -182,7 +182,7 @@ private fun LoanSummaryCard(
     val lentColor = if (isDark) loan_dark else loan_light
     val borrowedColor = if (isDark) income_dark else income_light
 
-    PennyWiseCardV2(modifier = Modifier.fillMaxWidth()) {
+    SpendlyCardV2(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
@@ -226,7 +226,7 @@ fun LoanListItem(
             .toFloat().coerceIn(0f, 1f)
     } else 0f
 
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick
     ) {

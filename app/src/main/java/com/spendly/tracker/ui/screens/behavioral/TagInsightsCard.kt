@@ -22,7 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.spendly.tracker.ui.components.BrandIcon
 import com.spendly.tracker.ui.components.CategoryIcon
-import com.spendly.tracker.ui.components.PennyWiseCard
+import com.spendly.tracker.ui.components.SpendlyCard
 import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.icons.CategoryMapping
 import com.spendly.tracker.ui.theme.Dimensions
@@ -65,7 +65,7 @@ fun TagInsightsCard(
             pageSpacing = Spacing.sm
         ) { pageIndex ->
             val page = pages[pageIndex]
-            PennyWiseCard(modifier = Modifier.fillMaxWidth()) {
+            SpendlyCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()

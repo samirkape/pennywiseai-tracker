@@ -48,7 +48,7 @@ class AddTransactionWidget : GlanceAppWidget() {
                 colors = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
                     GlanceTheme.colors
                 else
-                    PennyWiseWidgetTheme.colors
+                    SpendlyWidgetTheme.colors
             ) {
                 AddTransactionContent()
             }

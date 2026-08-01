@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.dp
 import com.spendly.tracker.R
 import com.spendly.tracker.domain.model.QuickKeywordBatchChange
 import com.spendly.tracker.domain.model.QuickKeywordBatchPreview
-import com.spendly.tracker.ui.components.PennyWiseCard
+import com.spendly.tracker.ui.components.SpendlyCard
 import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.utils.CurrencyFormatter
 import java.time.format.DateTimeFormatter
@@ -130,7 +130,7 @@ fun QuickKeywordBatchConfirmDialog(
 @Composable
 private fun BatchChangeSampleCard(change: QuickKeywordBatchChange) {
     val dateLabel = change.dateTime.format(DateTimeFormatter.ofPattern("d MMM yyyy"))
-    PennyWiseCard(modifier = Modifier.fillMaxWidth()) {
+    SpendlyCard(modifier = Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             Text(
                 text = stringResource(

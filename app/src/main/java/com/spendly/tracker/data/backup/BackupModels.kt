@@ -7,7 +7,7 @@ import java.time.LocalDateTime
 /**
  * Root container for Spendly backup data
  */
-data class PennyWiseBackup(
+data class SpendlyBackup(
     @SerializedName("_format")
     val format: String = "Spendly Backup v1.0",
     

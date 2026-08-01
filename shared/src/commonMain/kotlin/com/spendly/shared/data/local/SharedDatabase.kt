@@ -69,7 +69,7 @@ abstract class SharedDatabase : RoomDatabase() {
     abstract fun unrecognizedSmsDao(): SharedUnrecognizedSmsDao
 
     companion object {
-        const val DATABASE_NAME: String = "pennywise_shared.db"
+        const val DATABASE_NAME: String = "spendly_shared.db"
     }
 }
 

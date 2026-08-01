@@ -96,7 +96,7 @@ final class AppLockManager: ObservableObject {
         }
         context.evaluatePolicy(
             .deviceOwnerAuthenticationWithBiometrics,
-            localizedReason: "Unlock PennyWise to access your financial data"
+            localizedReason: "Unlock Spendly to access your financial data"
         ) { [weak self] success, _ in
             DispatchQueue.main.async {
                 if success {

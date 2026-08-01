@@ -38,7 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.spendly.tracker.ui.components.PennyWiseScaffold
+import com.spendly.tracker.ui.components.SpendlyScaffold
 import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.ui.viewmodel.PermissionViewModel
 
@@ -78,7 +78,7 @@ fun PermissionScreen(
         viewModel.refreshNotificationAccess()
     }
 
-    PennyWiseScaffold(
+    SpendlyScaffold(
         modifier = modifier,
         transparentTopBar = true
     ) { innerPadding ->

@@ -22,7 +22,7 @@
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
 
     <application
-        android:name=".PennyWiseApplication"
+        android:name=".SpendlyApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -30,7 +30,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Pennywisecompose">
+        android:theme="@style/Theme.Spendlycompose">
 
         <!-- AdMob App ID (test ID — replace before release) -->
         <meta-data
@@ -44,7 +44,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.PennyWise.SplashScreen"
+            android:theme="@style/Theme.Spendly.SplashScreen"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

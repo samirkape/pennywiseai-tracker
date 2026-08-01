@@ -14,7 +14,7 @@ struct WelcomeStep: View {
                 .clipShape(RoundedRectangle(cornerRadius: 22))
 
             VStack(spacing: AppSpacing.sm) {
-                Text("Welcome to PennyWise")
+                Text("Welcome to Spendly")
                     .font(AppTypography.largeTitle)
                     .multilineTextAlignment(.center)
 

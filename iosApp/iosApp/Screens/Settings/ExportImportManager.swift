@@ -3,7 +3,7 @@ import SwiftUI
 import Shared
 
 final class ExportImportManager: ObservableObject {
-    private let facade = PennyWiseSharedFacade.companion.shared
+    private let facade = SpendlySharedFacade.companion.shared
 
     @Published var isExporting = false
     @Published var isImporting = false
@@ -34,7 +34,7 @@ final class ExportImportManager: ObservableObject {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(backup)
 
-            let fileName = "PennyWise-Backup-\(backupDateString()).json"
+            let fileName = "Spendly-Backup-\(backupDateString()).json"
             let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
             try data.write(to: tempURL)
 

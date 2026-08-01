@@ -1,6 +1,7 @@
 package com.spendly.tracker.data.repository
 
 import com.spendly.tracker.data.database.dao.BulkCategoryPreviewDaoRow
+import com.spendly.tracker.data.database.dao.PrepaidExpenseDao
 import com.spendly.tracker.data.database.dao.TransactionDao
 import com.spendly.tracker.data.database.dao.TransactionReceiptDao
 import com.spendly.tracker.data.database.dao.TransactionSplitDao
@@ -27,7 +28,8 @@ import kotlin.math.min
 class TransactionRepository @Inject constructor(
     private val transactionDao: TransactionDao,
     private val transactionSplitDao: TransactionSplitDao,
-    private val transactionReceiptDao: TransactionReceiptDao
+    private val transactionReceiptDao: TransactionReceiptDao,
+    private val prepaidExpenseDao: PrepaidExpenseDao
 ) {
     companion object {
         /** Dummy lower bound when SQL `applySince` flag is off (date predicate ignored). */
@@ -291,6 +293,10 @@ class TransactionRepository @Inject constructor(
         // Drop any inbound pointers so the linked counterpart doesn't keep a
         // dangling linked_transaction_id reference.
         transactionDao.clearLinksTo(transaction.id)
+        // A prepaid plan has no basis for recognition without its source payment —
+        // cascade-delete it (and its allocations, via DB CASCADE) whether the payment
+        // itself is soft- or hard-deleted.
+        transaction.prepaidExpenseId?.let { prepaidExpenseDao.deleteById(it) }
         if (hardDelete) {
             transactionDao.deleteTransaction(transaction)
         } else {
@@ -300,6 +306,7 @@ class TransactionRepository @Inject constructor(
 
     suspend fun deleteTransactionById(id: Long, hardDelete: Boolean = false) {
         transactionDao.clearLinksTo(id)
+        transactionDao.getTransactionById(id)?.prepaidExpenseId?.let { prepaidExpenseDao.deleteById(it) }
         if (hardDelete) {
             transactionDao.deleteTransactionById(id)
         } else {

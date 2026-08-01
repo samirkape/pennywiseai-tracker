@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.spendly.tracker.utils.CurrencyFormatter
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
-import com.spendly.tracker.ui.components.PennyWiseEmptyState
+import com.spendly.tracker.ui.components.SpendlyEmptyState
 import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.theme.*
 import androidx.compose.foundation.text.KeyboardOptions
@@ -97,7 +97,7 @@ fun ManageAccountsScreen(
                     .padding(paddingValues),
                 contentAlignment = Alignment.Center
             ) {
-                PennyWiseEmptyState(
+                SpendlyEmptyState(
                     icon = Icons.Default.AccountBalance,
                     headline = "No Accounts",
                     description = "Add your first bank account to start tracking."

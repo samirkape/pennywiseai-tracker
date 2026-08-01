@@ -2,7 +2,7 @@ import Shared
 import SwiftUI
 
 struct AddEditCategoryScreen: View {
-    let facade: PennyWiseSharedFacade
+    let facade: SpendlySharedFacade
     var editingCategory: SharedCategoryItem?
     var onSave: (() -> Void)?
 

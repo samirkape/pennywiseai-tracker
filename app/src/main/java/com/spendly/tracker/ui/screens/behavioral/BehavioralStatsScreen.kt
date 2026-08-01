@@ -29,10 +29,10 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.spendly.tracker.presentation.common.TimePeriod
 import com.spendly.tracker.ui.components.PeriodRangeNavigator
-import com.spendly.tracker.ui.components.PennyWiseEmptyState
-import com.spendly.tracker.ui.components.PennyWiseStandardScaffold
+import com.spendly.tracker.ui.components.SpendlyEmptyState
+import com.spendly.tracker.ui.components.SpendlyStandardScaffold
 import com.spendly.tracker.ui.components.cards.ListItemCardV2
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.components.skeleton.BalanceCardSkeleton
 import com.spendly.tracker.ui.effects.overScrollVertical
@@ -101,7 +101,7 @@ fun BehavioralStatsScreen(
 
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
-    PennyWiseStandardScaffold(
+    SpendlyStandardScaffold(
         title = "Behavioral Stats",
         onNavigateBack = onNavigateBack,
         scrollBehavior = scrollBehavior,
@@ -172,7 +172,7 @@ fun BehavioralStatsScreen(
 
                 uiState.isEmpty -> {
                     item {
-                        PennyWiseEmptyState(
+                        SpendlyEmptyState(
                             icon = Icons.Default.Insights,
                             headline = "No spending data",
                             description = "Add some transactions to see your behavioral patterns here."
@@ -201,7 +201,7 @@ fun BehavioralStatsScreen(
                     }
 
                     item {
-                        PennyWiseCardV2(modifier = Modifier.fillMaxWidth()) {
+                        SpendlyCardV2(modifier = Modifier.fillMaxWidth()) {
                             Text(
                                 text = "Time of Day",
                                 style = MaterialTheme.typography.labelMedium,
@@ -221,7 +221,7 @@ fun BehavioralStatsScreen(
                     }
 
                     item {
-                        PennyWiseCardV2(modifier = Modifier.fillMaxWidth()) {
+                        SpendlyCardV2(modifier = Modifier.fillMaxWidth()) {
                             Text(
                                 text = "Day of Week",
                                 style = MaterialTheme.typography.labelMedium,
@@ -312,7 +312,7 @@ private fun SpendingForecastCard(
     }
     val insight = buildForecastInsight(forecast)
 
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = Dimensions.Padding.content,
     ) {

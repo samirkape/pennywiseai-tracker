@@ -39,7 +39,7 @@ Captured during Phase 0 (baseline) and Phase 1 (green build) execution. Update t
 
 - **`PayPeriodExplorerViewModel`:** Replaced six-way `Flow.combine` (Kotlin inference issue) with nested `combine` of two triples, then `collect` → `recompute`.
 - **Pay period timeline:** `PayPeriodExplorerContent` is shown from Home (bottom sheet); no separate full-screen route.
-- **Widget preview layouts:** Replaced `@android:style/Theme.DeviceDefault.DayNight` (API 29+) with `@style/Theme.Pennywisecompose` for minSdk 26 compatibility in four layout files.
+- **Widget preview layouts:** Replaced `@android:style/Theme.DeviceDefault.DayNight` (API 29+) with `@style/Theme.Spendlycompose` for minSdk 26 compatibility in four layout files.
 
 ### Lint (`:app:lintStandardRelease`)
 

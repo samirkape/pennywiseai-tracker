@@ -24,7 +24,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing
 import dev.chrisbanes.haze.HazeState
@@ -75,7 +75,7 @@ fun AddAccountScreen(
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
             // Info Card
-            PennyWiseCardV2(
+            SpendlyCardV2(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -102,7 +102,7 @@ fun AddAccountScreen(
             
             // Error Message
             formState.errorMessage?.let { error ->
-                PennyWiseCardV2(
+                SpendlyCardV2(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer

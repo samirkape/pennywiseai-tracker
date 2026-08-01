@@ -34,8 +34,8 @@ import androidx.navigation.navArgument
 import com.spendly.tracker.presentation.home.HomeScreen
 import com.spendly.tracker.presentation.subscriptions.SubscriptionsScreen
 import com.spendly.tracker.presentation.transactions.TransactionsScreen
-import com.spendly.tracker.ui.components.PennyWiseBottomNavigation
-import com.spendly.tracker.ui.components.PennyWiseNavigationRail
+import com.spendly.tracker.ui.components.SpendlyBottomNavigation
+import com.spendly.tracker.ui.components.SpendlyNavigationRail
 import com.spendly.tracker.ui.components.SpotlightTutorial
 import com.spendly.tracker.ui.components.WhatsNewDialog
 import com.spendly.tracker.ui.screens.settings.AppearanceScreen
@@ -162,7 +162,7 @@ fun MainScreen(
     ) {
         // NavigationRail for medium / expanded screens (tablets, landscape)
         if (useNavigationRail) {
-            PennyWiseNavigationRail(
+            SpendlyNavigationRail(
                 navController = navController,
                 currentDestination = navBackStackEntry?.destination,
             )
@@ -442,6 +442,24 @@ fun MainScreen(
                         rootNavController?.navigate(
                             com.spendly.tracker.navigation.AddTransaction()
                         ) { launchSingleTop = true }
+                    }
+                )
+            }
+
+            composable("prepaid_expenses") {
+                com.spendly.tracker.presentation.prepaid.PrepaidExpensesScreen(
+                    onNavigateBack = {
+                        if (navController.currentBackStackEntry?.lifecycle?.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) {
+                            if (!navController.popBackStack()) {
+                                navController.navigate(Constants.Routes.HOME) {
+                                    popUpTo(navController.graph.startDestinationId) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        }
                     }
                 )
             }
@@ -728,6 +746,11 @@ fun MainScreen(
                             launchSingleTop = true
                         }
                     },
+                    onNavigateToPrepaidExpenses = {
+                        navController.navigate("prepaid_expenses") {
+                            launchSingleTop = true
+                        }
+                    },
                     onNavigateToLoans = {
                         rootNavController?.navigate(
                             com.spendly.tracker.navigation.Loans
@@ -829,7 +852,7 @@ fun MainScreen(
         }
 
         // Bottom navigation + banner ad overlay
-        // Column stacks from top to bottom: BannerAdView (top) → PennyWiseBottomNavigation (bottom)
+        // Column stacks from top to bottom: BannerAdView (top) → SpendlyBottomNavigation (bottom)
         // aligned to BottomCenter so the nav stays at the very bottom edge
         Column(
             modifier = Modifier
@@ -846,7 +869,7 @@ fun MainScreen(
                     Constants.Routes.SETTINGS,
                 )
             ) {
-                PennyWiseBottomNavigation(
+                SpendlyBottomNavigation(
                     navController = navController,
                     currentDestination = navBackStackEntry?.destination,
                     navBarStyle = themeState.navBarStyle,

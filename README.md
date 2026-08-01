@@ -1,5 +1,5 @@
 <a name="top"></a>
-[![PennyWise AI Banner](banner.png)](https://github.com/sarim2000/spendly-tracker)
+[![Spendly AI Banner](banner.png)](https://github.com/sarim2000/spendly-tracker)
 [![GitHub stars](https://img.shields.io/github/stars/sarim2000/spendly-tracker?style=social)](https://github.com/sarim2000/spendly-tracker)
 [![License](https://img.shields.io/badge/license-AGPL%20v3-blue)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-12+-3DDC84)](https://developer.android.com/about/versions/12)
@@ -11,21 +11,21 @@
 [![GitHub last commit](https://img.shields.io/github/last-commit/sarim2000/spendly-tracker)](https://github.com/sarim2000/spendly-tracker/commits)
 [![Discord](https://img.shields.io/badge/Discord-Join_Community-5865F2)](https://discord.gg/H3xWeMWjKQ)
 
-## PennyWise AI — Free & Open‑Source, private SMS‑powered expense tracker
+## Spendly AI — Free & Open‑Source, private SMS‑powered expense tracker
 
 Turn bank SMS into a clean, searchable money timeline with on-device AI assistance. 100% private, no cloud processing.
 
 
 ⭐ **Star us on GitHub — join 300+ supporters!**
 
-[![Share](https://img.shields.io/badge/share-000000?logo=x&logoColor=white)](https://x.com/intent/tweet?text=Check%20out%20PennyWise%20AI%20-%20Privacy-first%20expense%20tracker%20with%20on-device%20AI:%20https://github.com/sarim2000/spendly-tracker%20%23Android%20%23PrivacyFirst%20%23OnDeviceAI)
+[![Share](https://img.shields.io/badge/share-000000?logo=x&logoColor=white)](https://x.com/intent/tweet?text=Check%20out%20Spendly%20AI%20-%20Privacy-first%20expense%20tracker%20with%20on-device%20AI:%20https://github.com/sarim2000/spendly-tracker%20%23Android%20%23PrivacyFirst%20%23OnDeviceAI)
 [![Share](https://img.shields.io/badge/share-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/sarim2000/spendly-tracker)
-[![Share](https://img.shields.io/badge/share-FF4500?logo=reddit&logoColor=white)](https://www.reddit.com/submit?title=PennyWise%20AI%20-%20Privacy-first%20expense%20tracker&url=https://github.com/sarim2000/spendly-tracker)
-[![Share](https://img.shields.io/badge/share-0088CC?logo=telegram&logoColor=white)](https://t.me/share/url?url=https://github.com/sarim2000/spendly-tracker&text=Check%20out%20PennyWise%20AI)
+[![Share](https://img.shields.io/badge/share-FF4500?logo=reddit&logoColor=white)](https://www.reddit.com/submit?title=Spendly%20AI%20-%20Privacy-first%20expense%20tracker&url=https://github.com/sarim2000/spendly-tracker)
+[![Share](https://img.shields.io/badge/share-0088CC?logo=telegram&logoColor=white)](https://t.me/share/url?url=https://github.com/sarim2000/spendly-tracker&text=Check%20out%20Spendly%20AI)
 
 ## Overview
 
-Your bank already texts you every transaction — PennyWise turns those SMS into a private, zero-setup expense tracker with on-device AI. No accounts, no cloud, no effort.
+Your bank already texts you every transaction — Spendly turns those SMS into a private, zero-setup expense tracker with on-device AI. No accounts, no cloud, no effort.
 
 <a href="https://play.google.com/store/apps/details?id=com.spendly.tracker">
   <img src="https://img.shields.io/badge/GET_IT_ON-Google_Play-00875F?style=for-the-badge&logo=google-play&logoColor=white" alt="Get it on Google Play" />
@@ -37,10 +37,10 @@ Your bank already texts you every transaction — PennyWise turns those SMS into
 ### How it works
 
 1. **Grant SMS permission** (read-only) — no account creation, no inbox changes, no messages sent.
-2. **PennyWise parses your transactions instantly** — extracts amount, merchant, category, and date. New SMS are detected in real-time.
+2. **Spendly parses your transactions instantly** — extracts amount, merchant, category, and date. New SMS are detected in real-time.
 3. **Get insights** — analytics, budgets, subscriptions, and an on-device AI assistant you can ask anything.
 
-## Why PennyWise
+## Why Spendly
 
 **Key Differentiators**
 
@@ -64,7 +64,7 @@ Your bank already texts you every transaction — PennyWise turns those SMS into
 
 - **🔐 Biometric App Lock** — Fingerprint/face unlock with configurable timeout
 - **📱 Home Screen Widgets** — Budget progress and recent transactions at a glance
-- **📤 Data Export & Backup** — CSV export for taxes, full backup/restore (.pennywisebackup)
+- **📤 Data Export & Backup** — CSV export for taxes, full backup/restore (.spendlybackup)
 - **🎭 Material You Theming** — Dynamic colors, multiple cover styles (Aurora, Gradient, Wave), light/dark/system themes
 - **✏️ Manual Transactions** — Add and edit transactions manually
 - **🔍 Search & Filters** — Filter by category, merchant, period, currency, transaction type

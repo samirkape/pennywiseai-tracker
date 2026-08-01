@@ -41,7 +41,7 @@ struct FAQScreen: View {
                         ),
                         FAQItem(
                             question: "What data does the app access?",
-                            answer: "PennyWise only accesses data you manually enter. The app does not access any other app data on your device."
+                            answer: "Spendly only accesses data you manually enter. The app does not access any other app data on your device."
                         ),
                     ]
                 )
@@ -76,7 +76,7 @@ struct FAQScreen: View {
                         .multilineTextAlignment(.center)
 
                     Button {
-                        if let url = URL(string: "https://github.com/nicekid1/pennywiseai-tracker/issues/new/choose") {
+                        if let url = URL(string: "https://github.com/nicekid1/spendlyai-tracker/issues/new/choose") {
                             UIApplication.shared.open(url)
                         }
                     } label: {

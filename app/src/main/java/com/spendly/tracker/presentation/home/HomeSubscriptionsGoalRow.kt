@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
 import com.spendly.tracker.data.database.entity.GoalEntity
 import com.spendly.tracker.data.database.entity.SubscriptionEntity
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.ui.theme.cardBorder
 import com.spendly.tracker.ui.theme.spendAmber
@@ -104,7 +104,7 @@ private fun SubscriptionsMiniCard(
     val today    = LocalDate.now()
     val tomorrow = today.plusDays(1)
 
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = modifier.defaultMinSize(minHeight = 220.dp),
         onClick = onClick,
         contentPadding = Spacing.md
@@ -184,7 +184,7 @@ private fun GoalsPagerCard(
     val greenColor = MaterialTheme.colorScheme.spendGreen
     val trackColor = MaterialTheme.colorScheme.cardBorder
 
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = modifier.defaultMinSize(minHeight = 220.dp),
         onClick = onClick,
         contentPadding = Spacing.md

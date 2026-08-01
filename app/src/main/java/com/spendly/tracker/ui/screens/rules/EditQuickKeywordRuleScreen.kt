@@ -65,7 +65,7 @@ import com.spendly.tracker.ui.components.TransactionTypeFilterChips
 import com.spendly.tracker.domain.service.QuickKeywordRuleCompiler
 import com.spendly.tracker.domain.service.QuickKeywordRuleMatcher
 import com.spendly.tracker.domain.usecase.BatchApplyResult
-import com.spendly.tracker.ui.components.PennyWiseCard
+import com.spendly.tracker.ui.components.SpendlyCard
 import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.ui.viewmodel.QuickKeywordRulesViewModel
 import com.spendly.tracker.ui.viewmodel.SaveQuickRuleOutcome
@@ -463,7 +463,7 @@ fun EditQuickKeywordRuleScreen(
                 enabled = !isRunningApply,
             )
 
-            PennyWiseCard(modifier = Modifier.fillMaxWidth()) {
+            SpendlyCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                     Text(
                         text = stringResource(R.string.quick_keyword_section_when_matches),
@@ -541,7 +541,7 @@ fun EditQuickKeywordRuleScreen(
                 }
             }
 
-            PennyWiseCard(modifier = Modifier.fillMaxWidth()) {
+            SpendlyCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                     Text(
                         text = stringResource(R.string.quick_keyword_section_set_on_match),
@@ -663,7 +663,7 @@ fun EditQuickKeywordRuleScreen(
                 }
             }
 
-            PennyWiseCard(modifier = Modifier.fillMaxWidth()) {
+            SpendlyCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     Text(
                         text = stringResource(R.string.quick_keyword_rule_behavior_title),

@@ -1,7 +1,7 @@
-# PennyWise State Management Guide
+# Spendly State Management Guide
 
 ## Overview
-PennyWise uses the modern Android state management approach with:
+Spendly uses the modern Android state management approach with:
 - **ViewModel + StateFlow** for UI state
 - **DataStore** for persistent preferences
 - **Unidirectional Data Flow (UDF)** pattern
@@ -118,9 +118,9 @@ fun StatelessCounter(
 
 ### 3. App-Wide State Management
 ```kotlin
-// PennyWiseApp.kt
+// SpendlyApp.kt
 @Composable
-fun PennyWiseApp() {
+fun SpendlyApp() {
     val themeViewModel: ThemeViewModel = hiltViewModel()
     val themeUiState by themeViewModel.themeUiState.collectAsStateWithLifecycle()
     
@@ -130,7 +130,7 @@ fun PennyWiseApp() {
         else -> themeUiState.isDarkTheme
     }
     
-    PennyWiseTheme(
+    SpendlyTheme(
         darkTheme = darkTheme,
         dynamicColor = themeUiState.isDynamicColorEnabled
     ) {

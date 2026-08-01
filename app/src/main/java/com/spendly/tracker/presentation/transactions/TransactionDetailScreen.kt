@@ -76,7 +76,7 @@ import com.spendly.tracker.ui.components.CategoryDot
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
 import com.spendly.tracker.ui.components.GroupedListItem
 import com.spendly.tracker.ui.components.ListItemPosition
-import com.spendly.tracker.ui.components.PennyWiseCard
+import com.spendly.tracker.ui.components.SpendlyCard
 import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.components.listItemPadding
 import com.spendly.tracker.ui.components.toShape
@@ -463,6 +463,9 @@ fun TransactionDetailScreen(
 
     // Loan state
     val loan by viewModel.loan.collectAsStateWithLifecycle()
+    val prepaidPlan by viewModel.prepaidPlan.collectAsStateWithLifecycle()
+    val showMarkAsPrepaidSheet by viewModel.showMarkAsPrepaidSheet.collectAsStateWithLifecycle()
+    val showMarkAsSubscriptionChooserSheet by viewModel.showMarkAsSubscriptionChooserSheet.collectAsStateWithLifecycle()
     val showMarkAsLoanSheet by viewModel.showMarkAsLoanSheet.collectAsStateWithLifecycle()
     val recentPersonNames by viewModel.recentPersonNames.collectAsStateWithLifecycle()
 
@@ -600,13 +603,102 @@ fun TransactionDetailScreen(
                     }
                 },
                 actionContent = {
-                    if (!isEditMode && transaction != null) {
-                        IconButton(onClick = { viewModel.showDeleteDialog() }) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "Delete Transaction",
-                                tint = MaterialTheme.colorScheme.error
-                            )
+                    transaction?.let { txn ->
+                        if (!isEditMode) {
+                            val quickActions = remember(txn, loan, prepaidPlan, currentGroup, linkedGoalContributions) {
+                                buildList {
+                                    if (loan == null) {
+                                        add(
+                                            TransactionQuickAction(
+                                                icon = Icons.Default.SwapHoriz,
+                                                label = if (txn.transactionType == TransactionType.INCOME) {
+                                                    "Track as borrowed"
+                                                } else {
+                                                    "Track as lent"
+                                                },
+                                                onClick = { viewModel.showMarkAsLoanSheet() }
+                                            )
+                                        )
+                                    }
+                                    if (prepaidPlan == null && !txn.isRecurring && txn.transactionType == TransactionType.EXPENSE) {
+                                        add(
+                                            TransactionQuickAction(
+                                                icon = Icons.Default.EventRepeat,
+                                                label = "Mark as subscription",
+                                                onClick = { viewModel.showMarkAsSubscriptionChooserSheet() }
+                                            )
+                                        )
+                                    }
+                                    if (currentGroup == null) {
+                                        add(
+                                            TransactionQuickAction(
+                                                icon = Icons.Outlined.FolderOpen,
+                                                label = "Add to group",
+                                                onClick = { viewModel.showGroupSheet() }
+                                            )
+                                        )
+                                    }
+                                    if (linkedGoalContributions.isEmpty()) {
+                                        add(
+                                            TransactionQuickAction(
+                                                icon = Icons.Default.EmojiEvents,
+                                                label = "Link to goal",
+                                                onClick = { viewModel.showLinkGoalSheet() }
+                                            )
+                                        )
+                                    } else {
+                                        val n = linkedGoalContributions.size
+                                        add(
+                                            TransactionQuickAction(
+                                                icon = Icons.Default.EmojiEvents,
+                                                label = if (n == 1) "Edit goal" else "Edit $n goals",
+                                                onClick = { viewModel.showLinkGoalSheet() }
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                            var quickActionsMenuExpanded by remember { mutableStateOf(false) }
+
+                            Row {
+                                IconButton(onClick = { viewModel.showDeleteDialog() }) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "Delete Transaction",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                                Box {
+                                    IconButton(onClick = { quickActionsMenuExpanded = true }) {
+                                        Icon(
+                                            Icons.Default.MoreVert,
+                                            contentDescription = "More options"
+                                        )
+                                    }
+                                    DropdownMenu(
+                                        expanded = quickActionsMenuExpanded,
+                                        onDismissRequest = { quickActionsMenuExpanded = false }
+                                    ) {
+                                        quickActions.forEach { action ->
+                                            DropdownMenuItem(
+                                                text = { Text(action.label) },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        action.icon,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(Dimensions.Icon.small)
+                                                    )
+                                                },
+                                                enabled = action.enabled,
+                                                onClick = {
+                                                    quickActionsMenuExpanded = false
+                                                    action.onClick()
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 },
@@ -627,6 +719,7 @@ fun TransactionDetailScreen(
                 showSplitEditor = showSplitEditor,
                 hasSplits = hasSplits,
                 loan = loan,
+                prepaidPlan = prepaidPlan,
                 onNavigateToLoanDetail = onNavigateToLoanDetail,
                 onFindSimilar = onFindSimilar,
                 onNavigateToTransactionDetail = onNavigateToTransactionDetail,
@@ -803,6 +896,29 @@ fun TransactionDetailScreen(
         )
     }
 
+    // Mark as Subscription Chooser Bottom Sheet
+    if (showMarkAsSubscriptionChooserSheet) {
+        MarkAsSubscriptionChooserBottomSheet(
+            transactionAmount = transaction?.amount ?: BigDecimal.ZERO,
+            transactionCurrency = transaction?.currency ?: "INR",
+            onDismiss = { viewModel.hideMarkAsSubscriptionChooserSheet() },
+            onChooseRegular = { viewModel.chooseRegularSubscription() },
+            onChoosePrepaid = { viewModel.choosePrepaidSubscription() }
+        )
+    }
+
+    // Mark as Prepaid Bottom Sheet
+    if (showMarkAsPrepaidSheet) {
+        MarkAsPrepaidBottomSheet(
+            transactionAmount = transaction?.amount ?: BigDecimal.ZERO,
+            transactionCurrency = transaction?.currency ?: "INR",
+            onDismiss = { viewModel.hideMarkAsPrepaidSheet() },
+            onConfirm = { totalMonths ->
+                viewModel.markTransactionAsPrepaid(totalMonths)
+            }
+        )
+    }
+
     // Split Among Goals Bottom Sheet
     if (showLinkGoalSheet) {
         SplitGoalsBottomSheet(
@@ -863,6 +979,7 @@ private fun TransactionDetailContent(
     showSplitEditor: Boolean,
     hasSplits: Boolean,
     loan: LoanEntity?,
+    prepaidPlan: com.spendly.tracker.data.database.entity.PrepaidExpenseEntity?,
     onNavigateToLoanDetail: (Long) -> Unit,
     onFindSimilar: (String) -> Unit,
     onNavigateToTransactionDetail: (Long) -> Unit,
@@ -919,6 +1036,7 @@ private fun TransactionDetailContent(
                     splits = splits,
                     hasSplits = hasSplits,
                     loan = loan,
+                    prepaidPlan = prepaidPlan,
                     onNavigateToLoanDetail = onNavigateToLoanDetail,
                     onFindSimilar = onFindSimilar,
                     onNavigateToTransactionDetail = onNavigateToTransactionDetail,
@@ -981,6 +1099,7 @@ private fun TransactionReceipt(
     splits: List<SplitItem>,
     hasSplits: Boolean,
     loan: LoanEntity?,
+    prepaidPlan: com.spendly.tracker.data.database.entity.PrepaidExpenseEntity?,
     onNavigateToLoanDetail: (Long) -> Unit,
     onFindSimilar: (String) -> Unit = {},
     onNavigateToTransactionDetail: (Long) -> Unit = {},
@@ -1175,93 +1294,14 @@ private fun TransactionReceipt(
 
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
             val similarTransactions by viewModel.similarTransactions.collectAsStateWithLifecycle()
-            val quickActions = buildList {
-                if (loan == null) {
-                    add(
-                        TransactionQuickAction(
-                            icon = Icons.Default.SwapHoriz,
-                            label = if (transaction.transactionType == TransactionType.INCOME) {
-                                "Track as borrowed"
-                            } else {
-                                "Track as lent"
-                            },
-                            compactLabel = if (transaction.transactionType == TransactionType.INCOME) {
-                                "Borrow"
-                            } else {
-                                "Lend"
-                            },
-                            onClick = { viewModel.showMarkAsLoanSheet() }
-                        )
-                    )
-                }
-                if (currentGroup == null) {
-                    add(
-                        TransactionQuickAction(
-                            icon = Icons.Outlined.FolderOpen,
-                            label = "Add to group",
-                            compactLabel = "Group",
-                            onClick = { viewModel.showGroupSheet() }
-                        )
-                    )
-                }
-                if (linkedGoalContributions.isEmpty()) {
-                    add(
-                        TransactionQuickAction(
-                            icon = Icons.Default.EmojiEvents,
-                            label = "Link to goal",
-                            compactLabel = "Goal",
-                            onClick = { viewModel.showLinkGoalSheet() }
-                        )
-                    )
-                } else {
-                    val n = linkedGoalContributions.size
-                    add(
-                        TransactionQuickAction(
-                            icon = Icons.Default.EmojiEvents,
-                            label = if (n == 1) "Edit goal" else "Edit $n goals",
-                            compactLabel = if (n == 1) "1 goal" else "$n goals",
-                            onClick = { viewModel.showLinkGoalSheet() }
-                        )
-                    )
-                }
-            }
-
-            // Use compact layout only when there are many actions — fewer items get larger icons/text.
-            val compactScreen = quickActions.size >= 5
 
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
-                // Quick Actions Row
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    tonalElevation = 1.dp
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = Spacing.sm, vertical = Spacing.xs),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        quickActions.forEach { action ->
-                            QuickActionItem(
-                                icon = action.icon,
-                                label = if (compactScreen) action.compactLabel else action.label,
-                                onClick = action.onClick,
-                                compact = compactScreen,
-                                modifier = Modifier.weight(1f),
-                                enabled = action.enabled
-                            )
-                        }
-                    }
-                }
-
                 // ── Similar Transactions Section ──
                 if (similarTransactions.isNotEmpty()) {
-                    val similarCardWidth = if (compactScreen) 136.dp else 160.dp
+                    val similarCardWidth = 160.dp
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
@@ -1498,6 +1538,16 @@ private fun TransactionReceipt(
                 }
             }
 
+            // Prepaid expense plan hint
+            prepaidPlan?.let { plan ->
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                DetailInfoRow(
+                    icon = Icons.Default.CalendarMonth,
+                    label = "Prepaid Plan",
+                    value = "Spread over ${plan.totalMonths} months (${plan.startDate} – ${plan.endDate})"
+                )
+            }
+
             // Classification
             val effectiveProfileId = transaction.profileId ?: accountProfileId
             val isEffectivelyBusiness = effectiveProfileId == ProfileEntity.BUSINESS_ID
@@ -1646,50 +1696,9 @@ private fun TransactionReceipt(
     }
 }
 
-@Composable
-private fun QuickActionItem(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    compact: Boolean,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true
-) {
-    val contentColor = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant
-                       else MaterialTheme.colorScheme.primary
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = if (compact) 52.dp else 58.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(vertical = if (compact) 3.dp else Spacing.xs),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            icon,
-            contentDescription = label,
-            modifier = Modifier.size(if (compact) 14.dp else 18.dp),
-            tint = contentColor
-        )
-        Spacer(modifier = Modifier.height(if (compact) 2.dp else 4.dp))
-        Text(
-            text = label,
-            modifier = Modifier.fillMaxWidth(),
-            style = MaterialTheme.typography.labelSmall,
-            color = contentColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center
-        )
-    }
-}
-
 private data class TransactionQuickAction(
     val icon: ImageVector,
     val label: String,
-    val compactLabel: String,
     val onClick: () -> Unit,
     val enabled: Boolean = true
 )
@@ -3073,6 +3082,156 @@ private fun MarkAsLoanBottomSheet(
                     contentDescription = null,
                     modifier = Modifier.size(Dimensions.Icon.small)
                 )
+                Spacer(modifier = Modifier.width(Spacing.xs))
+                Text("Confirm")
+            }
+        }
+    }
+}
+
+// ==================== Mark as Subscription Chooser Bottom Sheet ====================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MarkAsSubscriptionChooserBottomSheet(
+    transactionAmount: BigDecimal,
+    transactionCurrency: String,
+    onDismiss: () -> Unit,
+    onChooseRegular: () -> Unit,
+    onChoosePrepaid: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dimensions.Padding.content)
+                .padding(bottom = Spacing.xl)
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            Text(
+                text = "Mark as subscription: ${CurrencyFormatter.formatCurrency(transactionAmount, transactionCurrency)}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            Surface(
+                onClick = onChooseRegular,
+                shape = RoundedCornerShape(Dimensions.CornerRadius.medium),
+                color = MaterialTheme.colorScheme.surfaceContainerLow
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+                ) {
+                    Icon(Icons.Default.EventRepeat, contentDescription = null)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Regular subscription", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Text(
+                            "This charge repeats — e.g. a monthly bill",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Surface(
+                onClick = onChoosePrepaid,
+                shape = RoundedCornerShape(Dimensions.CornerRadius.medium),
+                color = MaterialTheme.colorScheme.surfaceContainerLow
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+                ) {
+                    Icon(Icons.Default.CalendarMonth, contentDescription = null)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Prepaid", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Text(
+                            "One payment, covers several months — e.g. annual insurance",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==================== Mark as Prepaid Bottom Sheet ====================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MarkAsPrepaidBottomSheet(
+    transactionAmount: BigDecimal,
+    transactionCurrency: String,
+    onDismiss: () -> Unit,
+    onConfirm: (totalMonths: Int) -> Unit
+) {
+    var totalMonths by remember { mutableIntStateOf(6) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val monthlyAmount = transactionAmount.divide(BigDecimal(totalMonths), 2, java.math.RoundingMode.HALF_UP)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dimensions.Padding.content)
+                .padding(bottom = Spacing.xl)
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            Text(
+                text = "Mark as prepaid: ${CurrencyFormatter.formatCurrency(transactionAmount, transactionCurrency)}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "This still counts as today's spend in full. This just tracks the plan's progress and its monthly/yearly equivalent cost, shown on the Subscriptions screen.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Text(
+                text = "Spread over $totalMonths months",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                listOf(3, 6, 12, 24).forEach { months ->
+                    FilterChip(
+                        selected = totalMonths == months,
+                        onClick = { totalMonths = months },
+                        label = { Text("$months") }
+                    )
+                }
+            }
+
+            Text(
+                text = "≈ ${CurrencyFormatter.formatCurrency(monthlyAmount, transactionCurrency)} / month",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Button(
+                onClick = { onConfirm(totalMonths) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(Dimensions.Icon.small))
                 Spacer(modifier = Modifier.width(Spacing.xs))
                 Text("Confirm")
             }

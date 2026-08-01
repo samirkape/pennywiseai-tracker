@@ -26,7 +26,7 @@ import com.spendly.tracker.presentation.common.PaymentMode
 import com.spendly.tracker.presentation.common.PaymentModeGroup
 import com.spendly.tracker.presentation.common.TimePeriod
 import com.spendly.tracker.presentation.common.TransactionTypeFilter
-import com.spendly.tracker.ui.components.PennyWiseStandardScaffold
+import com.spendly.tracker.ui.components.SpendlyStandardScaffold
 import com.spendly.tracker.ui.components.cards.SpendingBreakdownData
 import com.spendly.tracker.ui.components.cards.SpendingBreakdownTile
 import com.spendly.tracker.ui.effects.overScrollVertical
@@ -113,7 +113,7 @@ fun AnalyticsBreakdownScreen(
 
     val accounts = uiState.accountBreakdowns[tileKey].orEmpty()
 
-    PennyWiseStandardScaffold(
+    SpendlyStandardScaffold(
         title = breakdownTitle(tileKey),
         onNavigateBack = onNavigateBack,
         scrollBehavior = scrollBehavior,

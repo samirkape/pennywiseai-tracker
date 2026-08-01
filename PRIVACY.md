@@ -4,7 +4,7 @@
 
 ## Our Commitment to Privacy
 
-PennyWise AI is built with privacy as the core principle. We believe your financial data should remain yours alone.
+Spendly AI is built with privacy as the core principle. We believe your financial data should remain yours alone.
 
 ## 100% On-Device Processing
 
@@ -26,7 +26,7 @@ PennyWise AI is built with privacy as the core principle. We believe your financ
 ### Where It's Stored
 - All data is stored in a local SQLite database on your device
 - Database is protected by Android's app sandboxing
-- Data is only accessible to PennyWise AI app
+- Data is only accessible to Spendly AI app
 
 ### Data Deletion
 - Uninstalling the app completely removes all data
@@ -55,7 +55,7 @@ PennyWise AI is built with privacy as the core principle. We believe your financ
 
 ## Third-Party Services
 
-PennyWise AI does **NOT** use:
+Spendly AI does **NOT** use:
 - ❌ Cloud services or APIs (except CDN for model download)
 - ❌ Analytics services (Google Analytics, Firebase, etc.)
 - ❌ Crash reporting services
@@ -84,14 +84,14 @@ When you export your data:
 
 ## Open Source Transparency
 
-PennyWise AI is fully open source:
+Spendly AI is fully open source:
 - Review our code at [GitHub](https://github.com/sarim2000/spendly-tracker)
 - Verify our privacy claims yourself
 - Contribute to make it even better
 
 ## Children's Privacy
 
-PennyWise AI is not directed at children under 13. We do not knowingly collect information from children.
+Spendly AI is not directed at children under 13. We do not knowingly collect information from children.
 
 ## Changes to Privacy Policy
 
@@ -118,4 +118,4 @@ For privacy concerns or questions:
 
 ---
 
-*PennyWise AI - Privacy-first expense tracking with on-device AI*
+*Spendly AI - Privacy-first expense tracking with on-device AI*

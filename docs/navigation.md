@@ -2,8 +2,8 @@
 
 ## Two NavHosts
 
-1. **Root graph** — [`PennyWiseNavHost.kt`](../app/src/main/java/com/spendly/tracker/navigation/PennyWiseNavHost.kt)  
-   Typed routes (`@Serializable` objects in [`PennyWiseDestinations.kt`](../app/src/main/java/com/spendly/tracker/navigation/PennyWiseDestinations.kt)): onboarding, app lock, transaction detail, add transaction, rules, loans, budget edit from settings shortcuts, filtered transaction lists, etc.
+1. **Root graph** — [`SpendlyNavHost.kt`](../app/src/main/java/com/spendly/tracker/navigation/SpendlyNavHost.kt)  
+   Typed routes (`@Serializable` objects in [`SpendlyDestinations.kt`](../app/src/main/java/com/spendly/tracker/navigation/SpendlyDestinations.kt)): onboarding, app lock, transaction detail, add transaction, rules, loans, budget edit from settings shortcuts, filtered transaction lists, etc.
 
 2. **Main tab shell** — [`MainScreen.kt`](../app/src/main/java/com/spendly/tracker/ui/MainScreen.kt) inner `NavHost`  
    String routes in [`Constants.Routes`](../app/src/main/java/com/spendly/tracker/core/Constants.kt): home, transactions (with query args), subscriptions, analytics, optional chat (see below), pay period explorer, budgets, settings, and nested settings flows.

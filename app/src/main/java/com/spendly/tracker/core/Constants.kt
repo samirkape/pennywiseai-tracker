@@ -38,7 +38,7 @@ object Constants {
      * Database Configuration
      */
     object Database {
-        const val DATABASE_NAME = "pennywise_database"
+        const val DATABASE_NAME = "spendly_database"
         const val CURRENT_VERSION = 2
         const val TRANSACTION_HASH_DEFAULT = ""
     }
@@ -109,6 +109,6 @@ object Constants {
     object Links {
         const val DISCORD_URL = "https://discord.gg/H3xWeMWjKQ"
         const val GITHUB_URL = "https://github.com/sarim2000/spendly-tracker"
-        const val WEB_PARSER_URL = "https://pennywise.querymind.pro"
+        const val WEB_PARSER_URL = "https://spendly.querymind.pro"
     }
 }

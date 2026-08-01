@@ -10,7 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import com.spendly.tracker.ui.components.PennyWiseScaffold
+import com.spendly.tracker.ui.components.SpendlyScaffold
 import com.spendly.tracker.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -23,7 +23,7 @@ fun AddScreen(
     val transactionUiState by viewModel.transactionUiState.collectAsState()
     val fromUnrecognized = transactionUiState.fromUnrecognizedSms
     
-    PennyWiseScaffold(
+    SpendlyScaffold(
         title = if (fromUnrecognized) "Add from SMS" else "Add New",
         navigationIcon = {
             IconButton(onClick = onNavigateBack) {
@@ -42,9 +42,9 @@ fun AddScreen(
                     onSave = onNavigateBack,
                 )
             } else {
-                val pagerState = rememberPagerState(pageCount = { 2 })
+                val pagerState = rememberPagerState(pageCount = { 3 })
                 val coroutineScope = rememberCoroutineScope()
-                val tabs = listOf("Transaction", "Subscription")
+                val tabs = listOf("Transaction", "Subscription", "Prepaid")
 
                 TabRow(
                     selectedTabIndex = pagerState.currentPage,
@@ -74,6 +74,10 @@ fun AddScreen(
                             onSave = onNavigateBack
                         )
                         1 -> SubscriptionTabContent(
+                            viewModel = viewModel,
+                            onSave = onNavigateBack
+                        )
+                        2 -> PrepaidExpenseTabContent(
                             viewModel = viewModel,
                             onSave = onNavigateBack
                         )

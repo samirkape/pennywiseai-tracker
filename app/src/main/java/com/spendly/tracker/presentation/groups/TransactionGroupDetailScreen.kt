@@ -28,7 +28,7 @@ import com.spendly.tracker.data.database.entity.TransactionType
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
 import com.spendly.tracker.ui.components.cards.GroupMerchantAvatarStack
 import com.spendly.tracker.ui.components.cards.GroupSummaryStatPillRow
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.effects.overScrollVertical
 import com.spendly.tracker.ui.effects.rememberOverscrollFlingBehavior
@@ -156,7 +156,7 @@ fun TransactionGroupDetailScreen(
         ) {
             // Hero summary
             item {
-                PennyWiseCardV2(modifier = Modifier.fillMaxWidth()) {
+                SpendlyCardV2(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(Spacing.md)
@@ -206,7 +206,7 @@ fun TransactionGroupDetailScreen(
                     )
                 }
                 item {
-                    PennyWiseCardV2(
+                    SpendlyCardV2(
                         modifier = Modifier.fillMaxWidth(),
                         contentPadding = 0.dp
                     ) {
@@ -465,7 +465,7 @@ private fun AddTransactionToGroupSheet(
                             else -> ""
                         }
 
-                        PennyWiseCardV2(
+                        SpendlyCardV2(
                             modifier = Modifier.fillMaxWidth(),
                             onClick = { onAdd(txn.id) }
                         ) {

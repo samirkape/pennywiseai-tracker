@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Base dark theme -->
-    <style name="Theme.Pennywisecompose" parent="android:Theme.Material.NoActionBar" />
+    <style name="Theme.Spendlycompose" parent="android:Theme.Material.NoActionBar" />
     
     <!-- Splash Screen theme for dark mode -->
-    <style name="Theme.PennyWise.SplashScreen" parent="Theme.SplashScreen">
+    <style name="Theme.Spendly.SplashScreen" parent="Theme.SplashScreen">
         <!-- Spendly brand dark indigo for dark mode -->
         <item name="windowSplashScreenBackground">#1E1B4B</item>
         
@@ -15,6 +15,6 @@
         <item name="windowSplashScreenAnimationDuration">1000</item>
         
         <!-- Set the theme to use after splash screen -->
-        <item name="postSplashScreenTheme">@style/Theme.Pennywisecompose</item>
+        <item name="postSplashScreenTheme">@style/Theme.Spendlycompose</item>
     </style>
 </resources>

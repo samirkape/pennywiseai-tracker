@@ -370,7 +370,7 @@ fun GroupCard(
                 }
         ) { content() }
     } else {
-        PennyWiseCardV2(
+        SpendlyCardV2(
             modifier = rowModifier,
             onClick = {
                 view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)

@@ -29,7 +29,7 @@ fun CategoryBreakdownCard(
 ) {
     val maxAmount = categories.maxOfOrNull { it.amount } ?: java.math.BigDecimal.ZERO
 
-    PennyWiseCard(
+    SpendlyCard(
         modifier = modifier.fillMaxWidth()
     ) {
         Column(

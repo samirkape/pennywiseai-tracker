@@ -1,7 +1,7 @@
-# PennyWise Architecture Guide
+# Spendly Architecture Guide
 
 ## Overview
-PennyWise follows modern Android architecture guidelines with MVVM pattern, Clean Architecture principles, and Unidirectional Data Flow (UDF).
+Spendly follows modern Android architecture guidelines with MVVM pattern, Clean Architecture principles, and Unidirectional Data Flow (UDF).
 
 ## Core Architectural Principles
 
@@ -90,7 +90,7 @@ PennyWise follows modern Android architecture guidelines with MVVM pattern, Clea
 ## Module Structure
 ```
 app/
-├── src/main/java/com/pennywise/
+├── src/main/java/com/spendly/
 │   ├── ui/                    # UI Layer
 │   │   ├── screens/
 │   │   ├── components/

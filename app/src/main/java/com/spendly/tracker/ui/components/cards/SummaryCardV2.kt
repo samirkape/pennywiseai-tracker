@@ -30,7 +30,7 @@ fun SummaryCardV2(
     sparklineSlot: @Composable (() -> Unit)? = null,
     onClick: (() -> Unit)? = null
 ) {
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = modifier.fillMaxWidth(),
         colors = colors,
         onClick = onClick

@@ -46,7 +46,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.ui.theme.cardBorder
 import com.spendly.tracker.ui.theme.spendAmber
@@ -82,7 +82,7 @@ fun SmartInsightsCard(
         }
     }
 
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = modifier
             .fillMaxWidth()
             .semantics { contentDescription = cardDesc },

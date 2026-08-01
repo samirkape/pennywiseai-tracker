@@ -1,7 +1,7 @@
-# PennyWise Project Context
+# Spendly Project Context
 
 ## Project Overview
-PennyWise is a minimalist, AI-powered expense tracker for Android that automatically extracts transaction data from SMS messages using on-device processing.
+Spendly is a minimalist, AI-powered expense tracker for Android that automatically extracts transaction data from SMS messages using on-device processing.
 
 ## Important Documents
 Please reference these documents when working on this project:
@@ -20,8 +20,8 @@ Please reference these documents when working on this project:
 - **Spacing**: 8dp grid system
 - **Typography**: Material 3 type scale
 - **Navigation**: NavigationBar for phones, NavigationRail for tablets
-- **Edge-to-Edge**: All screens use PennyWiseScaffold with default TopAppBar for consistent system bar handling
-- **Consistent UI**: PennyWiseScaffold provides default TopAppBar with options for title, navigation, actions, and transparency
+- **Edge-to-Edge**: All screens use SpendlyScaffold with default TopAppBar for consistent system bar handling
+- **Consistent UI**: SpendlyScaffold provides default TopAppBar with options for title, navigation, actions, and transparency
 
 ## Current Phase
 Working on Phase 1: Core Foundation (Project setup, Material 3 theming, Room database, Navigation)

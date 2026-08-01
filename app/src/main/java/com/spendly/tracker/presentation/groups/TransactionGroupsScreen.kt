@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.effects.overScrollVertical
 import com.spendly.tracker.ui.effects.rememberOverscrollFlingBehavior
 import com.spendly.tracker.ui.theme.*
@@ -154,7 +154,7 @@ private fun GroupListItem(
     val isDark = isSystemInDarkTheme()
     val accentColor = if (isDark) income_dark else income_light
 
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick
     ) {

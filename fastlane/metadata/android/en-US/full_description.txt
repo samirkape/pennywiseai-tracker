@@ -1,6 +1,6 @@
 Turn bank SMS into a clean, searchable money timeline with on-device AI assistance. 100% private, no cloud processing.
 
-Your bank already texts you every transaction — PennyWise turns those SMS into a private, zero-setup expense tracker with on-device AI. No accounts, no cloud, no effort.
+Your bank already texts you every transaction — Spendly turns those SMS into a private, zero-setup expense tracker with on-device AI. No accounts, no cloud, no effort.
 
 Key Features:
 - 100% On-Device & Private — All AI processing runs locally, no cloud, no servers, no tracking

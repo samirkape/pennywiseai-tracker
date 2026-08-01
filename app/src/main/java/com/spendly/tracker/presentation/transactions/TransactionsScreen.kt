@@ -60,7 +60,7 @@ import com.spendly.tracker.data.database.entity.ProfileEntity
 import com.spendly.tracker.ui.components.profileIcon
 import com.spendly.tracker.ui.components.*
 import com.spendly.tracker.ui.components.skeleton.TransactionItemSkeleton
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
 import com.spendly.tracker.ui.theme.*
@@ -558,7 +558,7 @@ fun TransactionsScreen(
 
         // Data scope info banner
         if (showSmsDataLimitBanner) {
-            PennyWiseCardV2(
+            SpendlyCardV2(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = Dimensions.Padding.content, vertical = Spacing.xs),
@@ -1135,7 +1135,7 @@ private fun EmptyTransactionsState(
             .padding(Dimensions.Padding.content),
         contentAlignment = Alignment.Center
     ) {
-        PennyWiseEmptyState(
+        SpendlyEmptyState(
             icon = Icons.AutoMirrored.Filled.ReceiptLong,
             headline = headline,
             description = description,

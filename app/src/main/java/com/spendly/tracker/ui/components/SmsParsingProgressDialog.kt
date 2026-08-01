@@ -18,7 +18,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.worker.OptimizedSmsReaderWorker
@@ -38,7 +38,7 @@ fun SmsParsingProgressDialog(
 ) {
     if (isVisible && workInfo != null) {
         Dialog(onDismissRequest = { }) {
-            PennyWiseCardV2(
+            SpendlyCardV2(
                 modifier = modifier
                     .fillMaxWidth()
                     .padding(Spacing.md),

@@ -22,7 +22,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.spendly.tracker.data.database.entity.CategoryEntity
 import com.spendly.tracker.ui.components.CategoryChip
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing
@@ -304,7 +304,7 @@ private fun CategoryItem(
     onClick: (() -> Unit)?,
     onDelete: (() -> Unit)?
 ) {
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick,
         contentPadding = 0.dp

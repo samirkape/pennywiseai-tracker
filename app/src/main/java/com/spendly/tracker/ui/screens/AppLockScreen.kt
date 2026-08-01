@@ -16,7 +16,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.spendly.tracker.domain.security.BiometricAuthManager
 import com.spendly.tracker.domain.security.BiometricCapability
-import com.spendly.tracker.ui.components.PennyWiseScaffold
+import com.spendly.tracker.ui.components.SpendlyScaffold
 import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.ui.viewmodel.AppLockViewModel
 import dagger.hilt.android.EntryPointAccessors
@@ -52,7 +52,7 @@ fun AppLockScreen(
         }
     }
 
-    PennyWiseScaffold(
+    SpendlyScaffold(
         modifier = modifier,
         transparentTopBar = true
     ) { innerPadding ->

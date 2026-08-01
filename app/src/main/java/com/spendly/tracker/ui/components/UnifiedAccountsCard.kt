@@ -31,7 +31,7 @@ fun UnifiedAccountsCard(
 ) {
     var showAllAccounts by remember { mutableStateOf(false) }
     
-    PennyWiseCard(
+    SpendlyCard(
         modifier = modifier.fillMaxWidth()
     ) {
         Column {

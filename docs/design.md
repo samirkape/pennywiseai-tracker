@@ -1,7 +1,7 @@
-# PennyWise Design System
+# Spendly Design System
 
 ## Overview
-PennyWise follows Material 3 design principles with a focus on simplicity, clarity, and user-centric design. This document outlines the visual design system, theming approach, and layout guidelines.
+Spendly follows Material 3 design principles with a focus on simplicity, clarity, and user-centric design. This document outlines the visual design system, theming approach, and layout guidelines.
 
 For **screen shell patterns** (hero home vs standard list/detail, tablet direction), see [scaffold-patterns.md](scaffold-patterns.md).
 
@@ -10,7 +10,7 @@ For **navigation graphs and back behavior**, see [navigation.md](navigation.md).
 ## Theme System
 
 ### Material You Integration
-PennyWise leverages Android 12+ dynamic color system to create personalized experiences:
+Spendly leverages Android 12+ dynamic color system to create personalized experiences:
 - **Dynamic Color**: Automatically derives colors from user's wallpaper
 - **Adaptive Theming**: Seamlessly adapts to system-wide theme preferences
 - **Fallback Colors**: Provides branded colors for older Android versions
@@ -94,7 +94,7 @@ val DarkColorScheme = darkColorScheme(
 ### Theme Implementation
 ```kotlin
 @Composable
-fun PennyWiseTheme(
+fun SpendlyTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
@@ -355,7 +355,7 @@ object Animations {
 
 ### Common Icons
 ```kotlin
-object PennyWiseIcons {
+object SpendlyIcons {
     val Home = Icons.Outlined.Home
     val Transactions = Icons.Outlined.Receipt
     val Analytics = Icons.Outlined.Analytics
@@ -434,7 +434,7 @@ fun EmptyTransactions() {
 @Preview(name = "Dark Theme", uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
 fun ComponentPreview() {
-    PennyWiseTheme {
+    SpendlyTheme {
         // Component
     }
 }

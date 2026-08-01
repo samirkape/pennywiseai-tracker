@@ -60,7 +60,7 @@ class BudgetWidget : GlanceAppWidget() {
                 colors = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
                     GlanceTheme.colors
                 else
-                    PennyWiseWidgetTheme.colors
+                    SpendlyWidgetTheme.colors
             ) {
                 BudgetWidgetContent(data)
             }
@@ -117,7 +117,7 @@ class BudgetWidget : GlanceAppWidget() {
     private fun BudgetOverviewContent(data: BudgetWidgetData) {
         val size = LocalSize.current
         val isSmall = size.width < 280.dp
-        val statusColor = PennyWiseWidgetTheme.budgetStatusColor(data.percentageUsed)
+        val statusColor = SpendlyWidgetTheme.budgetStatusColor(data.percentageUsed)
 
         // Title row with percentage
         Row(
@@ -231,7 +231,7 @@ class BudgetWidget : GlanceAppWidget() {
                 if (data.totalIncome > BigDecimal.ZERO) {
                     Spacer(modifier = GlanceModifier.defaultWeight())
 
-                    val savingsColor = PennyWiseWidgetTheme.savingsColor(data.netSavings >= BigDecimal.ZERO)
+                    val savingsColor = SpendlyWidgetTheme.savingsColor(data.netSavings >= BigDecimal.ZERO)
 
                     val savingsText = buildString {
                         append(if (data.netSavings >= BigDecimal.ZERO) "Saved " else "Over ")

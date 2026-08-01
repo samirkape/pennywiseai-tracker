@@ -30,7 +30,7 @@ import com.spendly.tracker.data.database.entity.LoanStatus
 import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.database.entity.TransactionType
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.effects.overScrollVertical
 import com.spendly.tracker.ui.effects.rememberOverscrollFlingBehavior
 import com.spendly.tracker.ui.theme.*
@@ -493,7 +493,7 @@ private fun LoanTransactionItem(
         else -> ""
     }
 
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick
     ) {
@@ -624,7 +624,7 @@ private fun RecordPaymentBottomSheet(
 
             if (!useManualEntry && recentUnlinkedTransactions.isNotEmpty()) {
                 recentUnlinkedTransactions.take(5).forEach { txn ->
-                    PennyWiseCardV2(
+                    SpendlyCardV2(
                         modifier = Modifier.fillMaxWidth(),
                         onClick = { onLinkTransaction(txn.id) }
                     ) {

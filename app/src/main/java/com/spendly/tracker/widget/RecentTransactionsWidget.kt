@@ -70,7 +70,7 @@ class RecentTransactionsWidget : GlanceAppWidget() {
                 colors = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
                     GlanceTheme.colors
                 else
-                    PennyWiseWidgetTheme.colors
+                    SpendlyWidgetTheme.colors
             ) {
                 RecentTransactionsContent(data)
             }
@@ -215,9 +215,9 @@ class RecentTransactionsWidget : GlanceAppWidget() {
             }
 
             val amountColor = when (item.transactionType) {
-                TransactionType.INCOME -> PennyWiseWidgetTheme.transactionAmountColor(TransactionType.INCOME)
+                TransactionType.INCOME -> SpendlyWidgetTheme.transactionAmountColor(TransactionType.INCOME)
                 TransactionType.TRANSFER -> GlanceTheme.colors.onSurfaceVariant
-                else -> PennyWiseWidgetTheme.transactionAmountColor(item.transactionType)
+                else -> SpendlyWidgetTheme.transactionAmountColor(item.transactionType)
             }
 
             Text(

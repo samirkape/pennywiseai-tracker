@@ -378,7 +378,10 @@
     <string name="subs_section_active">Active Subscriptions</string>
     <string name="subs_section_due_soon">Due Soon</string>
     <string name="subs_summary_monthly_title">Monthly Subscriptions</string>
+    <string name="subs_summary_recurring_title">Recurring Costs</string>
     <string name="subs_summary_yearly">≈ %1$s / year</string>
+    <string name="subs_summary_breakdown_subscriptions">Subscriptions</string>
+    <string name="subs_summary_breakdown_prepaid">Prepaid (%1$d active)</string>
     <string name="subs_hero_next_billing">Next: %1$s · %2$s · %3$s</string>
     <string name="subs_item_per_month">/ mo</string>
     <string name="subs_empty_headline">No subscriptions detected yet</string>
@@ -412,6 +415,11 @@
     <string name="subs_item_menu_delete">Delete permanently</string>
     <string name="subs_item_notes_title">Notes</string>
     <string name="subs_item_sms_title">Original SMS</string>
+    <string name="subs_prepaid_expires_today">Expires today</string>
+    <string name="subs_prepaid_expires_tomorrow">Expires tomorrow</string>
+    <string name="subs_prepaid_expires_in_days">Expires in %1$d days</string>
+    <string name="subs_prepaid_badge">Prepaid</string>
+    <string name="subs_section_active_prepaid">Active Prepaid Plans</string>
 
     <!-- Merchant rename grouped sheet (Phase 2 tiered review) -->
     <string name="merchant_rename_grouped_title">Fix merchant name?</string>

@@ -10,7 +10,7 @@ import android.provider.Telephony
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.spendly.tracker.MainActivity
-import com.spendly.tracker.PennyWiseApplication
+import com.spendly.tracker.SpendlyApplication
 import com.spendly.tracker.R
 import com.spendly.tracker.data.manager.SmsTransactionProcessor
 import dagger.hilt.EntryPoint
@@ -141,7 +141,7 @@ class SmsBroadcastReceiver : BroadcastReceiver() {
 
     private fun isAppInForeground(context: Context): Boolean {
         return try {
-            val application = context.applicationContext as? PennyWiseApplication
+            val application = context.applicationContext as? SpendlyApplication
             application?.isAppInForeground ?: false
         } catch (e: Exception) {
             false

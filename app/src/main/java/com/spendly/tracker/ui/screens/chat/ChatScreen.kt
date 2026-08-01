@@ -32,7 +32,7 @@ import com.spendly.tracker.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.spendly.tracker.data.repository.ModelState
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing
 import androidx.compose.ui.graphics.Color
@@ -431,7 +431,7 @@ fun ChatScreen(
                             enter = expandVertically() + fadeIn(),
                             exit = shrinkVertically() + fadeOut()
                         ) {
-                            PennyWiseCardV2(
+                            SpendlyCardV2(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = Dimensions.Padding.content),
@@ -609,7 +609,7 @@ fun DeveloperInfoCard(
         else -> MaterialTheme.colorScheme.primary
     }
     
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = Dimensions.Padding.content)
@@ -736,7 +736,7 @@ fun TypingIndicator(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Start
     ) {
-        PennyWiseCardV2(
+        SpendlyCardV2(
             modifier = Modifier.widthIn(max = 280.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.secondaryContainer
@@ -791,7 +791,7 @@ fun ChatMessageItem(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start
     ) {
-        PennyWiseCardV2(
+        SpendlyCardV2(
             modifier = Modifier
                 .widthIn(max = 280.dp)
                 .animateContentSize(),

@@ -37,7 +37,7 @@ struct SettingsScreen: View {
 
             Section("Data Management") {
                 NavigationLink {
-                    CategoriesScreen(facade: PennyWiseSharedFacade.companion.shared)
+                    CategoriesScreen(facade: SpendlySharedFacade.companion.shared)
                 } label: {
                     Label {
                         VStack(alignment: .leading, spacing: AppSpacing.xs) {
@@ -234,7 +234,7 @@ struct SettingsScreen: View {
                 }
 
                 Button {
-                    if let url = URL(string: "https://github.com/nicekid1/pennywiseai-tracker/issues/new/choose") {
+                    if let url = URL(string: "https://github.com/nicekid1/spendlyai-tracker/issues/new/choose") {
                         UIApplication.shared.open(url)
                     }
                 } label: {
@@ -262,7 +262,7 @@ struct SettingsScreen: View {
                 } label: {
                     Label {
                         VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                            Text("About PennyWise")
+                            Text("About Spendly")
                                 .font(AppTypography.body)
                             Text("Version, links, and credits")
                                 .font(AppTypography.caption)
@@ -351,7 +351,7 @@ struct SettingsScreen: View {
         print("[PDF Import] First 1000 chars:\n\(String(fullText.prefix(1000)))")
         #endif
 
-        let facade = PennyWiseSharedFacade.companion.shared
+        let facade = SpendlySharedFacade.companion.shared
         let snapshot = facade.importStatementTextAndLoadHome(statementText: fullText)
         if snapshot.lastImportParsed > 0 {
             statementImportResult = "\(snapshot.lastImportImported) transactions imported, \(snapshot.lastImportSkipped) skipped"

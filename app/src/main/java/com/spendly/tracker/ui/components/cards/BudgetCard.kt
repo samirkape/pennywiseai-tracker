@@ -76,7 +76,7 @@ fun BudgetCard(
     else
         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
 
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = modifier,
         onClick = onClick,
         colors = cardColors

@@ -5,7 +5,7 @@ import android.net.Uri
 import android.util.Log
 import com.google.gson.GsonBuilder
 import androidx.room.withTransaction
-import com.spendly.tracker.data.database.PennyWiseDatabase
+import com.spendly.tracker.data.database.SpendlyDatabase
 import com.spendly.tracker.data.database.entity.*
 import com.spendly.tracker.data.preferences.UserPreferencesRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -22,7 +22,7 @@ import javax.inject.Singleton
 @Singleton
 class BackupImporter @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val database: PennyWiseDatabase,
+    private val database: SpendlyDatabase,
     private val userPreferencesRepository: UserPreferencesRepository
 ) {
 
@@ -86,13 +86,13 @@ class BackupImporter @Inject constructor(
      * the Kotlin type is non-nullable. Normalising the JsonObject before the
      * final deserialisation call is the safest backward-compat strategy.
      */
-    private suspend fun readBackupFile(uri: Uri): PennyWiseBackup {
+    private suspend fun readBackupFile(uri: Uri): SpendlyBackup {
         return withContext(Dispatchers.IO) {
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 val content = BufferedReader(InputStreamReader(inputStream)).readText()
                 val rawJson = gson.fromJson(content, com.google.gson.JsonObject::class.java)
                 normalizeBackupJson(rawJson)
-                gson.fromJson(rawJson, PennyWiseBackup::class.java)
+                gson.fromJson(rawJson, SpendlyBackup::class.java)
             } ?: throw Exception("Failed to read backup file")
         }
     }
@@ -202,12 +202,12 @@ class BackupImporter @Inject constructor(
     /**
      * Check if backup version is compatible.
      * The `_format` field may be absent in very old backups — treat a missing
-     * format as a legacy PennyWise v1 backup and try to import anyway.
+     * format as a legacy Spendly v1 backup and try to import anyway.
      */
-    private fun isCompatibleVersion(backup: PennyWiseBackup): Boolean {
+    private fun isCompatibleVersion(backup: SpendlyBackup): Boolean {
         val fmt: String? = try { backup.format } catch (_: Exception) { null }
         if (fmt == null) return true
-        return fmt.startsWith("PennyWise Backup v1") ||
+        return fmt.startsWith("Spendly Backup v1") ||
                fmt.startsWith("Spendly Backup v1")
     }
 
@@ -227,7 +227,7 @@ class BackupImporter @Inject constructor(
      * After a full clear + re-import the DB faithfully reflects the backup
      * snapshot — intentional for REPLACE_ALL.
      */
-    private suspend fun replaceAllData(backup: PennyWiseBackup): ImportResult {
+    private suspend fun replaceAllData(backup: SpendlyBackup): ImportResult {
         var importedTransactions = 0
         var importedCategories = 0
 
@@ -404,7 +404,7 @@ class BackupImporter @Inject constructor(
      *   state, including isExcludedFromTracking, so exclusions travel correctly
      *   to a fresh device.
      */
-    private suspend fun mergeData(backup: PennyWiseBackup): ImportResult {
+    private suspend fun mergeData(backup: SpendlyBackup): ImportResult {
         var importedTransactions = 0
         var importedCategories = 0
         var skippedDuplicates = 0
@@ -572,7 +572,7 @@ class BackupImporter @Inject constructor(
      * Selective restore — only imports data categories specified in [options].
      * Uses merge semantics for each selected category.
      */
-    private suspend fun selectiveRestore(backup: PennyWiseBackup, options: RestoreOptions): ImportResult {
+    private suspend fun selectiveRestore(backup: SpendlyBackup, options: RestoreOptions): ImportResult {
         val f = options.toFlags() // atomic flags from user-friendly grouped options
         var importedTransactions = 0
         var importedCategories = 0

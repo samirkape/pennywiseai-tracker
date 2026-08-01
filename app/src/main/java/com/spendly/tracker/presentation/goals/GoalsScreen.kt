@@ -33,8 +33,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.spendly.tracker.data.database.entity.GoalStatus
 import com.spendly.tracker.data.database.entity.GoalType
 import com.spendly.tracker.domain.model.GoalProgress
-import com.spendly.tracker.ui.components.PennyWiseEmptyState
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.SpendlyEmptyState
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.components.cards.SummaryCardV2
 import com.spendly.tracker.ui.components.shimmer
@@ -122,7 +122,7 @@ fun GoalsScreen(
 
             if (uiState.activeGoals.isEmpty() && uiState.archivedGoals.isEmpty()) {
                 item {
-                    PennyWiseEmptyState(
+                    SpendlyEmptyState(
                         icon = Icons.Default.EmojiEvents,
                         headline = "No goals yet",
                         description = "Set a savings goal and track your progress toward what matters most",
@@ -259,7 +259,7 @@ fun GoalCard(
     val alpha = if (dimmed) 0.55f else 1f
     val goalColor = parseGoalColor(goal.color)
 
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = 0.dp,
         onClick = onClick
@@ -360,7 +360,7 @@ fun GoalCard(
 @Composable
 private fun GoalCardSkeleton() {
     val placeholderColor = MaterialTheme.colorScheme.surfaceContainerHighest
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = 0.dp
     ) {

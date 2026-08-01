@@ -1,7 +1,7 @@
-# Implementation Prompt v2: PennyWise Home Screen (Kotlin / Jetpack Compose)
+# Implementation Prompt v2: Spendly Home Screen (Kotlin / Jetpack Compose)
 
 > **What changed from v1:**
-> 1. Full reconciliation with `design.md` (PennyWise Design System) — every conflict is resolved below
+> 1. Full reconciliation with `design.md` (Spendly Design System) — every conflict is resolved below
 > 2. New **Smart Insights** section added as screen section 5 (pushes Subscriptions/Goal and Transactions down)
 > 3. Data model extended for insights; all derivations remain on the ViewModel
 
@@ -14,7 +14,7 @@ Before building, here is a complete audit of everywhere the original prompt and 
 | # | Area | Original Prompt | design.md | Conflict | Resolution |
 |---|------|-----------------|-----------|----------|------------|
 | 1 | **Color system** | Custom `LocalSpendTrackerColors` CompositionLocal with earthy tokens (Green, Amber, Red, Purple…) — no M3 mapping | Material 3 dynamic color, `primary = 0xFF6750A4` (purple), full `lightColorScheme` / `darkColorScheme` | Completely different palettes; image clearly shows the earthy palette | **Use the earthy palette.** Map it into M3 color roles (see §Color Bridging below) so M3 components pick up correct colors automatically. Keep `LocalSpendTrackerColors` for semantic extensions that have no M3 equivalent |
-| 2 | **App name** | Unnamed / "SpendTracker" references | "PennyWise" throughout | Theme class name inconsistency | **Use `PennyWiseTheme` everywhere.** All composables, previews, and theme files should say "PennyWise" |
+| 2 | **App name** | Unnamed / "SpendTracker" references | "Spendly" throughout | Theme class name inconsistency | **Use `SpendlyTheme` everywhere.** All composables, previews, and theme files should say "Spendly" |
 | 3 | **Typography** | DM Sans (400/500) + Playfair Display SemiBold | `FontFamily.Default` (system font) for all type styles | design.md doesn't declare any custom fonts | **Keep DM Sans + Playfair Display** — they are visible and intentional in the image. Update `Type.kt` to wire them into M3's `Typography` object using the roles below, rather than a parallel system |
 | 4 | **Type scale mapping** | Custom ad-hoc sizes (40sp balance, 28sp week, 22sp subscriptions…) | Declares a full M3 type scale (displayLarge=57sp, headlineLarge=32sp, etc.) but leaves sizes generic | Sizes in prompt don't map to any M3 role | **Adopt M3 role names** in composables (`MaterialTheme.typography.displayMedium` for 40sp balance, etc.). Define the sizes once in `Type.kt`. This way font scaling and theming work correctly |
 | 5 | **Vertical spacing** | `Arrangement.spacedBy(14.dp)` between LazyColumn items | 8dp grid: xs=4, sm=8, md=16, lg=24, xl=32, xxl=48 | 14dp is off-grid | **Change to 16.dp** (`Spacing.md`). Also change any 18dp paddings to 16dp |
@@ -130,12 +130,12 @@ val ColorScheme.success: Color @Composable get() = spendGreen
 val ColorScheme.warning: Color @Composable get() = spendAmber
 ```
 
-#### PennyWise Theme (aligns with design.md's PennyWiseTheme)
+#### Spendly Theme (aligns with design.md's SpendlyTheme)
 
 ```kotlin
 // Theme.kt
 @Composable
-fun PennyWiseTheme(
+fun SpendlyTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,   // design.md requirement
     content: @Composable () -> Unit
@@ -152,8 +152,8 @@ fun PennyWiseTheme(
     }
     MaterialTheme(
         colorScheme = colorScheme,
-        typography  = PennyWiseTypography,   // see Type.kt below
-        shapes      = PennyWiseShapes,        // see below
+        typography  = SpendlyTypography,   // see Type.kt below
+        shapes      = SpendlyShapes,        // see below
         content     = content
     )
 }
@@ -165,7 +165,7 @@ fun PennyWiseTheme(
 
 ```kotlin
 // Theme.kt
-val PennyWiseShapes = Shapes(
+val SpendlyShapes = Shapes(
     extraSmall = RoundedCornerShape(4.dp),   // progress bars, small chips
     small      = RoundedCornerShape(8.dp),   // transaction icon containers (was 9dp)
     medium     = RoundedCornerShape(12.dp),  // inner containers, dialogs
@@ -208,7 +208,7 @@ val PlayfairDisplay = FontFamily(
     Font(R.font.playfair_display_semibold, FontWeight.SemiBold)
 )
 
-val PennyWiseTypography = Typography(
+val SpendlyTypography = Typography(
     // Used for the Playfair accent on balance figures
     displayMedium = TextStyle(
         fontFamily   = PlayfairDisplay,
@@ -275,8 +275,8 @@ val PennyWiseTypography = Typography(
 fun HomeScreen(windowSize: WindowSize, ...) {
     val isCompact = windowSize == WindowSize.COMPACT
     if (isCompact) {
-        // Use PennyWiseBottomNav (custom Row with raised centre FAB)
-        Scaffold(bottomBar = { PennyWiseBottomNav(...) }) { ... }
+        // Use SpendlyBottomNav (custom Row with raised centre FAB)
+        Scaffold(bottomBar = { SpendlyBottomNav(...) }) { ... }
     } else {
         // Use NavigationRail per design.md AdaptiveNavigation
         Row {
@@ -609,7 +609,7 @@ Full spec in Part 5 above.
 ### 7. Recent Transactions Section
 **Changed:** Icon container → `MaterialTheme.shapes.small`. Row minimum height 48dp enforced via `Modifier.heightIn(min = 48.dp)` on each transaction row.
 
-### 8. Bottom Nav (PennyWiseBottomNav)
+### 8. Bottom Nav (SpendlyBottomNav)
 **Changed:** On `WindowSize.COMPACT` — keep custom Row with raised centre FAB (v1 spec). On `WindowSize.MEDIUM` / `WindowSize.EXPANDED` — use `NavigationRail` per design.md `AdaptiveNavigation` pattern. The raised FAB becomes a standard `FloatingActionButton` at bottom of the rail on larger screens.
 
 ---
@@ -620,14 +620,14 @@ Full spec in Part 5 above.
 
 1. `HomeScreen.kt` — updated with `SmartInsightsCard` in the LazyColumn, `WindowSize`-aware Scaffold
 2. `HomeScreenViewModel.kt` — `computeInsights()` method, updated sample data including mock insights
-3. `Color.kt` / `Theme.kt` — earthy palette bridged to M3 roles, `PennyWiseTheme`, dynamic color support
+3. `Color.kt` / `Theme.kt` — earthy palette bridged to M3 roles, `SpendlyTheme`, dynamic color support
 4. `Extensions.kt` — `ColorScheme.spendGreen/Amber/Red/Purple/textMuted/cardBorder` extensions
 5. `Type.kt` — DM Sans + Playfair Display wired into M3 `Typography` with role names
 6. `Spacing.kt` — `Spacing` object matching design.md's 8dp grid
 7. `SpendBarChart.kt` — unchanged from v1
 8. **`SmartInsightsCard.kt`** — new file: `SmartInsightsCard` + `InsightRow` composables
 9. **`InsightTypes.kt`** — new file: `SpendInsight`, `InsightType`, `InsightSeverity` data classes
-10. `@Preview` composables for each card in both light and dark mode, now wrapped in `PennyWiseTheme { ... }`
+10. `@Preview` composables for each card in both light and dark mode, now wrapped in `SpendlyTheme { ... }`
 
 ---
 

@@ -27,7 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.spendly.tracker.ui.components.PennyWiseCard
+import com.spendly.tracker.ui.components.SpendlyCard
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.utils.CurrencyFormatter
@@ -42,7 +42,7 @@ fun CardAndBankMetricTile(
     val formattedTotal = CurrencyFormatter.formatCurrency(summary.total, currency)
     val isLongTotal = formattedTotal.length > 14
 
-    PennyWiseCard(modifier = modifier, onClick = onClick) {
+    SpendlyCard(modifier = modifier, onClick = onClick) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

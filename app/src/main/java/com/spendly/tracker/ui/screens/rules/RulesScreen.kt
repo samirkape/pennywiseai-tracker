@@ -24,7 +24,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.spendly.tracker.domain.usecase.BatchApplyResult
 import com.spendly.tracker.domain.usecase.DryRunResult
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
-import com.spendly.tracker.ui.components.PennyWiseCard
+import com.spendly.tracker.ui.components.SpendlyCard
 import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
@@ -151,7 +151,7 @@ fun RulesScreen(
                 verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
                 item {
-                    PennyWiseCard(
+                    SpendlyCard(
                         modifier = Modifier.fillMaxWidth(),
                         onClick = onNavigateToQuickKeywordRules,
                     ) {
@@ -188,7 +188,7 @@ fun RulesScreen(
 
                 // Info Card
                 item {
-                    PennyWiseCard(
+                    SpendlyCard(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -321,7 +321,7 @@ private fun RuleCard(
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showActionsMenu by remember { mutableStateOf(false) }
-    PennyWiseCard(
+    SpendlyCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(

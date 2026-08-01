@@ -38,7 +38,7 @@ import com.spendly.tracker.R
 import com.spendly.tracker.data.database.entity.SubscriptionEntity
 import com.spendly.tracker.data.repository.SubscriptionRepository
 import com.spendly.tracker.ui.components.*
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.effects.overScrollVertical
 import com.spendly.tracker.ui.effects.rememberOverscrollFlingBehavior
@@ -112,6 +112,19 @@ fun SubscriptionsScreen(
     val regularSubscriptions = remember(uiState.activeSubscriptions, upcomingIds) {
         uiState.activeSubscriptions.filter { it.id !in upcomingIds }
     }
+    // Prepaid plans expiring within 30 days — needs more lead time to decide on renewal
+    val expiringPrepaidPlans = remember(uiState.activePrepaidPlans) {
+        uiState.activePrepaidPlans
+            .filter { plan ->
+                val daysLeft = ChronoUnit.DAYS.between(today, plan.endDate)
+                daysLeft in 0..30
+            }
+            .sortedBy { it.endDate }
+    }
+    val expiringPrepaidIds = remember(expiringPrepaidPlans) { expiringPrepaidPlans.map { it.id }.toSet() }
+    val regularPrepaidPlans = remember(uiState.activePrepaidPlans, expiringPrepaidIds) {
+        uiState.activePrepaidPlans.filter { it.id !in expiringPrepaidIds }
+    }
     val soonestUpcoming = upcomingSubscriptions.firstOrNull()
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -174,11 +187,15 @@ fun SubscriptionsScreen(
                             currency = uiState.displayCurrency,
                             soonestUpcoming = soonestUpcoming,
                             nextPaymentDateProvider = ::nextPaymentDateFor,
+                            prepaidMonthlyAmount = uiState.prepaidMonthlyAmount,
+                            combinedMonthlyAmount = uiState.combinedMonthlyAmount,
+                            combinedYearlyAmount = uiState.combinedYearlyAmount,
+                            activePrepaidPlanCount = uiState.activePrepaidPlanCount,
                         )
                     }
                 }
                 // Due Soon section
-                if (upcomingSubscriptions.isNotEmpty()) {
+                if (upcomingSubscriptions.isNotEmpty() || expiringPrepaidPlans.isNotEmpty()) {
                     item {
                         SectionHeaderV2(
                             title = stringResource(R.string.subs_section_due_soon),
@@ -217,6 +234,25 @@ fun SubscriptionsScreen(
                             )
                         }
                     }
+                    itemsIndexed(
+                        items = expiringPrepaidPlans,
+                        key = { _, item -> "expiring_prepaid_${item.id}" }
+                    ) { index, plan ->
+                        val staggerIndex = upcomingSubscriptions.size + index
+                        val visible = remember { mutableStateOf(hasAnimated) }
+                        LaunchedEffect(Unit) {
+                            if (!hasAnimated) { delay((staggerIndex + 1) * 50L); visible.value = true }
+                        }
+                        AnimatedVisibility(
+                            visible = visible.value,
+                            enter = fadeIn(tween(300)) + slideInVertically(
+                                initialOffsetY = { slideOffsetPx },
+                                animationSpec = tween(300)
+                            )
+                        ) {
+                            PrepaidExpiringItem(plan = plan, today = today)
+                        }
+                    }
                 }
                 // Active subscriptions section
                 if (regularSubscriptions.isNotEmpty()) {
@@ -250,10 +286,35 @@ fun SubscriptionsScreen(
                         }
                     }
                 }
-                // Empty state
-                if (uiState.activeSubscriptions.isEmpty() && !uiState.isLoading) {
+                // Active prepaid plans section (non-expiring)
+                if (regularPrepaidPlans.isNotEmpty()) {
                     item {
-                        PennyWiseEmptyState(
+                        SectionHeaderV2(title = stringResource(R.string.subs_section_active_prepaid))
+                    }
+                    itemsIndexed(
+                        items = regularPrepaidPlans,
+                        key = { _, item -> "prepaid_${item.id}" }
+                    ) { index, plan ->
+                        val staggerIndex = upcomingSubscriptions.size + regularSubscriptions.size + index
+                        val visible = remember { mutableStateOf(hasAnimated) }
+                        LaunchedEffect(Unit) {
+                            if (!hasAnimated) { delay((staggerIndex + 1) * 50L); visible.value = true }
+                        }
+                        AnimatedVisibility(
+                            visible = visible.value,
+                            enter = fadeIn(tween(300)) + slideInVertically(
+                                initialOffsetY = { slideOffsetPx },
+                                animationSpec = tween(300)
+                            )
+                        ) {
+                            PrepaidExpiringItem(plan = plan, today = today)
+                        }
+                    }
+                }
+                // Empty state
+                if (uiState.activeSubscriptions.isEmpty() && uiState.activePrepaidPlans.isEmpty() && !uiState.isLoading) {
+                    item {
+                        SpendlyEmptyState(
                             icon = Icons.Default.Subscriptions,
                             headline = stringResource(R.string.subs_empty_headline),
                             description = stringResource(R.string.subs_empty_description),
@@ -314,17 +375,22 @@ private fun SubscriptionHeroCard(
     currency: String?,
     soonestUpcoming: SubscriptionEntity?,
     nextPaymentDateProvider: (SubscriptionEntity) -> LocalDate?,
+    prepaidMonthlyAmount: BigDecimal = BigDecimal.ZERO,
+    combinedMonthlyAmount: BigDecimal = totalAmount,
+    combinedYearlyAmount: BigDecimal = totalAmount.multiply(BigDecimal(12)),
+    activePrepaidPlanCount: Int = 0,
 ) {
+    val hasPrepaid = activePrepaidPlanCount > 0
+    fun format(amount: BigDecimal) =
+        if (currency != null) CurrencyFormatter.formatCurrency(amount, currency) else amount.toPlainString()
     val amountColor = if (!isSystemInDarkTheme()) expense_light else expense_dark
-    val yearlyAmount = totalAmount.multiply(BigDecimal(12))
-    val formattedMonthly = if (currency != null) CurrencyFormatter.formatCurrency(totalAmount, currency)
-    else totalAmount.toPlainString()
-    val formattedYearly = if (currency != null) CurrencyFormatter.formatCurrency(yearlyAmount, currency)
-    else yearlyAmount.toPlainString()
+    val formattedMonthly = if (hasPrepaid) format(combinedMonthlyAmount) else format(totalAmount)
+    val formattedYearly = if (hasPrepaid) format(combinedYearlyAmount)
+    else format(totalAmount.multiply(BigDecimal(12)))
     val today = LocalDate.now()
     val upcomingNextDate = soonestUpcoming?.let { nextPaymentDateProvider(it) }
     val daysUntilNext = upcomingNextDate?.let { ChronoUnit.DAYS.between(today, it) }
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
         contentPadding = 0.dp,
@@ -346,7 +412,8 @@ private fun SubscriptionHeroCard(
                         tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = Dimensions.Alpha.subtitle),
                     )
                     Text(
-                        text = stringResource(R.string.subs_summary_monthly_title),
+                        text = if (hasPrepaid) stringResource(R.string.subs_summary_recurring_title)
+                        else stringResource(R.string.subs_summary_monthly_title),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = Dimensions.Alpha.subtitle),
                     )
@@ -389,6 +456,39 @@ private fun SubscriptionHeroCard(
                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = Dimensions.Alpha.subtitle),
                 )
             }
+            if (hasPrepaid) {
+                Spacer(modifier = Modifier.height(Spacing.md))
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = Dimensions.Alpha.divider)
+                )
+                Spacer(modifier = Modifier.height(Spacing.md))
+                val breakdownColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = Dimensions.Alpha.subtitle)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(
+                        text = stringResource(R.string.subs_summary_breakdown_subscriptions),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = breakdownColor,
+                    )
+                    Text(
+                        text = stringResource(R.string.subs_item_per_month).let { "${format(totalAmount)}$it" },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(
+                        text = stringResource(R.string.subs_summary_breakdown_prepaid, activePrepaidPlanCount),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = breakdownColor,
+                    )
+                    Text(
+                        text = stringResource(R.string.subs_item_per_month).let { "${format(prepaidMonthlyAmount)}$it" },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+            }
             if (soonestUpcoming != null && daysUntilNext != null) {
                 Spacer(modifier = Modifier.height(Spacing.md))
                 HorizontalDivider(
@@ -429,6 +529,7 @@ private fun SubscriptionHeroCard(
         }
     }
 }
+
 // ─── Subscription List Item ───────────────────────────────────────────────────
 @Composable
 private fun SubscriptionListItem(
@@ -447,7 +548,7 @@ private fun SubscriptionListItem(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
-        PennyWiseCardV2(modifier = Modifier.fillMaxWidth(), contentPadding = 0.dp) {
+        SpendlyCardV2(modifier = Modifier.fillMaxWidth(), contentPadding = 0.dp) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier
@@ -587,7 +688,7 @@ private fun SubscriptionListItem(
         }
         // Expandable SMS / Notes panel
         AnimatedVisibility(visible = showSmsBody && !subscription.smsBody.isNullOrBlank()) {
-            PennyWiseCardV2(
+            SpendlyCardV2(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 contentPadding = 0.dp,
@@ -620,6 +721,105 @@ private fun SubscriptionListItem(
                             modifier = Modifier.padding(Spacing.md),
                         )
                     }
+                }
+            }
+        }
+    }
+}
+// ─── Prepaid Expiring Item ────────────────────────────────────────────────────
+@Composable
+private fun PrepaidExpiringItem(
+    plan: com.spendly.tracker.data.database.entity.PrepaidExpenseEntity,
+    today: LocalDate,
+) {
+    val daysLeft = ChronoUnit.DAYS.between(today, plan.endDate)
+    val isExpiringSoon = daysLeft in 0..30
+    SpendlyCardV2(modifier = Modifier.fillMaxWidth(), contentPadding = 0.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = Dimensions.Padding.content,
+                    end = Dimensions.Padding.content,
+                    top = 18.dp,
+                    bottom = 18.dp,
+                ),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BrandIcon(merchantName = plan.merchantName, size = 40.dp, showBackground = true)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = plan.merchantName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                // Expiry chip
+                val expiryLabel = when {
+                    daysLeft == 0L -> stringResource(R.string.subs_prepaid_expires_today)
+                    daysLeft == 1L -> stringResource(R.string.subs_prepaid_expires_tomorrow)
+                    daysLeft > 1L -> stringResource(R.string.subs_prepaid_expires_in_days, daysLeft.toInt())
+                    else -> plan.endDate.format(DateTimeFormatter.ofPattern("MMM d"))
+                }
+                val chipContainer = when {
+                    daysLeft <= 1L -> MaterialTheme.colorScheme.errorContainer
+                    isExpiringSoon -> MaterialTheme.colorScheme.tertiaryContainer
+                    else -> MaterialTheme.colorScheme.surfaceContainerHighest
+                }
+                val chipContent = when {
+                    daysLeft <= 1L -> MaterialTheme.colorScheme.onErrorContainer
+                    isExpiringSoon -> MaterialTheme.colorScheme.onTertiaryContainer
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
+                Surface(color = chipContainer, shape = MaterialTheme.shapes.extraSmall) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarToday,
+                            contentDescription = null,
+                            modifier = Modifier.size(10.dp),
+                            tint = chipContent,
+                        )
+                        Text(text = expiryLabel, style = MaterialTheme.typography.labelSmall, color = chipContent)
+                    }
+                }
+            }
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                val amountColor = if (!isSystemInDarkTheme()) expense_light else expense_dark
+                Text(
+                    text = CurrencyFormatter.formatCurrency(plan.totalAmount, plan.currency),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = amountColor,
+                )
+                // Prepaid badge
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = MaterialTheme.shapes.extraSmall,
+                ) {
+                    Text(
+                        text = stringResource(R.string.subs_prepaid_badge),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 2.dp),
+                    )
+                }
+                if (!plan.category.isBlank()) {
+                    Text(
+                        text = plan.category,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
         }
@@ -788,7 +988,7 @@ private fun SubscriptionEditDialog(
 @Composable
 private fun SubscriptionItemSkeleton(modifier: Modifier = Modifier) {
     val placeholderColor = MaterialTheme.colorScheme.surfaceContainerHighest
-    PennyWiseCardV2(modifier = modifier.fillMaxWidth(), contentPadding = 0.dp) {
+    SpendlyCardV2(modifier = modifier.fillMaxWidth(), contentPadding = 0.dp) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(Dimensions.Padding.content),
             horizontalArrangement = Arrangement.spacedBy(Spacing.md),

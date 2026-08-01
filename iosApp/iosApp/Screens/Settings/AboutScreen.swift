@@ -17,7 +17,7 @@ struct AboutScreen: View {
                         .font(.system(size: 72))
                         .foregroundStyle(.tint)
 
-                    Text("PennyWise")
+                    Text("Spendly")
                         .font(AppTypography.title)
 
                     Text("Version \(appVersion) (\(buildNumber))")
@@ -35,7 +35,7 @@ struct AboutScreen: View {
 
             Section("Links") {
                 Button {
-                    if let url = URL(string: "https://github.com/nicekid1/pennywiseai-tracker") {
+                    if let url = URL(string: "https://github.com/nicekid1/spendlyai-tracker") {
                         UIApplication.shared.open(url)
                     }
                 } label: {
@@ -50,7 +50,7 @@ struct AboutScreen: View {
                 }
 
                 Button {
-                    if let url = URL(string: "https://github.com/nicekid1/pennywiseai-tracker/issues/new/choose") {
+                    if let url = URL(string: "https://github.com/nicekid1/spendlyai-tracker/issues/new/choose") {
                         UIApplication.shared.open(url)
                     }
                 } label: {

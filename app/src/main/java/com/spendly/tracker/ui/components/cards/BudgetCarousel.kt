@@ -46,7 +46,7 @@ fun BudgetCarousel(
     val groups = summary.groups
 
     if (groups.isEmpty()) {
-        PennyWiseCardV2(
+        SpendlyCardV2(
             modifier = modifier.fillMaxWidth(),
             onClick = onCreateBudget
         ) {

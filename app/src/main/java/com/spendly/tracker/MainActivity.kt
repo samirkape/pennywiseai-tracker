@@ -18,6 +18,7 @@ class MainActivity : FragmentActivity() {
     companion object {
         const val EXTRA_OPEN_ADD_TRANSACTION = "com.spendly.tracker.OPEN_ADD_TRANSACTION"
         const val EXTRA_OPEN_TRANSACTIONS = "com.spendly.tracker.OPEN_TRANSACTIONS"
+        const val EXTRA_OPEN_SUBSCRIPTIONS = "com.spendly.tracker.OPEN_SUBSCRIPTIONS"
     }
 
     // Transaction ID to edit when launched from notification
@@ -32,6 +33,10 @@ class MainActivity : FragmentActivity() {
     var openTransactions by mutableStateOf(false)
         private set
 
+    // Flag to navigate directly to the Subscriptions screen when launched from a renewal reminder
+    var openSubscriptions by mutableStateOf(false)
+        private set
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Install splash screen before super.onCreate()
         installSplashScreen()
@@ -43,13 +48,15 @@ class MainActivity : FragmentActivity() {
         handleEditIntent(intent)
 
         setContent {
-            PennyWiseApp(
+            SpendlyApp(
                 editTransactionId = editTransactionId,
                 openAddTransaction = openAddTransaction,
                 openTransactions = openTransactions,
+                openSubscriptions = openSubscriptions,
                 onEditComplete = { editTransactionId = null },
                 onAddTransactionShortcutHandled = { openAddTransaction = false },
-                onOpenTransactionsHandled = { openTransactions = false }
+                onOpenTransactionsHandled = { openTransactions = false },
+                onOpenSubscriptionsHandled = { openSubscriptions = false }
             )
         }
     }
@@ -72,6 +79,9 @@ class MainActivity : FragmentActivity() {
         }
         if (intent?.getBooleanExtra(EXTRA_OPEN_TRANSACTIONS, false) == true) {
             openTransactions = true
+        }
+        if (intent?.getBooleanExtra(EXTRA_OPEN_SUBSCRIPTIONS, false) == true) {
+            openSubscriptions = true
         }
     }
 }

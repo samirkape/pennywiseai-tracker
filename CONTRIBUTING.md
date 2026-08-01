@@ -1,6 +1,6 @@
-# Contributing to PennyWise AI
+# Contributing to Spendly AI
 
-Thank you for your interest in contributing to PennyWise AI! We welcome contributions from the community.
+Thank you for your interest in contributing to Spendly AI! We welcome contributions from the community.
 
 ## How to Contribute
 
@@ -133,4 +133,4 @@ Feel free to:
 - Ask in our [Discord](https://discord.gg/H3xWeMWjKQ)
 - Reach out to maintainers
 
-Thank you for helping make PennyWise AI better! 🚀
+Thank you for helping make Spendly AI better! 🚀

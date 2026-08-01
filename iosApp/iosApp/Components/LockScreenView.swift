@@ -17,7 +17,7 @@ struct LockScreenView: View {
                     .foregroundStyle(.secondary)
 
                 VStack(spacing: AppSpacing.sm) {
-                    Text("PennyWise")
+                    Text("Spendly")
                         .font(AppTypography.title)
 
                     Text("Locked")

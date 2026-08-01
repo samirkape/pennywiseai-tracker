@@ -38,7 +38,7 @@ struct MainTabView: View {
                 TabView(selection: $selectedTab) {
                     NavigationStack {
                         HomeScreen(onSeeAllTransactions: { selectedTab = .transactions })
-                            .navigationTitle("PennyWise")
+                            .navigationTitle("Spendly")
                     }
                     .tabItem {
                         Label(AppTab.home.rawValue, systemImage: AppTab.home.icon)
@@ -46,7 +46,7 @@ struct MainTabView: View {
                     .tag(AppTab.home)
 
                     NavigationStack {
-                        TransactionListView(facade: PennyWiseSharedFacade.companion.shared)
+                        TransactionListView(facade: SpendlySharedFacade.companion.shared)
                     }
                     .tabItem {
                         Label(AppTab.transactions.rawValue, systemImage: AppTab.transactions.icon)

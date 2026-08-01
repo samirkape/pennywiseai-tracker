@@ -51,7 +51,7 @@ fun ExpandableCard(
         label = "chevronRotation"
     )
 
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = modifier.fillMaxWidth(),
         colors = colors
     ) {

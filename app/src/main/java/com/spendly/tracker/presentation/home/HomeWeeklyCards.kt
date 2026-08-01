@@ -41,7 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.ui.theme.spendGreen
 import com.spendly.tracker.ui.theme.spendGreenBg
@@ -75,7 +75,7 @@ fun HomeThisWeekCard(
     val delta = thisWeekSpend - lastWeekSpend
     val isHigher = delta > BigDecimal.ZERO
 
-    PennyWiseCardV2(modifier = modifier, onClick = onClick) {
+    SpendlyCardV2(modifier = modifier, onClick = onClick) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -165,7 +165,7 @@ fun HomeLast7DaysCard(
     val tooltipBg = MaterialTheme.colorScheme.inverseSurface
     val tooltipFg = MaterialTheme.colorScheme.inverseOnSurface
 
-    PennyWiseCardV2(modifier = modifier, onClick = onClick) {
+    SpendlyCardV2(modifier = modifier, onClick = onClick) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,

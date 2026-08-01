@@ -18,7 +18,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import kotlinx.coroutines.launch
 import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.export.ExportResult
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.utils.CurrencyFormatter
@@ -40,7 +40,7 @@ fun ExportTransactionsDialog(
             onDismiss()
         }
     }) {
-        PennyWiseCardV2(
+        SpendlyCardV2(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
@@ -99,7 +99,7 @@ fun ExportTransactionsDialog(
                         Spacer(modifier = Modifier.height(16.dp))
                         
                         // Summary info
-                        PennyWiseCardV2(
+                        SpendlyCardV2(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant
                             ),
@@ -174,7 +174,7 @@ fun ExportTransactionsDialog(
                         Spacer(modifier = Modifier.height(8.dp))
                         
                         // File info
-                        PennyWiseCardV2(
+                        SpendlyCardV2(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.primaryContainer
                             ),

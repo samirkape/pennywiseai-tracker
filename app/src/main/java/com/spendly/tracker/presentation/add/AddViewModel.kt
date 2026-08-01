@@ -22,6 +22,7 @@ import com.spendly.tracker.data.repository.UnrecognizedSmsRepository
 import com.spendly.tracker.domain.usecase.AddTransactionUseCase
 import com.spendly.tracker.domain.usecase.AddSubscriptionUseCase
 import com.spendly.tracker.data.repository.CategoryRepository
+import com.spendly.tracker.data.repository.PrepaidExpenseRepository
 import com.spendly.tracker.data.repository.TransactionRepository
 import com.spendly.tracker.domain.usecase.GetCategoriesUseCase
 import android.util.Log
@@ -48,6 +49,7 @@ class AddViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val addTransactionUseCase: AddTransactionUseCase,
     private val addSubscriptionUseCase: AddSubscriptionUseCase,
+    private val prepaidExpenseRepository: PrepaidExpenseRepository,
     private val getCategoriesUseCase: GetCategoriesUseCase,
     private val categoryRepository: CategoryRepository,
     private val transactionRepository: TransactionRepository,
@@ -73,13 +75,18 @@ class AddViewModel @Inject constructor(
     // Subscription Tab State
     private val _subscriptionUiState = MutableStateFlow(SubscriptionUiState())
     val subscriptionUiState: StateFlow<SubscriptionUiState> = _subscriptionUiState.asStateFlow()
-    
-    
+
+    // Prepaid Expense Tab State
+    private val _prepaidExpenseUiState = MutableStateFlow(PrepaidExpenseUiState())
+    val prepaidExpenseUiState: StateFlow<PrepaidExpenseUiState> = _prepaidExpenseUiState.asStateFlow()
+
+
     init {
         viewModelScope.launch {
             val baseCurrency = userPreferencesRepository.baseCurrency.first()
             _transactionUiState.update { it.copy(currency = baseCurrency) }
             _subscriptionUiState.update { it.copy(currency = baseCurrency) }
+            _prepaidExpenseUiState.update { it.copy(currency = baseCurrency) }
             _allUsedTags.value = transactionRepository.getAllUsedTags()
             _allKnownMerchants.value = transactionRepository.getDistinctMerchantNames()
             if (unrecognizedSmsId > 0) {
@@ -664,8 +671,115 @@ class AddViewModel @Inject constructor(
             }
         }
     }
-    
-    
+
+    // Prepaid Expense Tab Functions
+    fun updatePrepaidMerchant(merchant: String) {
+        _prepaidExpenseUiState.update { currentState ->
+            currentState.copy(
+                merchantName = merchant,
+                merchantError = if (merchant.isBlank()) "Merchant name is required" else null
+            )
+        }
+    }
+
+    fun updatePrepaidAmount(amount: String) {
+        val filtered = amount.filter { it.isDigit() || it == '.' }
+        val decimalCount = filtered.count { it == '.' }
+        val validAmount = if (decimalCount <= 1) filtered else _prepaidExpenseUiState.value.amount
+
+        _prepaidExpenseUiState.update { currentState ->
+            currentState.copy(
+                amount = validAmount,
+                amountError = validateAmount(validAmount)
+            )
+        }
+    }
+
+    fun updatePrepaidTotalMonths(months: Int) {
+        _prepaidExpenseUiState.update { currentState ->
+            currentState.copy(totalMonths = months.coerceIn(2, 60))
+        }
+    }
+
+    fun updatePrepaidStartDate(dateMillis: Long) {
+        val instant = Instant.ofEpochMilli(dateMillis)
+        val localDate = instant.atZone(ZoneId.systemDefault()).toLocalDate()
+        _prepaidExpenseUiState.update { currentState ->
+            currentState.copy(startDate = localDate)
+        }
+    }
+
+    fun updatePrepaidCategory(category: String) {
+        _prepaidExpenseUiState.update { currentState ->
+            currentState.copy(
+                category = category,
+                categoryError = validateCategory(category)
+            )
+        }
+    }
+
+    fun createAndSelectPrepaidCategory(name: String, color: String, isIncome: Boolean, icon: String) {
+        viewModelScope.launch {
+            categoryRepository.createCategory(name, color, isIncome, icon)
+            updatePrepaidCategory(name)
+        }
+    }
+
+    fun updatePrepaidNotes(notes: String) {
+        _prepaidExpenseUiState.update { currentState -> currentState.copy(notes = notes) }
+    }
+
+    fun updatePrepaidCurrency(currency: String) {
+        _prepaidExpenseUiState.update { currentState -> currentState.copy(currency = currency) }
+    }
+
+    fun savePrepaidExpense(onSuccess: () -> Unit) {
+        val state = _prepaidExpenseUiState.value
+
+        val merchantError = if (state.merchantName.isBlank()) "Merchant name is required" else null
+        val amountError = validateAmount(state.amount)
+        val categoryError = validateCategory(state.category)
+
+        if (merchantError != null || amountError != null || categoryError != null) {
+            _prepaidExpenseUiState.update { currentState ->
+                currentState.copy(
+                    merchantError = merchantError,
+                    amountError = amountError,
+                    categoryError = categoryError
+                )
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                _prepaidExpenseUiState.update { it.copy(isLoading = true) }
+                prepaidExpenseRepository.createPlan(
+                    merchantName = state.merchantName.trim(),
+                    category = state.category,
+                    totalAmount = BigDecimal(state.amount),
+                    currency = state.currency,
+                    startDate = state.startDate,
+                    totalMonths = state.totalMonths,
+                    paymentDateTime = state.startDate.atStartOfDay(),
+                    accountNumber = null,
+                    notes = state.notes.takeIf { it.isNotBlank() }
+                )
+                onSuccess()
+            } catch (e: Exception) {
+                Log.e("AddViewModel", "Error saving prepaid expense", e)
+                _prepaidExpenseUiState.update { currentState ->
+                    currentState.copy(
+                        isLoading = false,
+                        error = e.message ?: "Failed to save prepaid expense"
+                    )
+                }
+            } finally {
+                _prepaidExpenseUiState.update { it.copy(isLoading = false) }
+            }
+        }
+    }
+
     // Validation helpers
     private fun validateAmount(amount: String): String? {
         return when {
@@ -774,6 +888,32 @@ data class SubscriptionUiState(
                 billingCycle.isNotBlank() &&
                 category.isNotBlank() &&
                 serviceError == null &&
+                amountError == null &&
+                categoryError == null
+}
+
+data class PrepaidExpenseUiState(
+    val merchantName: String = "",
+    val merchantError: String? = null,
+    val amount: String = "",
+    val amountError: String? = null,
+    val startDate: LocalDate = LocalDate.now(),
+    val totalMonths: Int = 6,
+    val category: String = "Others",
+    val categoryError: String? = null,
+    val notes: String = "",
+    val isLoading: Boolean = false,
+    val error: String? = null,
+    val currency: String = "INR"
+) {
+    val isValid: Boolean
+        get() = merchantName.isNotBlank() &&
+                amount.isNotBlank() &&
+                amount.toDoubleOrNull() != null &&
+                amount.toDouble() > 0 &&
+                totalMonths >= 2 &&
+                category.isNotBlank() &&
+                merchantError == null &&
                 amountError == null &&
                 categoryError == null
 }

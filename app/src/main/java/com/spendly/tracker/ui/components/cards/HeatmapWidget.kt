@@ -92,7 +92,7 @@ fun HeatmapWidget(
         MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.5f)
     else MaterialTheme.colorScheme.surfaceContainerLow
 
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = modifier
             .fillMaxWidth()
             .then(

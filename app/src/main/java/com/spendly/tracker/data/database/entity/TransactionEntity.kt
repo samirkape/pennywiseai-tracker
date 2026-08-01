@@ -12,7 +12,8 @@ import java.time.LocalDateTime
     tableName = "transactions",
     indices = [
         Index(value = ["transaction_hash"], unique = true),
-        Index(value = ["linked_transaction_id"])
+        Index(value = ["linked_transaction_id"]),
+        Index(value = ["prepaid_expense_id"])
     ]
 )
 data class TransactionEntity(
@@ -109,7 +110,10 @@ data class TransactionEntity(
     val linkedTransactionId: Long? = null,
 
     @ColumnInfo(name = "transfer_kind", defaultValue = "NULL")
-    val transferKind: String? = null
+    val transferKind: String? = null,
+
+    @ColumnInfo(name = "prepaid_expense_id", defaultValue = "NULL")
+    val prepaidExpenseId: Long? = null
 )
 
 /**

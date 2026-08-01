@@ -5,7 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.spendly.tracker.data.database.PennyWiseDatabase
+import com.spendly.tracker.data.database.SpendlyDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -63,7 +63,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
     private fun deleteTransaction(context: Context, transactionId: Long, notificationId: Int) {
         receiverScope.launch {
             try {
-                val database = PennyWiseDatabase.getInstance(context)
+                val database = SpendlyDatabase.getInstance(context)
                 val transactionDao = database.transactionDao()
 
                 // Soft delete the transaction
@@ -87,7 +87,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
     private fun changeCategory(context: Context, transactionId: Long, newCategory: String, notificationId: Int) {
         receiverScope.launch {
             try {
-                val database = PennyWiseDatabase.getInstance(context)
+                val database = SpendlyDatabase.getInstance(context)
                 val transactionDao = database.transactionDao()
 
                 // Get the transaction

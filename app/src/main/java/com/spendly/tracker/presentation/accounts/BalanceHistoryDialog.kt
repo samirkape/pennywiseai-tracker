@@ -22,8 +22,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.text.KeyboardOptions
 import com.spendly.tracker.data.database.entity.AccountBalanceEntity
-import com.spendly.tracker.ui.components.PennyWiseEmptyState
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.SpendlyEmptyState
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.theme.*
 import com.spendly.tracker.utils.CurrencyFormatter
 import java.math.BigDecimal
@@ -50,7 +50,7 @@ fun BalanceHistoryDialog(
     val clipboard = LocalClipboardManager.current
     
     Dialog(onDismissRequest = onDismiss) {
-        PennyWiseCardV2(
+        SpendlyCardV2(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
                 .fillMaxHeight(0.8f),
@@ -85,7 +85,7 @@ fun BalanceHistoryDialog(
                 Spacer(modifier = Modifier.height(Spacing.md))
                 
                 if (balanceHistory.isEmpty()) {
-                    PennyWiseEmptyState(
+                    SpendlyEmptyState(
                         icon = Icons.Default.History,
                         headline = "No Balance History",
                         description = "Balance records will appear here as transactions are processed.",
@@ -199,7 +199,7 @@ private fun BalanceHistoryItem(
     onToggleExpand: () -> Unit,
     clipboard: androidx.compose.ui.platform.ClipboardManager
 ) {
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize(),

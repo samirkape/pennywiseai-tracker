@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.spendly.tracker.data.database.PennyWiseDatabase
+import com.spendly.tracker.data.database.SpendlyDatabase
 import com.spendly.tracker.data.database.dao.AccountBalanceDao
 import com.spendly.tracker.data.database.dao.SalaryMonthOverrideDao
 import com.spendly.tracker.data.database.dao.ProfileDao
@@ -29,6 +29,8 @@ import com.spendly.tracker.data.database.dao.UnrecognizedSmsDao
 import com.spendly.tracker.data.database.dao.GoalContributionDao
 import com.spendly.tracker.data.database.dao.GoalDao
 import com.spendly.tracker.data.database.dao.InsightsCacheDao
+import com.spendly.tracker.data.database.dao.PrepaidAllocationDao
+import com.spendly.tracker.data.database.dao.PrepaidExpenseDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -47,45 +49,46 @@ import javax.inject.Singleton
 object DatabaseModule {
     
     /**
-     * Provides the singleton instance of PennyWiseDatabase.
+     * Provides the singleton instance of SpendlyDatabase.
      * 
      * @param context Application context
      * @return Configured Room database instance
      */
     @Provides
     @Singleton
-    fun providePennyWiseDatabase(
+    fun provideSpendlyDatabase(
         @ApplicationContext context: Context
-    ): PennyWiseDatabase {
+    ): SpendlyDatabase {
         val database = Room.databaseBuilder(
             context,
-            PennyWiseDatabase::class.java,
-            PennyWiseDatabase.DATABASE_NAME
+            SpendlyDatabase::class.java,
+            SpendlyDatabase.DATABASE_NAME
         )
             // Add manual migrations here when needed
             .addMigrations(
-                PennyWiseDatabase.MIGRATION_12_14,
-                PennyWiseDatabase.MIGRATION_13_14,
-                PennyWiseDatabase.MIGRATION_14_15,
-                PennyWiseDatabase.MIGRATION_20_21,
-                PennyWiseDatabase.MIGRATION_21_22,
-                PennyWiseDatabase.MIGRATION_22_23,
-                PennyWiseDatabase.MIGRATION_38_39,
-                PennyWiseDatabase.MIGRATION_44_45,
-                PennyWiseDatabase.MIGRATION_45_46,
-                PennyWiseDatabase.MIGRATION_46_47,
-                PennyWiseDatabase.MIGRATION_47_48,
-                PennyWiseDatabase.MIGRATION_48_49,
-                PennyWiseDatabase.MIGRATION_49_50,
-                PennyWiseDatabase.MIGRATION_50_51,
-                PennyWiseDatabase.MIGRATION_51_52,
-                PennyWiseDatabase.MIGRATION_52_53,
-                PennyWiseDatabase.MIGRATION_53_54,
-                PennyWiseDatabase.MIGRATION_54_55,
-                PennyWiseDatabase.MIGRATION_55_56,
-                PennyWiseDatabase.MIGRATION_56_57,
-                PennyWiseDatabase.MIGRATION_58_59,
-                PennyWiseDatabase.MIGRATION_59_60
+                SpendlyDatabase.MIGRATION_12_14,
+                SpendlyDatabase.MIGRATION_13_14,
+                SpendlyDatabase.MIGRATION_14_15,
+                SpendlyDatabase.MIGRATION_20_21,
+                SpendlyDatabase.MIGRATION_21_22,
+                SpendlyDatabase.MIGRATION_22_23,
+                SpendlyDatabase.MIGRATION_38_39,
+                SpendlyDatabase.MIGRATION_44_45,
+                SpendlyDatabase.MIGRATION_45_46,
+                SpendlyDatabase.MIGRATION_46_47,
+                SpendlyDatabase.MIGRATION_47_48,
+                SpendlyDatabase.MIGRATION_48_49,
+                SpendlyDatabase.MIGRATION_49_50,
+                SpendlyDatabase.MIGRATION_50_51,
+                SpendlyDatabase.MIGRATION_51_52,
+                SpendlyDatabase.MIGRATION_52_53,
+                SpendlyDatabase.MIGRATION_53_54,
+                SpendlyDatabase.MIGRATION_54_55,
+                SpendlyDatabase.MIGRATION_55_56,
+                SpendlyDatabase.MIGRATION_56_57,
+                SpendlyDatabase.MIGRATION_58_59,
+                SpendlyDatabase.MIGRATION_59_60,
+                SpendlyDatabase.MIGRATION_60_61
             )
             .fallbackToDestructiveMigrationOnDowngrade()
 
@@ -98,7 +101,7 @@ object DatabaseModule {
             .build()
 
         // Set the singleton instance so BroadcastReceivers can access it
-        PennyWiseDatabase.setInstance(database)
+        SpendlyDatabase.setInstance(database)
 
         return database
     }
@@ -106,223 +109,235 @@ object DatabaseModule {
     /**
      * Provides the TransactionDao from the database.
      * 
-     * @param database The PennyWiseDatabase instance
+     * @param database The SpendlyDatabase instance
      * @return TransactionDao for accessing transaction data
      */
     @Provides
     @Singleton
-    fun provideTransactionDao(database: PennyWiseDatabase): TransactionDao {
+    fun provideTransactionDao(database: SpendlyDatabase): TransactionDao {
         return database.transactionDao()
     }
     
     /**
      * Provides the SubscriptionDao from the database.
      * 
-     * @param database The PennyWiseDatabase instance
+     * @param database The SpendlyDatabase instance
      * @return SubscriptionDao for accessing subscription data
      */
     @Provides
     @Singleton
-    fun provideSubscriptionDao(database: PennyWiseDatabase): SubscriptionDao {
+    fun provideSubscriptionDao(database: SpendlyDatabase): SubscriptionDao {
         return database.subscriptionDao()
     }
     
     /**
      * Provides the ChatDao from the database.
      * 
-     * @param database The PennyWiseDatabase instance
+     * @param database The SpendlyDatabase instance
      * @return ChatDao for accessing chat message data
      */
     @Provides
     @Singleton
-    fun provideChatDao(database: PennyWiseDatabase): ChatDao {
+    fun provideChatDao(database: SpendlyDatabase): ChatDao {
         return database.chatDao()
     }
     
     /**
      * Provides the MerchantMappingDao from the database.
      * 
-     * @param database The PennyWiseDatabase instance
+     * @param database The SpendlyDatabase instance
      * @return MerchantMappingDao for accessing merchant mapping data
      */
     @Provides
     @Singleton
-    fun provideMerchantMappingDao(database: PennyWiseDatabase): MerchantMappingDao {
+    fun provideMerchantMappingDao(database: SpendlyDatabase): MerchantMappingDao {
         return database.merchantMappingDao()
     }
 
     @Provides
     @Singleton
-    fun provideMerchantAliasDao(database: PennyWiseDatabase): MerchantAliasDao {
+    fun provideMerchantAliasDao(database: SpendlyDatabase): MerchantAliasDao {
         return database.merchantAliasDao()
     }
     
     /**
      * Provides the CategoryDao from the database.
      * 
-     * @param database The PennyWiseDatabase instance
+     * @param database The SpendlyDatabase instance
      * @return CategoryDao for accessing category data
      */
     @Provides
     @Singleton
-    fun provideCategoryDao(database: PennyWiseDatabase): CategoryDao {
+    fun provideCategoryDao(database: SpendlyDatabase): CategoryDao {
         return database.categoryDao()
     }
     
     /**
      * Provides the AccountBalanceDao from the database.
      * 
-     * @param database The PennyWiseDatabase instance
+     * @param database The SpendlyDatabase instance
      * @return AccountBalanceDao for accessing account balance data
      */
     @Provides
     @Singleton
-    fun provideAccountBalanceDao(database: PennyWiseDatabase): AccountBalanceDao {
+    fun provideAccountBalanceDao(database: SpendlyDatabase): AccountBalanceDao {
         return database.accountBalanceDao()
     }
     
     /**
      * Provides the UnrecognizedSmsDao from the database.
      * 
-     * @param database The PennyWiseDatabase instance
+     * @param database The SpendlyDatabase instance
      * @return UnrecognizedSmsDao for accessing unrecognized SMS data
      */
     @Provides
     @Singleton
-    fun provideUnrecognizedSmsDao(database: PennyWiseDatabase): UnrecognizedSmsDao {
+    fun provideUnrecognizedSmsDao(database: SpendlyDatabase): UnrecognizedSmsDao {
         return database.unrecognizedSmsDao()
     }
     
     /**
      * Provides the CardDao from the database.
      *
-     * @param database The PennyWiseDatabase instance
+     * @param database The SpendlyDatabase instance
      * @return CardDao for accessing card data
      */
     @Provides
     @Singleton
-    fun provideCardDao(database: PennyWiseDatabase): CardDao {
+    fun provideCardDao(database: SpendlyDatabase): CardDao {
         return database.cardDao()
     }
 
     /**
      * Provides the RuleDao from the database.
      *
-     * @param database The PennyWiseDatabase instance
+     * @param database The SpendlyDatabase instance
      * @return RuleDao for accessing rule data
      */
     @Provides
     @Singleton
-    fun provideRuleDao(database: PennyWiseDatabase): RuleDao {
+    fun provideRuleDao(database: SpendlyDatabase): RuleDao {
         return database.ruleDao()
     }
 
     /**
      * Provides the RuleApplicationDao from the database.
      *
-     * @param database The PennyWiseDatabase instance
+     * @param database The SpendlyDatabase instance
      * @return RuleApplicationDao for accessing rule application data
      */
     @Provides
     @Singleton
-    fun provideRuleApplicationDao(database: PennyWiseDatabase): RuleApplicationDao {
+    fun provideRuleApplicationDao(database: SpendlyDatabase): RuleApplicationDao {
         return database.ruleApplicationDao()
     }
 
     /**
      * Provides the ExchangeRateDao from the database.
      *
-     * @param database The PennyWiseDatabase instance
+     * @param database The SpendlyDatabase instance
      * @return ExchangeRateDao for accessing exchange rate data
      */
     @Provides
     @Singleton
-    fun provideExchangeRateDao(database: PennyWiseDatabase): ExchangeRateDao {
+    fun provideExchangeRateDao(database: SpendlyDatabase): ExchangeRateDao {
         return database.exchangeRateDao()
     }
 
     /**
      * Provides the BudgetDao from the database.
      *
-     * @param database The PennyWiseDatabase instance
+     * @param database The SpendlyDatabase instance
      * @return BudgetDao for accessing budget data
      */
     @Provides
     @Singleton
-    fun provideBudgetDao(database: PennyWiseDatabase): BudgetDao {
+    fun provideBudgetDao(database: SpendlyDatabase): BudgetDao {
         return database.budgetDao()
     }
 
     /**
      * Provides the TransactionSplitDao from the database.
      *
-     * @param database The PennyWiseDatabase instance
+     * @param database The SpendlyDatabase instance
      * @return TransactionSplitDao for accessing transaction split data
      */
     @Provides
     @Singleton
-    fun provideTransactionSplitDao(database: PennyWiseDatabase): TransactionSplitDao {
+    fun provideTransactionSplitDao(database: SpendlyDatabase): TransactionSplitDao {
         return database.transactionSplitDao()
     }
 
     @Provides
     @Singleton
-    fun provideBankNotificationDao(database: PennyWiseDatabase): BankNotificationDao {
+    fun provideBankNotificationDao(database: SpendlyDatabase): BankNotificationDao {
         return database.bankNotificationDao()
     }
 
     @Provides
     @Singleton
-    fun provideLoanDao(database: PennyWiseDatabase): LoanDao {
+    fun provideLoanDao(database: SpendlyDatabase): LoanDao {
         return database.loanDao()
     }
 
     @Provides
     @Singleton
-    fun provideTransactionGroupDao(database: PennyWiseDatabase): TransactionGroupDao {
+    fun provideTransactionGroupDao(database: SpendlyDatabase): TransactionGroupDao {
         return database.transactionGroupDao()
     }
 
     @Provides
     @Singleton
-    fun provideBudgetSnapshotDao(database: PennyWiseDatabase): BudgetSnapshotDao {
+    fun provideBudgetSnapshotDao(database: SpendlyDatabase): BudgetSnapshotDao {
         return database.budgetSnapshotDao()
     }
 
     @Provides
     @Singleton
-    fun provideProfileDao(database: PennyWiseDatabase): ProfileDao {
+    fun provideProfileDao(database: SpendlyDatabase): ProfileDao {
         return database.profileDao()
     }
 
     @Provides
     @Singleton
-    fun provideSalaryMonthOverrideDao(database: PennyWiseDatabase): SalaryMonthOverrideDao {
+    fun provideSalaryMonthOverrideDao(database: SpendlyDatabase): SalaryMonthOverrideDao {
         return database.salaryMonthOverrideDao()
     }
 
     @Provides
     @Singleton
-    fun provideTransactionReceiptDao(database: PennyWiseDatabase): TransactionReceiptDao {
+    fun provideTransactionReceiptDao(database: SpendlyDatabase): TransactionReceiptDao {
         return database.transactionReceiptDao()
     }
 
     @Provides
     @Singleton
-    fun provideInsightsCacheDao(database: PennyWiseDatabase): InsightsCacheDao {
+    fun provideInsightsCacheDao(database: SpendlyDatabase): InsightsCacheDao {
         return database.insightsCacheDao()
     }
 
     @Provides
     @Singleton
-    fun provideGoalDao(database: PennyWiseDatabase): GoalDao {
+    fun provideGoalDao(database: SpendlyDatabase): GoalDao {
         return database.goalDao()
     }
 
     @Provides
     @Singleton
-    fun provideGoalContributionDao(database: PennyWiseDatabase): GoalContributionDao {
+    fun provideGoalContributionDao(database: SpendlyDatabase): GoalContributionDao {
         return database.goalContributionDao()
+    }
+
+    @Provides
+    @Singleton
+    fun providePrepaidExpenseDao(database: SpendlyDatabase): PrepaidExpenseDao {
+        return database.prepaidExpenseDao()
+    }
+
+    @Provides
+    @Singleton
+    fun providePrepaidAllocationDao(database: SpendlyDatabase): PrepaidAllocationDao {
+        return database.prepaidAllocationDao()
     }
 }
 

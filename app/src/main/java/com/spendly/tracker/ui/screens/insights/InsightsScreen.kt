@@ -63,7 +63,7 @@ import com.spendly.tracker.domain.model.InsightType
 import com.spendly.tracker.domain.model.SmartInsight
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
 import com.spendly.tracker.ui.components.PeriodRangeNavigator
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing
@@ -227,7 +227,7 @@ private fun InsightsNavTile(
     tint: Color,
     onClick: () -> Unit,
 ) {
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick,
         contentPadding = Spacing.md
@@ -297,7 +297,7 @@ private fun InsightCard(
         visible = visible,
         enter = fadeIn(tween(280, delayMs)) + slideInVertically(tween(280, delayMs)) { it / 10 }
     ) {
-        PennyWiseCardV2(
+        SpendlyCardV2(
             modifier = Modifier
                 .fillMaxWidth()
                 .semantics(mergeDescendants = true) {
@@ -450,7 +450,7 @@ private fun CategorizationNudgeBanner(
         "$uncategorizedTransactionPercentage% of your transactions are uncategorized. Improve insights by categorizing a few recent transactions."
     }
 
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick,
         contentPadding = Spacing.md
@@ -652,7 +652,7 @@ private fun ConfidencePill(confidence: InsightConfidence) {
 
 @Composable
 private fun EmptyInsightsState() {
-    PennyWiseCardV2(modifier = Modifier.fillMaxWidth()) {
+    SpendlyCardV2(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

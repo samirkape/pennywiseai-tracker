@@ -25,6 +25,8 @@ import com.spendly.tracker.data.repository.GoalRepository
 import com.spendly.tracker.data.repository.LoanRepository
 import com.spendly.tracker.data.repository.MerchantAliasRepository
 import com.spendly.tracker.data.repository.MerchantMappingRepository
+import com.spendly.tracker.data.database.entity.PrepaidExpenseEntity
+import com.spendly.tracker.data.repository.PrepaidExpenseRepository
 import com.spendly.tracker.data.repository.TransactionGroupRepository
 import com.spendly.tracker.data.repository.TransactionRepository
 import com.spendly.tracker.domain.model.FutureParsingPromptState
@@ -87,6 +89,8 @@ class TransactionDetailViewModel @Inject constructor(
     private val categoryRepository: CategoryRepository,
     private val accountBalanceRepository: AccountBalanceRepository,
     private val loanRepository: LoanRepository,
+    private val prepaidExpenseRepository: PrepaidExpenseRepository,
+    private val subscriptionRepository: com.spendly.tracker.data.repository.SubscriptionRepository,
     private val goalRepository: GoalRepository,
     private val budgetGroupRepository: BudgetGroupRepository,
     private val transactionGroupRepository: TransactionGroupRepository,
@@ -402,6 +406,7 @@ class TransactionDetailViewModel @Inject constructor(
                 loadSplits(transactionId)
                 loadReceiptUris(it)
                 it.loanId?.let { id -> loadLoan(id) }
+                it.prepaidExpenseId?.let { id -> loadPrepaidPlan(id) } ?: run { _prepaidPlan.value = null }
                 _budgetImpactType.value = it.budgetImpactType
                 _budgetCategory.value = it.budgetCategory
                 loadAccountProfileId(it)
@@ -1569,6 +1574,68 @@ class TransactionDetailViewModel @Inject constructor(
     private fun loadLoan(loanId: Long) {
         viewModelScope.launch {
             _loan.value = loanRepository.getLoanById(loanId)
+        }
+    }
+
+    private val _prepaidPlan = MutableStateFlow<PrepaidExpenseEntity?>(null)
+    val prepaidPlan: StateFlow<PrepaidExpenseEntity?> = _prepaidPlan.asStateFlow()
+
+    private fun loadPrepaidPlan(prepaidExpenseId: Long) {
+        viewModelScope.launch {
+            _prepaidPlan.value = prepaidExpenseRepository.getPlanById(prepaidExpenseId)
+        }
+    }
+
+    // "Mark as subscription" is the single entry point for turning a transaction into
+    // either a regular recurring subscription or a prepaid plan — the two are mutually
+    // exclusive shapes for the same transaction (one recurs many times, the other is
+    // recognized many times), so the user picks which one applies before either sheet acts.
+    private val _showMarkAsSubscriptionChooserSheet = MutableStateFlow(false)
+    val showMarkAsSubscriptionChooserSheet: StateFlow<Boolean> = _showMarkAsSubscriptionChooserSheet.asStateFlow()
+
+    fun showMarkAsSubscriptionChooserSheet() { _showMarkAsSubscriptionChooserSheet.value = true }
+    fun hideMarkAsSubscriptionChooserSheet() { _showMarkAsSubscriptionChooserSheet.value = false }
+
+    private val _showMarkAsPrepaidSheet = MutableStateFlow(false)
+    val showMarkAsPrepaidSheet: StateFlow<Boolean> = _showMarkAsPrepaidSheet.asStateFlow()
+
+    fun chooseRegularSubscription() {
+        val txn = _transaction.value ?: return
+        _showMarkAsSubscriptionChooserSheet.value = false
+        viewModelScope.launch {
+            try {
+                val updated = txn.copy(isRecurring = true)
+                transactionRepository.updateTransaction(updated)
+                subscriptionRepository.syncRecurringWithSubscriptions(before = txn, after = updated)
+                _transaction.value = updated
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to mark as subscription: ${e.message}"
+            }
+        }
+    }
+
+    fun choosePrepaidSubscription() {
+        _showMarkAsSubscriptionChooserSheet.value = false
+        _showMarkAsPrepaidSheet.value = true
+    }
+
+    fun hideMarkAsPrepaidSheet() { _showMarkAsPrepaidSheet.value = false }
+
+    /** Converts the current (e.g. SMS-parsed) transaction into a prepaid plan retroactively. */
+    fun markTransactionAsPrepaid(totalMonths: Int) {
+        val txn = _transaction.value ?: return
+        viewModelScope.launch {
+            try {
+                val planId = prepaidExpenseRepository.createPlanFromTransaction(
+                    transactionId = txn.id,
+                    totalMonths = totalMonths
+                )
+                _transaction.value = transactionRepository.getTransactionById(txn.id)
+                _prepaidPlan.value = prepaidExpenseRepository.getPlanById(planId)
+                _showMarkAsPrepaidSheet.value = false
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to mark as prepaid: ${e.message}"
+            }
         }
     }
 

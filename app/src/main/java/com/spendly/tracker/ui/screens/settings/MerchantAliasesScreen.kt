@@ -20,9 +20,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.spendly.tracker.R
-import com.spendly.tracker.ui.components.PennyWiseEmptyState
-import com.spendly.tracker.ui.components.PennyWiseScaffold
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.SpendlyEmptyState
+import com.spendly.tracker.ui.components.SpendlyScaffold
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.utils.MerchantAliasAuditor
@@ -51,7 +51,7 @@ fun MerchantAliasesScreen(
         }
     }
 
-    PennyWiseScaffold(
+    SpendlyScaffold(
         title = "Merchant name mappings",
         navigationIcon = {
             IconButton(onClick = onNavigateBack) {
@@ -82,7 +82,7 @@ fun MerchantAliasesScreen(
             ) {
                 CircularProgressIndicator()
             }
-            return@PennyWiseScaffold
+            return@SpendlyScaffold
         }
 
         LazyColumn(
@@ -98,7 +98,7 @@ fun MerchantAliasesScreen(
             verticalArrangement = Arrangement.spacedBy(Spacing.sm),
         ) {
             item {
-                PennyWiseCardV2(modifier = Modifier.fillMaxWidth()) {
+                SpendlyCardV2(modifier = Modifier.fillMaxWidth()) {
                     Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                         Text(
                             text = "How this works",
@@ -126,7 +126,7 @@ fun MerchantAliasesScreen(
 
             if (uiState.items.isEmpty()) {
                 item {
-                    PennyWiseEmptyState(
+                    SpendlyEmptyState(
                         icon = Icons.Default.Warning,
                         headline = "No mappings yet",
                         description = "Rename a merchant on a transaction, or tap + to add one",
@@ -267,7 +267,7 @@ private fun MerchantAliasRow(
         MerchantAliasAuditor.RiskLevel.OK -> "OK"
     }
 
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onEdit),

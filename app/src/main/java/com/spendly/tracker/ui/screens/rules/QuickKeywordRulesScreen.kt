@@ -60,7 +60,7 @@ import com.spendly.tracker.domain.model.rule.TransactionRule
 import com.spendly.tracker.domain.service.QuickKeywordRuleCompiler
 import com.spendly.tracker.domain.service.QuickKeywordRuleMatcher
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
-import com.spendly.tracker.ui.components.PennyWiseCard
+import com.spendly.tracker.ui.components.SpendlyCard
 import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.effects.overScrollVertical
 import com.spendly.tracker.ui.effects.rememberOverscrollFlingBehavior
@@ -199,7 +199,7 @@ fun QuickKeywordRulesScreen(
             }
 
             item {
-                PennyWiseCard(
+                SpendlyCard(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -370,7 +370,7 @@ private fun QuickKeywordRuleCard(
     val input = QuickKeywordRuleCompiler.decompile(rule)
     var showMenu by remember { mutableStateOf(false) }
 
-    PennyWiseCard(modifier = Modifier.fillMaxWidth()) {
+    SpendlyCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,

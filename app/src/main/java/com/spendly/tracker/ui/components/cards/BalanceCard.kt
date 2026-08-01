@@ -136,7 +136,7 @@ fun HeroSpendCard(
     val incomeFormatted = CurrencyFormatter.formatCurrency(incomeForProgress.setScale(0, RoundingMode.HALF_UP), currency)
 
 
-    PennyWiseCardV2(
+    SpendlyCardV2(
         contentPadding = Spacing.md,
         modifier = modifier
             .fillMaxWidth()

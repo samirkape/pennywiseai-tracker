@@ -43,7 +43,7 @@ import com.spendly.tracker.data.repository.BudgetGroupSpending
 import com.spendly.tracker.data.repository.BudgetOverallSummary
 import com.spendly.tracker.ui.components.CategoryIcon
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.icons.CategoryMapping
 import com.spendly.tracker.ui.theme.*
 import com.spendly.tracker.ui.utils.LocalWindowSizeInfo
@@ -155,7 +155,7 @@ private fun EmptyBudgetState(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        PennyWiseCardV2(
+        SpendlyCardV2(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(Dimensions.Padding.content),
@@ -506,7 +506,7 @@ private fun BudgetCard(
         else -> MaterialTheme.colorScheme.primary
     }
 
-    PennyWiseCardV2(
+    SpendlyCardV2(
         onClick = { expanded = !expanded },
         modifier = modifier.fillMaxWidth()
     ) {

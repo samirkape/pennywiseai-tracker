@@ -117,7 +117,7 @@ private fun AccountCarouselCard(
 
     val cardShape = RoundedCornerShape(16.dp)
 
-    PennyWiseCardV2(
+    SpendlyCardV2(
         modifier = modifier
             .then(
                 if (blurEffects && hazeState != null) Modifier

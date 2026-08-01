@@ -24,7 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
-import com.spendly.tracker.ui.components.PennyWiseCard
+import com.spendly.tracker.ui.components.SpendlyCard
 import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing
@@ -198,7 +198,7 @@ fun FAQScreen(
             faqCategories.forEachIndexed { categoryIndex, category ->
                 SectionHeaderV2(title = category.title)
                 
-                PennyWiseCard(
+                SpendlyCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column {
@@ -285,7 +285,7 @@ fun FAQScreen(
             // Still need help section
             SectionHeaderV2(title = "Still Need Help?")
             
-            PennyWiseCard(
+            SpendlyCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable {

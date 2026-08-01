@@ -96,7 +96,7 @@ if [ "$USE_CLAUDE" = true ] && [ -n "$LAST_TAG" ]; then
     COMMITS=$(git log $LAST_TAG..HEAD --pretty=format:"- %s (%h)")
 
     # Create prompt for Claude
-    CLAUDE_PROMPT="Generate concise, user-friendly release notes for version $NEXT_VERSION of PennyWise (an Android expense tracker app that parses bank SMS messages).
+    CLAUDE_PROMPT="Generate concise, user-friendly release notes for version $NEXT_VERSION of Spendly (an Android expense tracker app that parses bank SMS messages).
 
     Just return the release notes, don't include any other text. We will directly copy the release notes to the RELEASE_NOTES.md file.
 
@@ -150,7 +150,7 @@ if [ "$USE_CLAUDE" = false ]; then
     else
         echo "## Initial Release" >> RELEASE_NOTES.md
         echo "" >> RELEASE_NOTES.md
-        echo "First release of PennyWise" >> RELEASE_NOTES.md
+        echo "First release of Spendly" >> RELEASE_NOTES.md
     fi
 
     echo "" >> RELEASE_NOTES.md
@@ -194,7 +194,7 @@ if [ "$USE_CLAUDE" = true ]; then
     echo -e "${YELLOW}🤖 Generating Play Store changelog with Claude...${NC}"
 
     # Create prompt for Play Store release notes (more concise)
-    PLAYSTORE_PROMPT="Generate very concise Play Store release notes for PennyWise version $NEXT_VERSION (max 500 characters).
+    PLAYSTORE_PROMPT="Generate very concise Play Store release notes for Spendly version $NEXT_VERSION (max 500 characters).
 
 Based on these changes:
 $COMMITS
@@ -306,21 +306,21 @@ FDROID_PATH="app/build/outputs/apk/fdroid/release"
 # Rename universal APK
 if [ -f "$STANDARD_PATH/app-standard-universal-release.apk" ]; then
     mv "$STANDARD_PATH/app-standard-universal-release.apk" \
-       "$STANDARD_PATH/PennyWise-v${NEXT_VERSION}-universal.apk"
+       "$STANDARD_PATH/Spendly-v${NEXT_VERSION}-universal.apk"
 fi
 
 # Rename architecture-specific APKs
 for arch in armeabi-v7a arm64-v8a x86 x86_64; do
     if [ -f "$STANDARD_PATH/app-standard-${arch}-release.apk" ]; then
         mv "$STANDARD_PATH/app-standard-${arch}-release.apk" \
-           "$STANDARD_PATH/PennyWise-v${NEXT_VERSION}-${arch}.apk"
+           "$STANDARD_PATH/Spendly-v${NEXT_VERSION}-${arch}.apk"
     fi
 done
 
 # Rename F-Droid APK
 if [ -f "$FDROID_PATH/app-fdroid-release-unsigned.apk" ]; then
     mv "$FDROID_PATH/app-fdroid-release-unsigned.apk" \
-       "$FDROID_PATH/PennyWise-fdroid-v${NEXT_VERSION}.apk"
+       "$FDROID_PATH/Spendly-fdroid-v${NEXT_VERSION}.apk"
 fi
 
 echo -e "${GREEN}✅ APKs renamed${NC}"
@@ -328,15 +328,15 @@ echo -e "${GREEN}✅ APKs renamed${NC}"
 # 8. Calculate SHA256
 ORIGINAL_DIR="$PWD"
 cd "$STANDARD_PATH"
-for apk in PennyWise-v${NEXT_VERSION}*.apk; do
+for apk in Spendly-v${NEXT_VERSION}*.apk; do
     if [ -f "$apk" ]; then
         sha256sum "$apk" > "${apk}.sha256"
     fi
 done
 
 cd "$ORIGINAL_DIR/$FDROID_PATH"
-if [ -f "PennyWise-fdroid-v${NEXT_VERSION}.apk" ]; then
-    sha256sum "PennyWise-fdroid-v${NEXT_VERSION}.apk" > "PennyWise-fdroid-v${NEXT_VERSION}.apk.sha256"
+if [ -f "Spendly-fdroid-v${NEXT_VERSION}.apk" ]; then
+    sha256sum "Spendly-fdroid-v${NEXT_VERSION}.apk" > "Spendly-fdroid-v${NEXT_VERSION}.apk.sha256"
 fi
 cd "$ORIGINAL_DIR"
 
@@ -378,18 +378,18 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
         gh release create "v$NEXT_VERSION" \
             --title "Release v$NEXT_VERSION" \
             --notes-file RELEASE_NOTES.md \
-            "$STANDARD_PATH/PennyWise-v${NEXT_VERSION}-universal.apk" \
-            "$STANDARD_PATH/PennyWise-v${NEXT_VERSION}-universal.apk.sha256" \
-            "$STANDARD_PATH/PennyWise-v${NEXT_VERSION}-arm64-v8a.apk" \
-            "$STANDARD_PATH/PennyWise-v${NEXT_VERSION}-arm64-v8a.apk.sha256" \
-            "$STANDARD_PATH/PennyWise-v${NEXT_VERSION}-armeabi-v7a.apk" \
-            "$STANDARD_PATH/PennyWise-v${NEXT_VERSION}-armeabi-v7a.apk.sha256" \
-            "$FDROID_PATH/PennyWise-fdroid-v${NEXT_VERSION}.apk" \
-            "$FDROID_PATH/PennyWise-fdroid-v${NEXT_VERSION}.apk.sha256"
+            "$STANDARD_PATH/Spendly-v${NEXT_VERSION}-universal.apk" \
+            "$STANDARD_PATH/Spendly-v${NEXT_VERSION}-universal.apk.sha256" \
+            "$STANDARD_PATH/Spendly-v${NEXT_VERSION}-arm64-v8a.apk" \
+            "$STANDARD_PATH/Spendly-v${NEXT_VERSION}-arm64-v8a.apk.sha256" \
+            "$STANDARD_PATH/Spendly-v${NEXT_VERSION}-armeabi-v7a.apk" \
+            "$STANDARD_PATH/Spendly-v${NEXT_VERSION}-armeabi-v7a.apk.sha256" \
+            "$FDROID_PATH/Spendly-fdroid-v${NEXT_VERSION}.apk" \
+            "$FDROID_PATH/Spendly-fdroid-v${NEXT_VERSION}.apk.sha256"
         echo -e "${GREEN}✅ GitHub release created${NC}"
     else
         echo -e "${YELLOW}gh CLI not found. Create release manually at:${NC}"
-        echo "https://github.com/sarim2000/pennywiseai-tracker/releases/new?tag=v$NEXT_VERSION"
+        echo "https://github.com/sarim2000/spendlyai-tracker/releases/new?tag=v$NEXT_VERSION"
     fi
 fi
 
@@ -405,32 +405,32 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     AAB_PATH="app/build/outputs/bundle/standardRelease"
     if [ -f "$AAB_PATH/app-standard-release.aab" ]; then
         mv "$AAB_PATH/app-standard-release.aab" \
-           "$AAB_PATH/PennyWise-v${NEXT_VERSION}.aab"
-        echo -e "${GREEN}✅ App Bundle created: $AAB_PATH/PennyWise-v${NEXT_VERSION}.aab${NC}"
+           "$AAB_PATH/Spendly-v${NEXT_VERSION}.aab"
+        echo -e "${GREEN}✅ App Bundle created: $AAB_PATH/Spendly-v${NEXT_VERSION}.aab${NC}"
         
         # Show file size
-        SIZE=$(du -h "$AAB_PATH/PennyWise-v${NEXT_VERSION}.aab" | cut -f1)
+        SIZE=$(du -h "$AAB_PATH/Spendly-v${NEXT_VERSION}.aab" | cut -f1)
         echo "Size: $SIZE"
         
         echo ""
         echo -e "${YELLOW}📱 Play Store Upload Instructions:${NC}"
         echo "1. Go to https://play.google.com/console"
-        echo "2. Select PennyWise app"
+        echo "2. Select Spendly app"
         echo "3. Go to Release > Production (or Testing)"
         echo "4. Create new release"
-        echo "5. Upload: $AAB_PATH/PennyWise-v${NEXT_VERSION}.aab"
+        echo "5. Upload: $AAB_PATH/Spendly-v${NEXT_VERSION}.aab"
         echo "6. Add release notes from RELEASE_NOTES.md"
     fi
 fi
 
 # 12. Deploy webapp (optional)
 echo ""
-read -p "Deploy webapp (pennywise-web) to Cloudflare? (y/n) " -n 1 -r
+read -p "Deploy webapp (spendly-web) to Cloudflare? (y/n) " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo -e "${YELLOW}🌐 Deploying webapp to Cloudflare...${NC}"
 
-    WEBAPP_DIR="$ORIGINAL_DIR/pennywise-web"
+    WEBAPP_DIR="$ORIGINAL_DIR/spendly-web"
 
     if [ -d "$WEBAPP_DIR" ]; then
         if [ -f "$WEBAPP_DIR/deploy.sh" ]; then
@@ -439,14 +439,14 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
                 echo -e "${GREEN}✅ Webapp deployed successfully${NC}"
             else
                 echo -e "${RED}❌ Webapp deployment failed${NC}"
-                echo -e "${YELLOW}You can retry manually: cd pennywise-web && ./deploy.sh${NC}"
+                echo -e "${YELLOW}You can retry manually: cd spendly-web && ./deploy.sh${NC}"
             fi
             cd "$ORIGINAL_DIR"
         else
-            echo -e "${RED}❌ deploy.sh not found in pennywise-web${NC}"
+            echo -e "${RED}❌ deploy.sh not found in spendly-web${NC}"
         fi
     else
-        echo -e "${RED}❌ pennywise-web directory not found${NC}"
+        echo -e "${RED}❌ spendly-web directory not found${NC}"
     fi
 fi
 

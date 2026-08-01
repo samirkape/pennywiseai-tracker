@@ -63,9 +63,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.spendly.tracker.R
 import com.spendly.tracker.data.database.entity.TransactionType
-import com.spendly.tracker.ui.components.PennyWiseCard
-import com.spendly.tracker.ui.components.cards.PennyWiseCardV2
-import com.spendly.tracker.ui.components.PennyWiseEmptyState
+import com.spendly.tracker.ui.components.SpendlyCard
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
+import com.spendly.tracker.ui.components.SpendlyEmptyState
 import com.spendly.tracker.ui.components.PayPeriodSalarySuggestionDialog
 import com.spendly.tracker.ui.components.SmsParsingProgressDialog
 import com.spendly.tracker.ui.components.cards.GroupCard
@@ -521,7 +521,7 @@ fun HomeScreen(
                             animationSpec = tween(300)
                         )
                     ) {
-                        PennyWiseEmptyState(
+                        SpendlyEmptyState(
                             icon = Icons.Default.Sync,
                             headline = stringResource(R.string.home_feed_empty_today_headline),
                             description = stringResource(R.string.home_feed_empty_today_description),
@@ -557,7 +557,7 @@ fun HomeScreen(
                             buildProfileAccountKeys(uiState.accountBalances)
                         }
                         // Grouped feed card — all transactions in a single card with dividers
-                        com.spendly.tracker.ui.components.cards.PennyWiseCardV2(
+                        com.spendly.tracker.ui.components.cards.SpendlyCardV2(
                             modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
                             contentPadding = 0.dp
                         ) {
@@ -862,7 +862,7 @@ private fun BreakdownDialog(
                 fontWeight = FontWeight.Bold,
             )
 
-            PennyWiseCardV2(
+            SpendlyCardV2(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 ),

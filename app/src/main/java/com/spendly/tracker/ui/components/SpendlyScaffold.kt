@@ -1,0 +1,51 @@
+package com.spendly.tracker.ui.components
+
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+
+/**
+ * Default **Pattern B** shell: standard [TopAppBar] and [Scaffold] with optional transparency.
+ * For collapsing large titles or blur, use [CustomTitleTopAppBar] or [SpendlyStandardScaffold] per [docs/scaffold-patterns.md](../../../../../docs/scaffold-patterns.md).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SpendlyScaffold(
+    modifier: Modifier = Modifier,
+    title: String = "",
+    navigationIcon: @Composable (() -> Unit)? = null,
+    actions: @Composable RowScope.() -> Unit = {},
+    transparentTopBar: Boolean = false,
+    customTopBar: @Composable (() -> Unit)? = null,
+    bottomBar: @Composable () -> Unit = {},
+    floatingActionButton: @Composable () -> Unit = {},
+    floatingActionButtonPosition: FabPosition = FabPosition.End,
+    snackbarHost: @Composable () -> Unit = {},
+    containerColor: Color = MaterialTheme.colorScheme.background,
+    contentColor: Color = contentColorFor(containerColor),
+    content: @Composable (PaddingValues) -> Unit
+) {
+    Scaffold(
+        modifier = modifier,
+        snackbarHost = snackbarHost,
+        topBar = customTopBar ?: {
+            TopAppBar(
+                title = { if (title.isNotEmpty()) Text(title) },
+                navigationIcon = navigationIcon ?: {},
+                actions = actions,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = if (transparentTopBar) Color.Transparent else MaterialTheme.colorScheme.surface
+                )
+            )
+        },
+        bottomBar = bottomBar,
+        floatingActionButton = floatingActionButton,
+        floatingActionButtonPosition = floatingActionButtonPosition,
+        containerColor = containerColor,
+        contentColor = contentColor,
+        content = content
+    )
+}

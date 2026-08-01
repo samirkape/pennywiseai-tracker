@@ -21,7 +21,7 @@ class BackupModelsTest {
 
     @Test
     fun backupSerializationRoundtripWithAllFields() {
-        val backup = PennyWiseBackup(
+        val backup = SpendlyBackup(
             metadata = BackupMetadata(
                 exportId = "test-export-id",
                 appVersion = "2.15.50",
@@ -201,7 +201,7 @@ class BackupModelsTest {
         val json = gson.toJson(backup)
         assertNotNull(json)
 
-        val deserialized = gson.fromJson(json, PennyWiseBackup::class.java)
+        val deserialized = gson.fromJson(json, SpendlyBackup::class.java)
         assertNotNull(deserialized)
 
         assertEquals(backup.metadata.statistics.totalRules, deserialized.metadata.statistics.totalRules)
@@ -237,7 +237,7 @@ class BackupModelsTest {
 
     @Test
     fun backupSerializationWithEmptyLists() {
-        val backup = PennyWiseBackup(
+        val backup = SpendlyBackup(
             metadata = BackupMetadata(
                 exportId = "empty-test",
                 appVersion = "2.15.50",
@@ -285,7 +285,7 @@ class BackupModelsTest {
         )
 
         val json = gson.toJson(backup)
-        val deserialized = gson.fromJson(json, PennyWiseBackup::class.java)
+        val deserialized = gson.fromJson(json, SpendlyBackup::class.java)
         
         assertEquals(0, deserialized.database.rules.size)
         assertEquals(0, deserialized.database.exchangeRates.size)

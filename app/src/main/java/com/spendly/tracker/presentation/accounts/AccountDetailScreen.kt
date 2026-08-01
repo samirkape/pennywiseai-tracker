@@ -147,7 +147,7 @@ fun AccountDetailScreen(
             // Transaction List
             if (uiState.transactions.isEmpty() && !uiState.isLoading) {
                 item {
-                    PennyWiseEmptyState(
+                    SpendlyEmptyState(
                         icon = Icons.Outlined.Receipt,
                         headline = "No transactions",
                         description = "Transactions for this account will appear here"
@@ -190,7 +190,7 @@ private fun ExpandableBalanceChart(
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     
-    PennyWiseCard(
+    SpendlyCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { isExpanded = !isExpanded }
@@ -270,7 +270,7 @@ private fun CurrentBalanceCard(
 ) {
     val isCreditCard = creditLimit != null
     
-    PennyWiseCard(
+    SpendlyCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -383,7 +383,7 @@ private fun SummaryStatistics(
     primaryCurrency: String,
     hasMultipleCurrencies: Boolean = false
 ) {
-    PennyWiseCard(
+    SpendlyCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(

@@ -3,9 +3,11 @@ package com.spendly.tracker.presentation.subscriptions
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.spendly.tracker.data.currency.CurrencyConversionService
+import com.spendly.tracker.data.database.entity.PrepaidExpenseEntity
 import com.spendly.tracker.data.database.entity.SubscriptionEntity
 import com.spendly.tracker.data.database.entity.SubscriptionState
 import com.spendly.tracker.data.preferences.UserPreferencesRepository
+import com.spendly.tracker.data.repository.PrepaidExpenseRepository
 import com.spendly.tracker.data.repository.SubscriptionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,11 +16,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
+import java.math.RoundingMode
 import javax.inject.Inject
 
 @HiltViewModel
 class SubscriptionsViewModel @Inject constructor(
     private val subscriptionRepository: SubscriptionRepository,
+    private val prepaidExpenseRepository: PrepaidExpenseRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val currencyConversionService: CurrencyConversionService
 ) : ViewModel() {
@@ -34,17 +38,20 @@ class SubscriptionsViewModel @Inject constructor(
         viewModelScope.launch {
             combine(
                 subscriptionRepository.getActiveSubscriptions(),
+                prepaidExpenseRepository.getActivePlans(),
                 userPreferencesRepository.unifiedCurrencyMode,
                 userPreferencesRepository.displayCurrency,
                 userPreferencesRepository.baseCurrency
-            ) { subscriptions, isUnified, displayCurrency, baseCurrency ->
-                arrayOf(subscriptions, isUnified, displayCurrency, baseCurrency)
+            ) { subscriptions, prepaidPlans, isUnified, displayCurrency, baseCurrency ->
+                arrayOf(subscriptions, prepaidPlans, isUnified, displayCurrency, baseCurrency)
             }.collect { values ->
                 @Suppress("UNCHECKED_CAST")
                 val subscriptions = (values[0] as List<SubscriptionEntity>).deduplicated()
-                val isUnified = values[1] as Boolean
-                val displayCurrency = values[2] as String
-                val baseCurrency = values[3] as String
+                @Suppress("UNCHECKED_CAST")
+                val prepaidPlans = values[1] as List<PrepaidExpenseEntity>
+                val isUnified = values[2] as Boolean
+                val displayCurrency = values[3] as String
+                val baseCurrency = values[4] as String
                 val totalMonthlyAmount = if (isUnified) {
                     var total = BigDecimal.ZERO
                     for (sub in subscriptions) {
@@ -71,9 +78,25 @@ class SubscriptionsViewModel @Inject constructor(
                     emptyMap()
                 }
 
+                // Monthly-equivalent cost of active prepaid plans — for planning visibility
+                // only, not tied to actual expense reporting (the source payment already
+                // counts in full on its real day everywhere else).
+                var prepaidMonthlyAmount = BigDecimal.ZERO
+                for (plan in prepaidPlans) {
+                    val monthlyEquivalent = plan.totalAmount.divide(BigDecimal(plan.totalMonths), 2, RoundingMode.HALF_UP)
+                    prepaidMonthlyAmount += if (isUnified) {
+                        currencyConversionService.convertAmount(monthlyEquivalent, plan.currency, displayCurrency)
+                    } else {
+                        monthlyEquivalent
+                    }
+                }
+
                 _uiState.value = _uiState.value.copy(
                     activeSubscriptions = subscriptions,
+                    activePrepaidPlans = prepaidPlans,
                     totalMonthlyAmount = totalMonthlyAmount,
+                    prepaidMonthlyAmount = prepaidMonthlyAmount,
+                    activePrepaidPlanCount = prepaidPlans.size,
                     convertedAmounts = convertedAmounts,
                     displayCurrency = if (isUnified) displayCurrency else baseCurrency,
                     isUnifiedMode = isUnified,
@@ -147,10 +170,16 @@ class SubscriptionsViewModel @Inject constructor(
 
 data class SubscriptionsUiState(
     val activeSubscriptions: List<SubscriptionEntity> = emptyList(),
+    val activePrepaidPlans: List<PrepaidExpenseEntity> = emptyList(),
     val totalMonthlyAmount: BigDecimal = BigDecimal.ZERO,
+    val prepaidMonthlyAmount: BigDecimal = BigDecimal.ZERO,
+    val activePrepaidPlanCount: Int = 0,
     val convertedAmounts: Map<Long, BigDecimal> = emptyMap(),
     val displayCurrency: String? = null,
     val isUnifiedMode: Boolean = false,
     val isLoading: Boolean = true,
     val lastHiddenSubscription: SubscriptionEntity? = null
-)
+) {
+    val combinedMonthlyAmount: BigDecimal get() = totalMonthlyAmount + prepaidMonthlyAmount
+    val combinedYearlyAmount: BigDecimal get() = combinedMonthlyAmount.multiply(BigDecimal(12))
+}

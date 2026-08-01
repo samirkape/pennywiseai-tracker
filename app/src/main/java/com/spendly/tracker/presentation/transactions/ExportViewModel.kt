@@ -1,7 +1,7 @@
 package com.spendly.tracker.presentation.transactions
 
 import androidx.lifecycle.ViewModel
-import com.spendly.tracker.data.database.PennyWiseDatabase
+import com.spendly.tracker.data.database.SpendlyDatabase
 import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.export.CsvExporter
 import com.spendly.tracker.data.export.ExportResult
@@ -15,7 +15,7 @@ import javax.inject.Inject
 @HiltViewModel
 class ExportViewModel @Inject constructor(
     private val csvExporter: CsvExporter,
-    private val database: PennyWiseDatabase
+    private val database: SpendlyDatabase
 ) : ViewModel() {
 
     fun exportTransactions(
