@@ -4,6 +4,9 @@
     <include domain="database" path="spendly_database"/>
     <include domain="database" path="spendly_database-wal"/>
     <include domain="database" path="spendly_database-shm"/>
+    <include domain="database" path="pennywise_database"/>
+    <include domain="database" path="pennywise_database-wal"/>
+    <include domain="database" path="pennywise_database-shm"/>
     <!-- User preferences -->
     <include domain="sharedpref" path="."/>
 </full-backup-content>
