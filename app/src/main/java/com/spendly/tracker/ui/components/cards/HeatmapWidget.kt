@@ -1,12 +1,17 @@
 package com.spendly.tracker.ui.components.cards
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -18,16 +23,23 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.spendly.tracker.presentation.home.DayActivity
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing
+import com.spendly.tracker.utils.CurrencyFormatter
 import dev.chrisbanes.haze.HazeDefaults
 import dev.chrisbanes.haze.HazeEffectScope
 import dev.chrisbanes.haze.HazeState
@@ -38,11 +50,16 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 fun HeatmapWidget(
-    transactionHeatmap: Map<Long, Int>,
+    transactionHeatmap: Map<Long, DayActivity>,
+    currency: String,
     modifier: Modifier = Modifier,
     blurEffects: Boolean = false,
     hazeState: HazeState? = null,
+    onClick: (() -> Unit)? = null,
+    onDayClick: ((LocalDate) -> Unit)? = null,
+    onDayLongClick: ((LocalDate) -> Unit)? = null,
 ) {
+    val view = androidx.compose.ui.platform.LocalView.current
     val weeksToShow = 26
     val today = LocalDate.now()
     val startDate = today.minusWeeks((weeksToShow - 1).toLong()).with(DayOfWeek.MONDAY)
@@ -88,6 +105,9 @@ fun HeatmapWidget(
         scrollState.scrollTo(scrollState.maxValue)
     }
 
+    // Selected day (tapped cell) — defaults to today if it has activity, else unselected.
+    var selectedEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
+
     val containerColor = if (blurEffects)
         MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.5f)
     else MaterialTheme.colorScheme.surfaceContainerLow
@@ -112,6 +132,7 @@ fun HeatmapWidget(
                     )
                 else Modifier
             ),
+        onClick = onClick,
         colors = CardDefaults.cardColors(
             containerColor = containerColor
         )
@@ -168,11 +189,14 @@ fun HeatmapWidget(
                                 for (d in 0 until 7) {
                                     val date = startDate.plusWeeks(w.toLong()).plusDays(d.toLong())
                                     val epochDay = date.toEpochDay()
-                                    val count = transactionHeatmap[epochDay] ?: 0
+                                    val activity = transactionHeatmap[epochDay]
+                                    val count = activity?.count ?: 0
+                                    val isFuture = date > today
+                                    val isSelected = selectedEpochDay == epochDay
 
                                     val primary = MaterialTheme.colorScheme.primary
                                     val color = when {
-                                        date > today -> MaterialTheme.colorScheme.surfaceContainerHigh
+                                        isFuture -> MaterialTheme.colorScheme.surfaceContainerHigh
                                         count == 0 -> MaterialTheme.colorScheme.surfaceContainerHigh
                                         count == 1 -> primary.copy(alpha = 0.25f)
                                         count == 2 -> primary.copy(alpha = 0.5f)
@@ -185,6 +209,29 @@ fun HeatmapWidget(
                                             .size(cellSize)
                                             .clip(RoundedCornerShape(4.dp))
                                             .background(color)
+                                            .then(
+                                                if (isSelected) Modifier.border(
+                                                    width = 1.5.dp,
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                    shape = RoundedCornerShape(4.dp)
+                                                ) else Modifier
+                                            )
+                                            .combinedClickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null,
+                                                enabled = !isFuture,
+                                                onClick = {
+                                                    selectedEpochDay = if (selectedEpochDay == epochDay) null else epochDay
+                                                    onDayClick?.invoke(date)
+                                                },
+                                                onLongClick = {
+                                                    view.performHapticFeedback(
+                                                        android.view.HapticFeedbackConstants.LONG_PRESS
+                                                    )
+                                                    selectedEpochDay = epochDay
+                                                    onDayLongClick?.invoke(date)
+                                                },
+                                            )
                                     )
                                 }
                             }
@@ -206,6 +253,32 @@ fun HeatmapWidget(
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                             fontSize = 11.sp,
                             modifier = Modifier.offset(x = xOffset)
+                        )
+                    }
+                }
+
+                // Selected-day detail readout
+                val selectedDate = selectedEpochDay?.let { LocalDate.ofEpochDay(it) }
+                val selectedActivity = selectedEpochDay?.let { transactionHeatmap[it] }
+                Box(modifier = Modifier.padding(top = Spacing.sm, start = dayLabelWidth).height(18.dp)) {
+                    if (selectedDate != null) {
+                        val dateLabel = selectedDate.format(DateTimeFormatter.ofPattern("MMM d, yyyy"))
+                        val detailText = if (selectedActivity != null && selectedActivity.count > 0) {
+                            val amountText = CurrencyFormatter.formatCurrency(selectedActivity.amount, currency)
+                            "$dateLabel \u00B7 ${selectedActivity.count} txn${if (selectedActivity.count == 1) "" else "s"} \u00B7 $amountText"
+                        } else {
+                            "$dateLabel \u00B7 No spending"
+                        }
+                        Text(
+                            text = detailText,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    } else {
+                        Text(
+                            text = "Tap a day to see details",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         )
                     }
                 }

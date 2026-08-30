@@ -40,7 +40,19 @@ class UpdateTransactionUseCase @Inject constructor(
 ) {
     suspend fun execute(request: UpdateTransactionRequest): UpdateTransactionResult {
         val original = request.original
-        val updated = request.updated
+        val rawUpdated = request.updated
+
+        // Once a user edits merchant/category away from the parsed value, mark it so
+        // future reparse passes (Full Resync) never silently overwrite the edit.
+        val merchantChanged = !original.merchantName.trim()
+            .equals(rawUpdated.merchantName.trim(), ignoreCase = true)
+        val categoryChanged = original.category != rawUpdated.category
+        val typeChanged = original.transactionType != rawUpdated.transactionType
+        val updated = rawUpdated.copy(
+            merchantManuallyEdited = rawUpdated.merchantManuallyEdited || merchantChanged,
+            categoryManuallyEdited = rawUpdated.categoryManuallyEdited || categoryChanged,
+            transactionTypeManuallyEdited = rawUpdated.transactionTypeManuallyEdited || typeChanged,
+        )
 
         // Delete removed receipts from disk and DB
         for ((index, id) in request.removedReceiptIds.withIndex()) {

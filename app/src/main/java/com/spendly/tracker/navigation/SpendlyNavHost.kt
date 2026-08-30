@@ -236,11 +236,32 @@ fun SpendlyNavHost(
                     },
                     onNavigateToTransactionDetail = { targetTransactionId ->
                         navController.navigate(TransactionDetail(targetTransactionId))
+                    },
+                    onMerchantClick = { merchant ->
+                        navController.navigate(MerchantDetail(merchant)) {
+                            launchSingleTop = true
+                        }
                     }
                 )
             }
         }
         
+        composable<MerchantDetail>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+        ) { backStackEntry ->
+            val args = backStackEntry.toRoute<MerchantDetail>()
+            com.spendly.tracker.presentation.merchant.MerchantDetailScreen(
+                merchant = args.merchant,
+                onNavigateBack = { navController.safePopBackStack() },
+                onViewAllTransactions = { merchant ->
+                    navController.navigate(TransactionsByMerchant(merchant)) { launchSingleTop = true }
+                }
+            )
+        }
+
         composable<AddTransaction>(
             enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
             exitTransition = { fadeOut(tween(200)) },
@@ -621,6 +642,23 @@ fun SpendlyNavHost(
                         launchSingleTop = true
                         popUpTo(Home()) { inclusive = true }
                     }
+                },
+                onNavigateToInsightDetail = { insightId, anchorMonth ->
+                    navController.navigate(InsightDetail(insightId, anchorMonth)) { launchSingleTop = true }
+                }
+            )
+        }
+
+        composable<InsightDetail>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+        ) {
+            com.spendly.tracker.ui.screens.insights.InsightDetailScreen(
+                onBack = { navController.safePopBackStack() },
+                onTransactionClick = { transactionId ->
+                    navController.navigate(TransactionDetail(transactionId)) { launchSingleTop = true }
                 }
             )
         }

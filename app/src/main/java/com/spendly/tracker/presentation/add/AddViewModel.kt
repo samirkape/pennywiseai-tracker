@@ -283,6 +283,7 @@ class AddViewModel @Inject constructor(
                     TransactionType.INVESTMENT -> "Investment"
                     TransactionType.TRANSFER -> when (newTransferKind) {
                         TransferKind.CC_BILL_PAYMENT -> "Credit Card Payment"
+                        TransferKind.SELF_TRANSFER -> ""
                         else -> currentState.category.ifBlank { "Others" }
                     }
                 },
@@ -297,10 +298,10 @@ class AddViewModel @Inject constructor(
 
     fun updateTransferKind(kind: String) {
         _transactionUiState.update { current ->
-            if (kind == TransferKind.CC_BILL_PAYMENT) {
-                current.copy(transferKind = kind, category = "Credit Card Payment")
-            } else {
-                current.copy(transferKind = kind)
+            when (kind) {
+                TransferKind.CC_BILL_PAYMENT -> current.copy(transferKind = kind, category = "Credit Card Payment")
+                TransferKind.SELF_TRANSFER -> current.copy(transferKind = kind, category = "")
+                else -> current.copy(transferKind = kind)
             }
         }
     }

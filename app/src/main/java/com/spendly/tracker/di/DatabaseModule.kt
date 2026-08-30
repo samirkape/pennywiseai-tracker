@@ -1,7 +1,6 @@
 package com.spendly.tracker.di
 
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -40,7 +39,6 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.io.File
 import javax.inject.Singleton
 
 /**
@@ -49,8 +47,6 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
-
-    private const val LEGACY_DATABASE_NAME = "pennywise_database"
 
     /**
      * Provides the singleton instance of SpendlyDatabase.
@@ -63,8 +59,6 @@ object DatabaseModule {
     fun provideSpendlyDatabase(
         @ApplicationContext context: Context
     ): SpendlyDatabase {
-        recoverLegacyDatabaseIfNeeded(context)
-
         val database = Room.databaseBuilder(
             context,
             SpendlyDatabase::class.java,
@@ -94,7 +88,9 @@ object DatabaseModule {
                 SpendlyDatabase.MIGRATION_56_57,
                 SpendlyDatabase.MIGRATION_58_59,
                 SpendlyDatabase.MIGRATION_59_60,
-                SpendlyDatabase.MIGRATION_60_61
+                SpendlyDatabase.MIGRATION_60_61,
+                SpendlyDatabase.MIGRATION_62_63,
+                SpendlyDatabase.MIGRATION_63_64
             )
             .fallbackToDestructiveMigrationOnDowngrade()
 
@@ -110,54 +106,6 @@ object DatabaseModule {
         SpendlyDatabase.setInstance(database)
 
         return database
-    }
-
-    /**
-     * Restores legacy data if a user upgraded from a build that used the old DB filename.
-     * We only replace the current file when it is missing or appears empty.
-     */
-    private fun recoverLegacyDatabaseIfNeeded(context: Context) {
-        val currentDb = context.getDatabasePath(SpendlyDatabase.DATABASE_NAME)
-        val legacyDb = context.getDatabasePath(LEGACY_DATABASE_NAME)
-
-        if (!legacyDb.exists()) return
-
-        val legacyRows = readTransactionCount(legacyDb)
-        if (legacyRows <= 0L) return
-
-        val currentRows = if (currentDb.exists()) readTransactionCount(currentDb) else -1L
-        val shouldRecover = !currentDb.exists() || currentRows == 0L
-        if (!shouldRecover) return
-
-        if (currentDb.exists()) {
-            val backup = File(currentDb.parentFile, "${SpendlyDatabase.DATABASE_NAME}.pre_recovery.bak")
-            currentDb.copyTo(backup, overwrite = true)
-        }
-
-        copyDatabaseFamily(legacyDb, currentDb)
-    }
-
-    private fun copyDatabaseFamily(fromMain: File, toMain: File) {
-        copyOne(fromMain, toMain)
-        copyOne(File(fromMain.absolutePath + "-wal"), File(toMain.absolutePath + "-wal"))
-        copyOne(File(fromMain.absolutePath + "-shm"), File(toMain.absolutePath + "-shm"))
-    }
-
-    private fun copyOne(from: File, to: File) {
-        if (!from.exists()) return
-        to.parentFile?.mkdirs()
-        from.copyTo(to, overwrite = true)
-    }
-
-    private fun readTransactionCount(dbFile: File): Long {
-        if (!dbFile.exists()) return -1L
-        return runCatching {
-            SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                db.rawQuery("SELECT COUNT(*) FROM transactions", null).use { cursor ->
-                    if (cursor.moveToFirst()) cursor.getLong(0) else -1L
-                }
-            }
-        }.getOrDefault(-1L)
     }
 
     /**

@@ -816,10 +816,10 @@ class TransactionDetailViewModel @Inject constructor(
             if (kind == com.spendly.tracker.data.database.entity.TransferKind.SELF_TRANSFER) {
                 _bulkPastCategory.value = false
             }
-            if (kind == com.spendly.tracker.data.database.entity.TransferKind.CC_BILL_PAYMENT) {
-                base.copy(category = "Credit Card Payment")
-            } else {
-                base
+            when (kind) {
+                com.spendly.tracker.data.database.entity.TransferKind.CC_BILL_PAYMENT -> base.copy(category = "Credit Card Payment")
+                com.spendly.tracker.data.database.entity.TransferKind.SELF_TRANSFER -> base.copy(category = "")
+                else -> base
             }
         }
     }
@@ -856,7 +856,9 @@ class TransactionDetailViewModel @Inject constructor(
 
     fun updateDateTime(dateTime: LocalDateTime) {
         _editableTransaction.update { current ->
-            current?.copy(dateTime = dateTime)
+            // Flags this transaction's date as manually set, so the detail screen can
+            // surface that it no longer necessarily matches the original SMS text.
+            current?.copy(dateTime = dateTime, dateManuallyEdited = true)
         }
     }
     

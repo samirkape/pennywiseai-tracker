@@ -18,8 +18,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -27,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -46,6 +49,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
@@ -73,6 +78,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.time.LocalDate
 
 /**
  * Hero spend: period context, amount, trend sparkline, remaining headroom,
@@ -86,6 +92,9 @@ fun HeroSpendCard(
     currentMonthIncome: BigDecimal,
     currentMonthTotal: BigDecimal,
     periodDayLabel: String,
+    paceLabel: String,
+    payPeriodStartEpochDay: Long,
+    payPeriodEndEpochDay: Long,
     availableCurrencies: List<String>,
     isUnifiedMode: Boolean,
     spendingPeriodLabel: String,
@@ -103,16 +112,57 @@ fun HeroSpendCard(
     modifier: Modifier = Modifier,
     blurEffects: Boolean = false,
     hazeState: HazeState = remember { HazeState() },
+    useFixedReferenceColors: Boolean = false,
 ) {
     val view = LocalView.current
-    val isDark = isSystemInDarkTheme()
+    // Effective rendered theme (not the system dark-mode toggle) — the app's own theme
+    // preference can override the system setting, so isSystemInDarkTheme() can disagree
+    // with what's actually on screen (e.g. app forced to dark while system is light).
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     var showOptionsSheet by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val useExternalPeriodSheet = onPeriodChipClick != null
 
-    val accentColor = if (isDark) income_dark else income_light
+    // When rendering the HTML reference redesign, pin the exact hex values from the
+    // approved mockup instead of deriving from theme roles — this card is a fixed,
+    // pixel-matched design, not a theme-adaptive component.
+    val heroContainerColor: Color
+    val heroOnContainerColor: Color
+    val heroMutedColor: Color
+    val progressAccentColor: Color
+    val progressTrackColor: Color
+    val tickColor: Color
+    val heroStatBgColor: Color
+    val heroStatLabelColor: Color
 
-    val containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+    if (useFixedReferenceColors) {
+        heroContainerColor = Color(0xFF4F378B)
+        heroOnContainerColor = Color(0xFFEADDFF)
+        heroMutedColor = Color(0xFFC9B8E8)
+        progressAccentColor = Color(0xFFD0BCFF)
+        progressTrackColor = Color(0xFF3E2E68)
+        tickColor = Color(0xFFEADDFF)
+        heroStatBgColor = Color(0x2E000000)
+        heroStatLabelColor = heroMutedColor
+    } else {
+        // Built by darkening/lightening `primary` (never neutralized), instead of reading
+        // `primaryContainer` directly — AMOLED mode intentionally flattens primary/secondary/
+        // tertiary *Container roles to grays (see Theme.kt), which otherwise makes the hero
+        // card an indistinguishable gray instead of a bold, saturated "hero" surface.
+        val heroBaseColor = MaterialTheme.colorScheme.primary
+        heroContainerColor = if (isDark) {
+            lerp(heroBaseColor, Color.Black, 0.42f)
+        } else {
+            lerp(heroBaseColor, Color.White, 0.72f)
+        }
+        heroOnContainerColor = if (isDark) Color.White else Color(0xFF1C1B1F)
+        heroMutedColor = heroOnContainerColor.copy(alpha = 0.85f)
+        progressAccentColor = MaterialTheme.colorScheme.primary
+        progressTrackColor = heroOnContainerColor.copy(alpha = 0.15f)
+        tickColor = heroOnContainerColor
+        heroStatBgColor = heroOnContainerColor.copy(alpha = 0.12f)
+        heroStatLabelColor = heroOnContainerColor.copy(alpha = 0.75f)
+    }
+    val containerColor = heroContainerColor
     val periodChipText = when {
         spendingPeriodLabel.isNotEmpty() -> spendingPeriodLabel
         else -> stringResource(R.string.period_type_calendar)
@@ -134,6 +184,40 @@ fun HeroSpendCard(
     val trueRemaining = (currentMonthTotal - currentMonthInvestment).coerceAtLeast(BigDecimal.ZERO)
     val remainingFormatted = CurrencyFormatter.formatCurrency(trueRemaining.setScale(0, RoundingMode.HALF_UP), currency)
     val incomeFormatted = CurrencyFormatter.formatCurrency(incomeForProgress.setScale(0, RoundingMode.HALF_UP), currency)
+    val todayEpoch = LocalDate.now().toEpochDay()
+    val hasPeriodRange = payPeriodStartEpochDay >= 0L && payPeriodEndEpochDay >= payPeriodStartEpochDay
+    val elapsedDays = if (hasPeriodRange) {
+        (todayEpoch - payPeriodStartEpochDay + 1).coerceAtLeast(1L)
+    } else {
+        1L
+    }
+    val totalDays = if (hasPeriodRange) {
+        (payPeriodEndEpochDay - payPeriodStartEpochDay + 1).coerceAtLeast(1L)
+    } else {
+        elapsedDays
+    }
+    val remainingDays = if (hasPeriodRange) {
+        (payPeriodEndEpochDay - todayEpoch).toInt().coerceAtLeast(0)
+    } else {
+        0
+    }
+    val projectedMonthEnd = if (currentMonthExpenses > BigDecimal.ZERO) {
+        currentMonthExpenses
+            .multiply(BigDecimal(totalDays))
+            .divide(BigDecimal(elapsedDays), 0, RoundingMode.HALF_UP)
+    } else {
+        BigDecimal.ZERO
+    }
+    val projectedMonthEndText = CurrencyFormatter.formatCurrency(projectedMonthEnd, currency)
+    val dailyBudgetLeft = if (trueRemaining > BigDecimal.ZERO && remainingDays > 0) {
+        trueRemaining.divide(BigDecimal(remainingDays), 0, RoundingMode.HALF_UP)
+    } else {
+        null
+    }
+    val dailyBudgetLeftText = dailyBudgetLeft?.let { "${CurrencyFormatter.formatCurrency(it, currency)}/day" } ?: "—"
+    val paceDisplay = paceLabel.trim().let {
+        if (it.isEmpty()) it else it.replaceFirstChar { ch -> ch.titlecase() }
+    }
 
 
     SpendlyCardV2(
@@ -164,32 +248,20 @@ fun HeroSpendCard(
             view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
             if (onSpendSoFarClick != null) onSpendSoFarClick() else onNavigateToTransactions()
         },
+        border = BorderStroke(0.dp, Color.Transparent),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            containerColor = heroContainerColor
         ),
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.Start,
         ) {
-            // ── Eyebrow: "SPENDING" section label (left) + period date ▼ + status pill (right) ──
+            // ── Top row: period range (left) + day progress (right) ───────────────────────────
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Left: fixed section label — same pattern as "THIS WEEK", "LAST 7 DAYS"
-                Text(
-                    text = stringResource(R.string.home_spent_so_far).uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.textMuted,
-                    letterSpacing = 0.66.sp,
-                )
-                // Right: tappable period date range + optional status pill
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.clickable {
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
                         view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                         if (useExternalPeriodSheet) {
                             onPeriodChipClick!!.invoke()
@@ -197,19 +269,37 @@ fun HeroSpendCard(
                             showOptionsSheet = true
                         }
                     },
-                ) {
-                    Text(
-                        text = periodChipText.uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.textMuted,
-                        letterSpacing = 0.66.sp,
-                    )
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.textMuted,
-                        modifier = Modifier.size(14.dp),
-                    )
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = periodChipText,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Normal,
+                    ),
+                    color = heroMutedColor,
+                    letterSpacing = 0.sp,
+                )
+                if (periodDayLabel.isNotBlank()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = periodDayLabel,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                            ),
+                            color = heroMutedColor,
+                            letterSpacing = 0.sp,
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = heroMutedColor,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                 }
             }
 
@@ -235,11 +325,13 @@ fun HeroSpendCard(
                 AnimatedCurrencyText(
                     text = CurrencyFormatter.formatCurrency(currentMonthExpenses.setScale(0, RoundingMode.HALF_UP), currency),
                     style = MaterialTheme.typography.headlineLarge.copy(
+                        fontSize = 32.sp,
+                        lineHeight = 40.sp,
                         letterSpacing = (-0.25).sp,
                     ),
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.Medium,
                     brush = null,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = heroOnContainerColor,
                 )
                 if (incomeForProgress > BigDecimal.ZERO) {
                     Spacer(modifier = Modifier.width(6.dp))
@@ -253,19 +345,12 @@ fun HeroSpendCard(
                             .padding(bottom = 4.dp),
                     ) {
                         Text(
-                            text = "of $incomeFormatted",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.textMuted,
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = "How is this calculated?",
-                            tint = MaterialTheme.colorScheme.textMuted.copy(alpha = 0.6f),
-                            modifier = Modifier
-                                .size(13.dp)
-                                .padding(bottom = 1.dp)
-                                .align(Alignment.Bottom),
+                            text = "spent of $incomeFormatted",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Normal,
+                            ),
+                            color = heroMutedColor,
                         )
                     }
                 }
@@ -273,7 +358,16 @@ fun HeroSpendCard(
 
             Spacer(modifier = Modifier.height(2.dp))
 
-            // ── Progress bar (4dp, teal accent) ─────────────────────────────
+            val projectedFraction = if (incomeForProgress > BigDecimal.ZERO) {
+                projectedMonthEnd.divide(incomeForProgress, 4, RoundingMode.HALF_UP)
+                    .toFloat().coerceIn(0f, 1f)
+            } else {
+                0f
+            }
+            val spentPercent = (spendFraction * 100).toInt()
+            val projectedPercent = (projectedFraction * 100).toInt()
+
+            // ── Progress bar with projection tick ─────────────────────────
             Surface(
                 onClick = {
                     view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
@@ -282,38 +376,126 @@ fun HeroSpendCard(
                 shape = RoundedCornerShape(Dimensions.CornerRadius.medium),
                 color = Color.Transparent,
             ) {
-                SpendProgressBar(
-                    expenseFraction = spendFraction,
-                    investmentFraction = investmentFraction,
-                    accentColor = accentColor,
-                    trackHeightDp = 4,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    SpendProgressBar(
+                        expenseFraction = spendFraction,
+                        investmentFraction = investmentFraction,
+                        accentColor = progressAccentColor,
+                        trackColor = progressTrackColor,
+                        trackHeightDp = 8,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (projectedFraction > 0f && projectedFraction <= 1f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(projectedFraction)
+                                .height(8.dp)
+                                .align(Alignment.CenterStart),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .width(2.dp)
+                                    .height(16.dp)
+                                    .background(tickColor, RoundedCornerShape(1.dp))
+                            )
+                        }
+                    }
+                }
             }
 
-            Spacer(modifier = Modifier.height(Spacing.xs))
+            // ── Track labels: spent% (left) + projected% (right) ──
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "$spentPercent% spent",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    color = progressAccentColor,
+                )
+                if (projectedFraction > 0f && projectedFraction <= 1f) {
+                    Text(
+                        text = "\u2191$projectedPercent%",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Normal,
+                        ),
+                        color = heroMutedColor,
+                    )
+                }
+            }
 
-            // ── Footer: day progress (left) + remaining (right) ──────────────
+            Spacer(modifier = Modifier.height(Spacing.sm))
+
+            // ── Status row: On track (left) + remaining (right) ───────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (periodDayLabel.isNotEmpty()) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = heroOnContainerColor,
+                        modifier = Modifier.size(15.dp),
+                    )
                     Text(
-                        text = periodDayLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.textMuted,
+                        text = paceDisplay.ifEmpty { "On track" },
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Normal,
+                        ),
+                        color = heroOnContainerColor,
                     )
                 }
                 if (incomeForProgress > BigDecimal.ZERO) {
                     Text(
-                        text = "$remainingFormatted remaining",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = accentColor,
+                        text = "$remainingFormatted left",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                        ),
+                        color = heroOnContainerColor,
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.sm))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+            ) {
+                HeroMoreStatCell(
+                    label = stringResource(R.string.home_hero_projected_month_end),
+                    value = projectedMonthEndText,
+                    subLabel = null,
+                    onClick = onNavigateToTransactions,
+                    containerColor = heroStatBgColor,
+                    labelColor = heroStatLabelColor,
+                    valueColor = heroOnContainerColor,
+                    subLabelColor = heroOnContainerColor.copy(alpha = 0.95f),
+                    modifier = Modifier.weight(1f),
+                )
+                HeroMoreStatCell(
+                    label = stringResource(R.string.home_hero_daily_budget_left),
+                    value = dailyBudgetLeftText,
+                    subLabel = null,
+                    onClick = onNavigateToBudgets,
+                    containerColor = heroStatBgColor,
+                    labelColor = heroStatLabelColor,
+                    valueColor = heroOnContainerColor,
+                    subLabelColor = heroOnContainerColor.copy(alpha = 0.95f),
+                    modifier = Modifier.weight(1f),
+                )
             }
 
         }
@@ -479,6 +661,7 @@ internal fun SpendProgressBar(
     expenseFraction: Float,
     investmentFraction: Float = 0f,
     accentColor: Color? = null,
+    trackColor: Color? = null,
     trackHeightDp: Int = 6,
     modifier: Modifier = Modifier,
 ) {
@@ -486,7 +669,7 @@ internal fun SpendProgressBar(
     val resolvedAccent = accentColor ?: (if (isDark) income_dark else income_light)
     val expenseColor = resolvedAccent
     val investmentColor = resolvedAccent.copy(alpha = 0.5f)
-    val trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+    val resolvedTrackColor = trackColor ?: MaterialTheme.colorScheme.surfaceContainerHighest
     val totalFraction = (expenseFraction + investmentFraction).coerceIn(0f, 1f)
 
     Box(
@@ -498,7 +681,7 @@ internal fun SpendProgressBar(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(trackColor),
+                .background(resolvedTrackColor),
         )
         // Investment segment — drawn first (fills from 0 to total), shows as green
         if (totalFraction > 0f) {
@@ -562,6 +745,10 @@ private fun HeroMoreStatCell(
     value: String,
     subLabel: String?,
     onClick: (() -> Unit)?,
+    containerColor: Color,
+    labelColor: Color,
+    valueColor: Color,
+    subLabelColor: Color,
     modifier: Modifier = Modifier,
 ) {
     val view = LocalView.current
@@ -572,7 +759,7 @@ private fun HeroMoreStatCell(
         },
         modifier = modifier,
         shape = RoundedCornerShape(Dimensions.CornerRadius.small),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
+        color = containerColor,
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
@@ -580,21 +767,29 @@ private fun HeroMoreStatCell(
         ) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Normal,
+                ),
+                color = labelColor,
             )
             Text(
                 text = value,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                ),
+                color = valueColor,
                 maxLines = 1,
             )
             if (!subLabel.isNullOrEmpty()) {
                 Text(
                     text = subLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Normal,
+                    ),
+                    color = subLabelColor,
                     maxLines = 1,
                 )
             }

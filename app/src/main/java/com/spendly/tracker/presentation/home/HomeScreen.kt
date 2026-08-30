@@ -32,6 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material.icons.outlined.Savings
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
@@ -46,6 +47,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -62,9 +65,12 @@ import kotlinx.coroutines.delay
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.spendly.tracker.R
+import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.database.entity.TransactionType
 import com.spendly.tracker.ui.components.SpendlyCard
+import com.spendly.tracker.ui.components.BrandIcon
 import com.spendly.tracker.ui.components.cards.SpendlyCardV2
+import com.spendly.tracker.ui.components.cards.HeatmapWidget
 import com.spendly.tracker.ui.components.SpendlyEmptyState
 import com.spendly.tracker.ui.components.PayPeriodSalarySuggestionDialog
 import com.spendly.tracker.ui.components.SmsParsingProgressDialog
@@ -96,6 +102,8 @@ import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 /**
  * Primary dashboard: hero balances and charts, date-scoped feed, and recent activity.
@@ -132,6 +140,7 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val isPremium by viewModel.isPremium.collectAsState()
+    val useHtmlReferenceLayout = Constants.Features.HOME_HTML_REFERENCE_LAYOUT
     val transactionsPeriod = defaultTimePeriodNavParam(uiState.useFinancialMonth)
     val deletedTransaction by viewModel.deletedTransaction.collectAsState()
     val smsScanWorkInfo by viewModel.smsScanWorkInfo.collectAsState()
@@ -239,8 +248,9 @@ fun HomeScreen(
             snackbarHostState.currentSnackbarData?.dismiss()
         }
     }
-
+    
     val spendTimelineSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val hasMeaningfulLast7DaysSpend = uiState.last7DaysSpend.any { it.second > BigDecimal.ZERO }
 
     uiState.payPeriodSuggestion?.let { suggestion ->
         PayPeriodSalarySuggestionDialog(
@@ -267,32 +277,49 @@ fun HomeScreen(
                 hazeState = hazeState,
                 blurEffects = blurEffects,
                 actionContent = {
-                    val containerColor = MaterialTheme.colorScheme.surfaceContainer
-                    Box(
-                        modifier = Modifier
-                            .padding(end = 16.dp)
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(
-                                color = if (blurEffects) containerColor.copy(0.5f) else containerColor,
-                                shape = CircleShape,
+                    if (useHtmlReferenceLayout) {
+                        IconButton(
+                            onClick = {
+                                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                onNavigateToTransactionsWithSearch(transactionsPeriod)
+                            },
+                            modifier = Modifier.padding(end = 12.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = stringResource(R.string.home_search),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
                             )
-                            .clickable(
-                                onClick = {
-                                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                                    onNavigateToTransactionsWithSearch(transactionsPeriod)
-                                },
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = stringResource(R.string.home_search),
-                            tint = MaterialTheme.colorScheme.inverseSurface,
-                            modifier = Modifier.size(Dimensions.Icon.medium),
-                        )
+                        }
+                    } else {
+                        val containerColor = MaterialTheme.colorScheme.surfaceContainer
+                        Box(
+                            modifier = Modifier
+                                .padding(end = 16.dp)
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    color = if (blurEffects) containerColor.copy(0.5f) else containerColor,
+                                    shape = CircleShape,
+                                )
+                                .clickable(
+                                    onClick = {
+                                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                        onNavigateToTransactionsWithSearch(transactionsPeriod)
+                                    },
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = stringResource(R.string.home_search),
+                                tint = MaterialTheme.colorScheme.inverseSurface,
+                                modifier = Modifier.size(Dimensions.Icon.medium),
+                            )
+                        }
                     }
                 }
             )
@@ -355,12 +382,16 @@ fun HomeScreen(
                                 modifier = Modifier.fillMaxWidth(),
                             blurEffects = blurEffects,
                             hazeState = hazeStateHero,
+                            useFixedReferenceColors = useHtmlReferenceLayout,
                             currency = uiState.selectedCurrency,
                             currentMonthExpenses = uiState.currentMonthExpenses,
                             currentMonthIncome = uiState.currentMonthIncome,
                             currentMonthTotal = uiState.currentMonthTotal,
                             currentMonthInvestment = uiState.currentMonthInvestment,
                             periodDayLabel = uiState.periodDayLabel,
+                            paceLabel = uiState.paceLabel,
+                            payPeriodStartEpochDay = uiState.payPeriodStartEpochDay,
+                            payPeriodEndEpochDay = uiState.payPeriodEndEpochDay,
                             availableCurrencies = uiState.availableCurrencies,
                             isUnifiedMode = uiState.isUnifiedMode,
                             spendingPeriodLabel = uiState.spendingPeriodLabel,
@@ -388,35 +419,168 @@ fun HomeScreen(
                 }
             }
 
-            // ── Section 2: This week snapshot ────────────────────────────────
-            item {
-                HomeThisWeekCard(
-                    thisWeekSpend = uiState.thisWeekSpend,
-                    lastWeekSpend = uiState.lastWeekSpend,
-                    currency = uiState.selectedCurrency,
-                    onClick = {
-                        val weekStart = LocalDate.now().with(DayOfWeek.MONDAY)
-                        val weekEnd = weekStart.plusDays(6)
-                        onNavigateToThisWeekTransactions(weekStart.toEpochDay(), weekEnd.toEpochDay())
-                    },
-                    modifier = Modifier.padding(horizontal = Dimensions.Padding.content)
-                )
+            // ── Section 2: Recent transactions preview (redesign parity) ──────
+            if (useHtmlReferenceLayout && !uiState.isLoading && uiState.globalRecentItems.isNotEmpty()) {
+                item {
+                    val visible = remember { mutableStateOf(hasAnimated) }
+                    LaunchedEffect(Unit) {
+                        if (!hasAnimated) { delay(10); visible.value = true }
+                    }
+                    AnimatedVisibility(
+                        visible = visible.value,
+                        enter = fadeIn(tween(300)) + slideInVertically(
+                            initialOffsetY = { slideOffsetPx },
+                            animationSpec = tween(300)
+                        )
+                    ) {
+                        val previewItems = remember(
+                            uiState.globalRecentItems,
+                            uiState.isUnifiedMode,
+                            uiState.selectedCurrency,
+                        ) {
+                            buildHomeReferencePreviewItems(
+                                recentItems = uiState.globalRecentItems,
+                                isUnifiedMode = uiState.isUnifiedMode,
+                                selectedCurrency = uiState.selectedCurrency,
+                            )
+                        }
+
+                        if (previewItems.isNotEmpty()) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
+                                verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.home_recent_transactions),
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Normal,
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                )
+                                SpendlyCardV2(contentPadding = 0.dp) {
+                                    previewItems.forEachIndexed { index, item ->
+                                        HomeReferenceRecentRow(
+                                            item = item,
+                                            onClick = { onTransactionClick(item.id) },
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                        if (index < previewItems.size - 1) {
+                                            HorizontalDivider(
+                                                modifier = Modifier.padding(horizontal = 12.dp),
+                                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+                                                thickness = 0.5.dp,
+                                            )
+                                        }
+                                    }
+                                }
+                                TextButton(
+                                    onClick = { onNavigateToTransactions(transactionsPeriod) },
+                                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.home_view_all_transactions),
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Medium
+                                        ),
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.ChevronRight,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
-            // ── Section 3: Last 7 days bar chart ─────────────────────────────
-            if (uiState.last7DaysSpend.isNotEmpty()) {
+            if (!useHtmlReferenceLayout) {
+                // ── Section 2: This week snapshot ────────────────────────────────
                 item {
-                    HomeLast7DaysCard(
-                        last7DaysSpend = uiState.last7DaysSpend,
+                    HomeThisWeekCard(
+                        thisWeekSpend = uiState.thisWeekSpend,
+                        lastWeekSpend = uiState.lastWeekSpend,
                         currency = uiState.selectedCurrency,
-                        onClick = onNavigateToAnalytics,
+                        onClick = {
+                            val weekStart = LocalDate.now().with(DayOfWeek.MONDAY)
+                            val weekEnd = weekStart.plusDays(6)
+                            onNavigateToThisWeekTransactions(weekStart.toEpochDay(), weekEnd.toEpochDay())
+                        },
                         modifier = Modifier.padding(horizontal = Dimensions.Padding.content)
                     )
                 }
             }
 
-            // ── Section 5: Smart Insights (after hero/chart, before goals) ──────
-            if (uiState.insights.isNotEmpty()) {
+            // ── Section 3: Last 7 days bar chart ─────────────────────────────
+            if (uiState.last7DaysSpend.isNotEmpty() && (!useHtmlReferenceLayout || hasMeaningfulLast7DaysSpend)) {
+                item {
+                    if (useHtmlReferenceLayout) {
+                        HomeLast7DaysReferenceCard(
+                            last7DaysSpend = uiState.last7DaysSpend,
+                            currency = uiState.selectedCurrency,
+                            onClick = onNavigateToAnalytics,
+                            onDayClick = { date ->
+                                onNavigateToThisWeekTransactions(date.toEpochDay(), date.toEpochDay())
+                            },
+                            modifier = Modifier.padding(horizontal = Dimensions.Padding.content)
+                        )
+                    } else {
+                        HomeLast7DaysCard(
+                            last7DaysSpend = uiState.last7DaysSpend,
+                            currency = uiState.selectedCurrency,
+                            onClick = onNavigateToAnalytics,
+                            modifier = Modifier.padding(horizontal = Dimensions.Padding.content)
+                        )
+                    }
+                }
+            }
+
+            // ── Section 4: Activity heatmap preview ──────────────────────────
+            if (uiState.transactionHeatmap.isNotEmpty()) {
+                item {
+                    HeatmapWidget(
+                        transactionHeatmap = uiState.transactionHeatmap,
+                        currency = uiState.selectedCurrency,
+                        onClick = onNavigateToAnalytics,
+                        onDayLongClick = { date ->
+                            onNavigateToThisWeekTransactions(date.toEpochDay(), date.toEpochDay())
+                        },
+                        modifier = Modifier.padding(horizontal = Dimensions.Padding.content)
+                    )
+                }
+            }
+
+            // ── Section 5: Insight card (reference) / Smart Insights (default) ──────
+            if (useHtmlReferenceLayout && uiState.insights.isNotEmpty()) {
+                item {
+                    val visible = remember { mutableStateOf(hasAnimated) }
+                    LaunchedEffect(Unit) {
+                        if (!hasAnimated) { delay(10); visible.value = true }
+                    }
+                    AnimatedVisibility(
+                        visible = visible.value,
+                        enter = fadeIn(tween(300)) + slideInVertically(
+                            initialOffsetY = { slideOffsetPx },
+                            animationSpec = tween(300)
+                        )
+                    ) {
+                        HomeReferenceInsightCard(
+                            insight = uiState.insights.first(),
+                            onAction = onNavigateToAnalytics,
+                            onViewAll = onNavigateToAnalytics,
+                            modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
+                        )
+                    }
+                }
+            }
+            if (!useHtmlReferenceLayout && uiState.insights.isNotEmpty()) {
                 item {
                     val visible = remember { mutableStateOf(hasAnimated) }
                     LaunchedEffect(Unit) {
@@ -446,50 +610,37 @@ fun HomeScreen(
 
             // ── Section 6: Subscriptions + Goal row ──────────────────────────
             item {
-                HomeSubscriptionsGoalRow(
-                    activeSubscriptionCount = uiState.activeSubscriptionCount,
-                    totalSubscriptionAmount = uiState.totalSubscriptionAmount,
-                    upcomingSubscriptions = uiState.upcomingSubscriptions,
-                    currency = uiState.selectedCurrency,
-                    activeGoals = uiState.activeGoals,
-                    onNavigateToSubscriptions = onNavigateToSubscriptions,
-                    onNavigateToGoals = onNavigateToGoals,
-                    modifier = Modifier.padding(horizontal = Dimensions.Padding.content)
-                )
-            }
-
-
-            // 2. Feed header — day zone (20ms)
-            item {
-                val visible = remember { mutableStateOf(hasAnimated) }
-                LaunchedEffect(Unit) {
-                    if (!hasAnimated) { delay(20); visible.value = true }
-                }
-                AnimatedVisibility(
-                    visible = visible.value,
-                    enter = fadeIn(tween(300)) + slideInVertically(
-                        initialOffsetY = { slideOffsetPx },
-                        animationSpec = tween(300)
+                if (useHtmlReferenceLayout) {
+                    HomeSubscriptionsGoalRowReference(
+                        activeSubscriptionCount = uiState.activeSubscriptionCount,
+                        totalSubscriptionAmount = uiState.totalSubscriptionAmount,
+                        upcomingSubscriptions = uiState.upcomingSubscriptions,
+                        currency = uiState.selectedCurrency,
+                        activeGoals = uiState.activeGoals,
+                        onNavigateToSubscriptions = onNavigateToSubscriptions,
+                        onNavigateToGoals = onNavigateToGoals,
+                        modifier = Modifier.padding(horizontal = Dimensions.Padding.content)
                     )
-                ) {
-                    HomeFeedDateNavigator(
-                        uiState = uiState,
-                        transactionsPeriod = transactionsPeriod,
-                        onNavigateToTransactions = onNavigateToTransactions,
-                        onNavigateDateBy = viewModel::navigateDateBy,
-                        onNavigateToDate = viewModel::navigateToDate,
-                        getDailyExpensesForMonth = viewModel::getDailyExpensesForMonth,
-                        getDailyExpensesBetween = viewModel::getDailyExpensesBetween,
-                        modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
+                } else {
+                    HomeSubscriptionsGoalRow(
+                        activeSubscriptionCount = uiState.activeSubscriptionCount,
+                        totalSubscriptionAmount = uiState.totalSubscriptionAmount,
+                        upcomingSubscriptions = uiState.upcomingSubscriptions,
+                        currency = uiState.selectedCurrency,
+                        activeGoals = uiState.activeGoals,
+                        onNavigateToSubscriptions = onNavigateToSubscriptions,
+                        onNavigateToGoals = onNavigateToGoals,
+                        modifier = Modifier.padding(horizontal = Dimensions.Padding.content)
                     )
                 }
             }
 
-            if (uiState.isLoading) {
+            if (!useHtmlReferenceLayout) {
+                // 2. Feed header — day zone (20ms)
                 item {
                     val visible = remember { mutableStateOf(hasAnimated) }
                     LaunchedEffect(Unit) {
-                        if (!hasAnimated) { delay(100); visible.value = true }
+                        if (!hasAnimated) { delay(20); visible.value = true }
                     }
                     AnimatedVisibility(
                         visible = visible.value,
@@ -498,109 +649,135 @@ fun HomeScreen(
                             animationSpec = tween(300)
                         )
                     ) {
-                        Column(
+                        HomeFeedDateNavigator(
+                            uiState = uiState,
+                            transactionsPeriod = transactionsPeriod,
+                            onNavigateToTransactions = onNavigateToTransactions,
+                            onNavigateDateBy = viewModel::navigateDateBy,
+                            onNavigateToDate = viewModel::navigateToDate,
+                            getDailyExpensesForMonth = viewModel::getDailyExpensesForMonth,
+                            getDailyExpensesBetween = viewModel::getDailyExpensesBetween,
                             modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
-                            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+                        )
+                    }
+                }
+                if (uiState.isLoading) {
+                    item {
+                        val visible = remember { mutableStateOf(hasAnimated) }
+                        LaunchedEffect(Unit) {
+                            if (!hasAnimated) { delay(100); visible.value = true }
+                        }
+                        AnimatedVisibility(
+                            visible = visible.value,
+                            enter = fadeIn(tween(300)) + slideInVertically(
+                                initialOffsetY = { slideOffsetPx },
+                                animationSpec = tween(300)
+                            )
                         ) {
-                            repeat(5) {
-                                TransactionItemSkeleton()
+                            Column(
+                                modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
+                                verticalArrangement = Arrangement.spacedBy(Spacing.md)
+                            ) {
+                                repeat(5) {
+                                    TransactionItemSkeleton()
+                                }
                             }
                         }
                     }
-                }
-            } else if (uiState.recentItems.isEmpty()) {
-                item {
-                    val visible = remember { mutableStateOf(hasAnimated) }
-                    LaunchedEffect(Unit) {
-                        if (!hasAnimated) { delay(100); visible.value = true }
-                    }
-                    AnimatedVisibility(
-                        visible = visible.value,
-                        enter = fadeIn(tween(300)) + slideInVertically(
-                            initialOffsetY = { slideOffsetPx },
-                            animationSpec = tween(300)
-                        )
-                    ) {
-                        SpendlyEmptyState(
-                            icon = Icons.Default.Sync,
-                            headline = stringResource(R.string.home_feed_empty_today_headline),
-                            description = stringResource(R.string.home_feed_empty_today_description),
-                            actionLabel = "Scan Now",
-                            onAction = { viewModel.scanSmsMessages() },
-                            modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
-                            ghostContent = {
-                                Column(
-                                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-                                ) {
-                                    repeat(3) {
-                                        TransactionItemSkeleton()
+                } else if (uiState.recentItems.isEmpty()) {
+                    item {
+                        val visible = remember { mutableStateOf(hasAnimated) }
+                        LaunchedEffect(Unit) {
+                            if (!hasAnimated) { delay(100); visible.value = true }
+                        }
+                        AnimatedVisibility(
+                            visible = visible.value,
+                            enter = fadeIn(tween(300)) + slideInVertically(
+                                initialOffsetY = { slideOffsetPx },
+                                animationSpec = tween(300)
+                            )
+                        ) {
+                            SpendlyEmptyState(
+                                icon = Icons.Default.Sync,
+                                headline = stringResource(R.string.home_feed_empty_today_headline),
+                                description = stringResource(R.string.home_feed_empty_today_description),
+                                actionLabel = "Scan Now",
+                                onAction = { viewModel.scanSmsMessages() },
+                                modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
+                                ghostContent = {
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                                    ) {
+                                        repeat(3) {
+                                            TransactionItemSkeleton()
+                                        }
                                     }
                                 }
-                            }
-                        )
-                    }
-                }
-            } else {
-                item {
-                    val visible = remember { mutableStateOf(hasAnimated) }
-                    LaunchedEffect(Unit) {
-                        if (!hasAnimated) { delay(100); visible.value = true }
-                    }
-                    AnimatedVisibility(
-                        visible = visible.value,
-                        enter = fadeIn(tween(300)) + slideInVertically(
-                            initialOffsetY = { slideOffsetPx },
-                            animationSpec = tween(300)
-                        )
-                    ) {
-                        val profileAccountKeys = remember(uiState.accountBalances) {
-                            buildProfileAccountKeys(uiState.accountBalances)
+                            )
                         }
-                        // Grouped feed card — all transactions in a single card with dividers
-                        com.spendly.tracker.ui.components.cards.SpendlyCardV2(
-                            modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
-                            contentPadding = 0.dp
+                    }
+                } else {
+                    item {
+                        val visible = remember { mutableStateOf(hasAnimated) }
+                        LaunchedEffect(Unit) {
+                            if (!hasAnimated) { delay(100); visible.value = true }
+                        }
+                        AnimatedVisibility(
+                            visible = visible.value,
+                            enter = fadeIn(tween(300)) + slideInVertically(
+                                initialOffsetY = { slideOffsetPx },
+                                animationSpec = tween(300)
+                            )
                         ) {
-                            uiState.recentItems.forEachIndexed { index, item ->
-                                when (item) {
-                                    is HomeRecentItem.SingleTransaction -> TransactionItem(
-                                        transaction = item.transaction,
-                                        convertedAmount = item.convertedAmount,
-                                        displayCurrency = if (uiState.isUnifiedMode) {
-                                            uiState.selectedCurrency
-                                        } else {
-                                            null
-                                        },
-                                        profileAccountKeys = profileAccountKeys,
-                                        flat = true,
-                                        categoryForIconFallback = item.transaction.category,
-                                        categoryIconKey = item.categoryIconKey,
-                                        onClick = { onTransactionClick(item.transaction.id) },
-                                        onExcludeToggle = {
-                                            viewModel.toggleExcludedFromTracking(item.transaction)
-                                        },
-                                        onDelete = { viewModel.deleteTransaction(item.transaction) },
-                                    )
-                                    is HomeRecentItem.GroupItem -> GroupCard(
-                                        group = item.group,
-                                        transactions = item.transactions,
-                                        convertedAmounts = item.convertedAmounts,
-                                        displayCurrency = if (uiState.isUnifiedMode) {
-                                            uiState.selectedCurrency
-                                        } else {
-                                            null
-                                        },
-                                        flat = true,
-                                        useCategoryIconFallback = true,
-                                        onClick = { onGroupClick(item.group.id) },
-                                    )
-                                }
-                                if (index < uiState.recentItems.size - 1) {
-                                    HorizontalDivider(
-                                        modifier = Modifier.padding(horizontal = 16.dp),
-                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                                        thickness = 0.5.dp,
-                                    )
+                            val profileAccountKeys = remember(uiState.accountBalances) {
+                                buildProfileAccountKeys(uiState.accountBalances)
+                            }
+                            // Grouped feed card — full selected-day feed with dividers
+                            com.spendly.tracker.ui.components.cards.SpendlyCardV2(
+                                modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
+                                contentPadding = 0.dp
+                            ) {
+                                uiState.recentItems.forEachIndexed { index, item ->
+                                    when (item) {
+                                        is HomeRecentItem.SingleTransaction -> TransactionItem(
+                                            transaction = item.transaction,
+                                            convertedAmount = item.convertedAmount,
+                                            displayCurrency = if (uiState.isUnifiedMode) {
+                                                uiState.selectedCurrency
+                                            } else {
+                                                null
+                                            },
+                                            profileAccountKeys = profileAccountKeys,
+                                            flat = true,
+                                            categoryForIconFallback = item.transaction.category,
+                                            categoryIconKey = item.categoryIconKey,
+                                            onClick = { onTransactionClick(item.transaction.id) },
+                                            onExcludeToggle = {
+                                                viewModel.toggleExcludedFromTracking(item.transaction)
+                                            },
+                                            onDelete = { viewModel.deleteTransaction(item.transaction) },
+                                        )
+                                        is HomeRecentItem.GroupItem -> GroupCard(
+                                            group = item.group,
+                                            transactions = item.transactions,
+                                            convertedAmounts = item.convertedAmounts,
+                                            displayCurrency = if (uiState.isUnifiedMode) {
+                                                uiState.selectedCurrency
+                                            } else {
+                                                null
+                                            },
+                                            flat = true,
+                                            useCategoryIconFallback = true,
+                                            onClick = { onGroupClick(item.group.id) },
+                                        )
+                                    }
+                                    if (index < uiState.recentItems.size - 1) {
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(horizontal = 16.dp),
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                                            thickness = 0.5.dp,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -744,8 +921,9 @@ fun HomeScreen(
                 },
                 text = {
                     Text(
-                        "This will reprocess all SMS messages from scratch. " +
-                        "Use this to fix issues caused by updated bank parsers.\n\n" +
+                        "This will reprocess all SMS messages, including ones already imported, " +
+                        "and fix any that were parsed incorrectly. Your manual edits " +
+                        "(renamed merchants, categories, notes) are preserved.\n\n" +
                         "This may take a few seconds depending on your message history."
                     )
                 },
@@ -1058,7 +1236,7 @@ private fun DayDotTrack(
                             java.util.Locale.getDefault(),
                         ),
                         style = MaterialTheme.typography.labelSmall,
-                        fontSize = 9.sp,
+                        fontSize = 12.sp,
                         color = if (isSelected) MaterialTheme.colorScheme.onSurface
                         else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
@@ -1078,7 +1256,7 @@ private fun DayDotTrack(
                     Text(
                         text = date.dayOfMonth.toString(),
                         style = MaterialTheme.typography.labelSmall,
-                        fontSize = if (isSelected) 11.sp else 10.sp,
+                        fontSize = if (isSelected) 13.sp else 12.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                         color = if (isSelected) MaterialTheme.colorScheme.onSurface
                         else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
@@ -1139,14 +1317,14 @@ private fun DayNumberStrip(
                         java.time.format.TextStyle.NARROW,
                         java.util.Locale.getDefault(),
                     ),
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (isSelected) MaterialTheme.colorScheme.onSurfaceVariant
                     else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
                 )
                 Text(
                     text = date.dayOfMonth.toString(),
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = if (isSelected) 13.sp else 11.sp),
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = if (isSelected) 14.sp else 12.sp),
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                     color = if (isSelected) MaterialTheme.colorScheme.onSurface
                     else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
@@ -1466,7 +1644,7 @@ private fun CalendarBottomSheet(
                                         text = CurrencyFormatter.formatAbbreviated(
                                             expense!!.toDouble(), selectedCurrency
                                         ),
-                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
                                         color = expenseColor.copy(alpha = if (isSelected) 0.85f else 1f),
                                         textAlign = TextAlign.Center,
                                         maxLines = 1
@@ -1559,3 +1737,228 @@ private fun HomeGoalsSummaryCard(
     }
 }
 
+private data class HomeReferencePreviewItem(
+    val id: Long,
+    val merchantName: String,
+    val category: String,
+    val categoryIconKey: String?,
+    val dateTime: LocalDateTime,
+    val amount: BigDecimal,
+    val currency: String,
+    val transactionType: TransactionType,
+)
+
+private fun buildHomeReferencePreviewItems(
+    recentItems: List<HomeRecentItem>,
+    isUnifiedMode: Boolean,
+    selectedCurrency: String,
+): List<HomeReferencePreviewItem> {
+    val flattened = buildList {
+        recentItems.forEach { item ->
+            when (item) {
+                is HomeRecentItem.SingleTransaction -> {
+                    val tx = item.transaction
+                    add(
+                        HomeReferencePreviewItem(
+                            id = tx.id,
+                            merchantName = tx.merchantName,
+                            category = tx.category,
+                            categoryIconKey = item.categoryIconKey,
+                            dateTime = tx.dateTime,
+                            amount = if (isUnifiedMode) item.convertedAmount ?: tx.amount else tx.amount,
+                            currency = if (isUnifiedMode) selectedCurrency else tx.currency,
+                            transactionType = tx.transactionType,
+                        )
+                    )
+                }
+                is HomeRecentItem.GroupItem -> {
+                    item.transactions.forEach { tx ->
+                        add(
+                            HomeReferencePreviewItem(
+                                id = tx.id,
+                                merchantName = tx.merchantName,
+                                category = tx.category,
+                                categoryIconKey = null,
+                                dateTime = tx.dateTime,
+                                amount = if (isUnifiedMode) item.convertedAmounts[tx.id] ?: tx.amount else tx.amount,
+                                currency = if (isUnifiedMode) selectedCurrency else tx.currency,
+                                transactionType = tx.transactionType,
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    return flattened
+        .filter { it.transactionType != TransactionType.INCOME }
+        .sortedByDescending { it.dateTime }
+        .take(2)
+}
+
+@Composable
+private fun HomeReferenceRecentRow(
+    item: HomeReferencePreviewItem,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val dateLabel = remember(item.dateTime) {
+        val date = item.dateTime.toLocalDate()
+        val today = LocalDate.now()
+        val prefix = when (date) {
+            today -> "Today"
+            today.minusDays(1) -> "Yesterday"
+            else -> date.format(DateTimeFormatter.ofPattern("MMM d"))
+        }
+        "$prefix, ${item.dateTime.format(DateTimeFormatter.ofPattern("h:mm a"))}"
+    }
+    val isExpenseLike = item.transactionType == TransactionType.EXPENSE ||
+        item.transactionType == TransactionType.CREDIT ||
+        item.transactionType == TransactionType.INVESTMENT
+    val amountText = remember(item.amount, item.currency, isExpenseLike) {
+        val absAmount = item.amount.abs()
+        val formatted = CurrencyFormatter.formatCurrency(absAmount, item.currency)
+        if (isExpenseLike) "-$formatted" else formatted
+    }
+
+    Row(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BrandIcon(
+                merchantName = item.merchantName,
+                categoryOverride = item.category,
+                iconKey = item.categoryIconKey,
+                size = 36.dp,
+                showBackground = true,
+            )
+            Column {
+                Text(
+                    text = item.merchantName,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1
+                )
+                Text(
+                    text = dateLabel,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Text(
+            text = amountText,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+            ),
+            color = if (isExpenseLike) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+        )
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.size(16.dp),
+        )
+    }
+}
+
+@Composable
+private fun HomeReferenceInsightCard(
+    insight: SpendInsight,
+    onAction: () -> Unit,
+    onViewAll: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val warningColor = MaterialTheme.colorScheme.spendAmber
+    val cardShape = MaterialTheme.shapes.large
+    Column(modifier = modifier.fillMaxWidth()) {
+        SpendlyCardV2(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(cardShape)
+                .drawBehind {
+                    drawRect(
+                        color = warningColor,
+                        topLeft = Offset.Zero,
+                        size = Size(3.dp.toPx(), size.height),
+                    )
+                },
+            shape = cardShape,
+            contentPadding = Spacing.md,
+            onClick = onAction,
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Warning,
+                    contentDescription = null,
+                    tint = warningColor,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = insight.type.name.replace("_", " "),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.5.sp,
+                    ),
+                    color = warningColor
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = insight.title,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                ),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = insight.body,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (!insight.actionLabel.isNullOrEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "${insight.actionLabel} \u2192",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                    ),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+        TextButton(
+            onClick = onViewAll,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
+            contentPadding = PaddingValues(vertical = 4.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.home_view_all_insights),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Normal,
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}

@@ -12,6 +12,7 @@ object Constants {
      */
     object Features {
         const val AI_CHAT_ENABLED = false
+        const val HOME_HTML_REFERENCE_LAYOUT = true
     }
     
     /**

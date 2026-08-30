@@ -42,6 +42,9 @@ object Analytics
 object Insights
 
 @Serializable
+data class InsightDetail(val insightId: String, val anchorMonth: String)
+
+@Serializable
 object QuickCategorize
 
 @Serializable
@@ -49,6 +52,9 @@ data class BehavioralStats(val initialMonthStr: String? = null)
 
 @Serializable
 data class TransactionDetail(val transactionId: Long)
+
+@Serializable
+data class MerchantDetail(val merchant: String)
 
 @Serializable
 data class AddTransaction(

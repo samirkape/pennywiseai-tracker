@@ -134,6 +134,7 @@ class UserPreferencesRepository @Inject constructor(
 
         // Smart Insights
         val INSIGHTS_DATA_WINDOW_MONTHS = intPreferencesKey("insights_data_window_months")
+        val INSIGHT_FEEDBACK = stringPreferencesKey("insight_feedback") // "insightId:up|insightId:down|..."
 
         // Future parsing prompt
         val FUTURE_PARSING_PROMPT_DISABLED = booleanPreferencesKey("future_parsing_prompt_disabled")
@@ -848,6 +849,37 @@ class UserPreferencesRepository @Inject constructor(
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.DISMISSED_SALARY_SUGGESTIONS] =
                 tokens.filter { it.isNotBlank() }.joinToString("|")
+        }
+    }
+
+    /** Map of insightId -> "up"/"down", recording the user's helpful/not-helpful feedback. */
+    val insightFeedback: Flow<Map<String, String>> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.INSIGHT_FEEDBACK]
+                ?.split('|')
+                ?.filter { it.isNotBlank() }
+                ?.mapNotNull { entry ->
+                    val parts = entry.split(':', limit = 2)
+                    if (parts.size == 2) parts[0] to parts[1] else null
+                }
+                ?.toMap()
+                ?: emptyMap()
+        }
+
+    suspend fun setInsightFeedback(insightId: String, helpful: Boolean) {
+        context.dataStore.edit { preferences ->
+            val current = preferences[PreferencesKeys.INSIGHT_FEEDBACK]
+                ?.split('|')
+                ?.filter { it.isNotBlank() }
+                ?.mapNotNull { entry ->
+                    val parts = entry.split(':', limit = 2)
+                    if (parts.size == 2) parts[0] to parts[1] else null
+                }
+                ?.toMap()
+                ?.toMutableMap()
+                ?: mutableMapOf()
+            current[insightId] = if (helpful) "up" else "down"
+            preferences[PreferencesKeys.INSIGHT_FEEDBACK] = current.entries.joinToString("|") { "${it.key}:${it.value}" }
         }
     }
 

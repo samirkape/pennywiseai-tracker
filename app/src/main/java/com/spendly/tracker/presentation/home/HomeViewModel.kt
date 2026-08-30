@@ -778,8 +778,11 @@ class HomeViewModel @Inject constructor(
                 filterTransactionsByProfile(transactions, profileId, buildProfileAccountKeys(balances))
             }.collect { transactions ->
                 val heatmap = transactions
+                    .filter { !it.isExcludedFromTracking && it.matchesAnalyticsSpendingFilter() }
                     .groupBy { it.dateTime.toLocalDate().toEpochDay() }
-                    .mapValues { it.value.size }
+                    .mapValues { (_, txs) ->
+                        DayActivity(count = txs.size, amount = txs.fold(BigDecimal.ZERO) { acc, tx -> acc + tx.amount })
+                    }
                 _uiState.value = _uiState.value.copy(transactionHeatmap = heatmap)
             }
         }
@@ -860,6 +863,83 @@ class HomeViewModel @Inject constructor(
                 }
             }.collect { items ->
                 _uiState.value = _uiState.value.copy(recentItems = items, isLoading = false)
+            }
+        }
+
+        launch {
+            // Reference layout's "Recent transactions" preview needs the most recent
+            // transactions overall, not scoped to the selected day (unlike `recentItems`
+            // above, which follows the date navigator).
+            val recentGroupsFlow = transactionGroupRepository.getAllGroups().flatMapLatest { groups ->
+                if (groups.isEmpty()) flowOf(emptyList())
+                else combine(groups.map { group ->
+                    transactionGroupRepository.getTransactionsForGroup(group.id)
+                        .map { txns -> group to txns }
+                }) { it.toList() }
+            }
+
+            combine(
+                combine(
+                    transactionGroupRepository.getRecentUngroupedTransactions(limit = 30),
+                    _cachedAccountBalances,
+                    categoryRepository.getAllCategories(),
+                ) { ungrouped, balances, categories ->
+                    val profileId = _uiState.value.selectedProfileId
+                    val keys = buildProfileAccountKeys(balances ?: emptyList())
+                    val categoryIconMap = categories.associate { it.name to it.icon }
+                    filterTransactionsByProfile(ungrouped, profileId, keys)
+                        .map { HomeRecentItem.SingleTransaction(it, categoryIconKey = categoryIconMap[it.category]) }
+                },
+                combine(
+                    recentGroupsFlow,
+                    _cachedAccountBalances,
+                ) { groupPairs, balances ->
+                    val profileId = _uiState.value.selectedProfileId
+                    val keys = buildProfileAccountKeys(balances ?: emptyList())
+                    groupPairs.mapNotNull { (group, txns) ->
+                        val filtered = filterTransactionsByProfile(txns, profileId, keys)
+                        if (filtered.isEmpty()) null
+                        else HomeRecentItem.GroupItem(group, filtered)
+                    }
+                },
+                userPreferencesRepository.unifiedCurrencyMode,
+                userPreferencesRepository.displayCurrency,
+            ) { singles, groups, isUnified, displayCurrency ->
+                val merged = (singles + groups).sortedByDescending { it.sortTime }.take(30)
+
+                if (!isUnified) return@combine merged
+
+                merged.map { item ->
+                    when (item) {
+                        is HomeRecentItem.SingleTransaction -> {
+                            val converted =
+                                if (!item.transaction.currency.equals(displayCurrency, ignoreCase = true)) {
+                                    currencyConversionService.convertAmount(
+                                        item.transaction.amount,
+                                        item.transaction.currency,
+                                        displayCurrency,
+                                    )
+                                } else {
+                                    null
+                                }
+                            item.copy(convertedAmount = converted)
+                        }
+                        is HomeRecentItem.GroupItem -> {
+                            val amounts = item.transactions
+                                .filter { !it.currency.equals(displayCurrency, ignoreCase = true) }
+                                .associate { tx ->
+                                    tx.id to currencyConversionService.convertAmount(
+                                        tx.amount,
+                                        tx.currency,
+                                        displayCurrency,
+                                    )
+                                }
+                            item.copy(convertedAmounts = amounts)
+                        }
+                    }
+                }
+            }.collect { items ->
+                _uiState.value = _uiState.value.copy(globalRecentItems = items)
             }
         }
 
@@ -1365,7 +1445,8 @@ class HomeViewModel @Inject constructor(
                     type = InsightType.DAILY_TREND,
                     title = "Big spend on $dayName",
                     body = "${CurrencyFormatter.formatCurrency(highDay.second, currency)} — ${(highDay.second.toDouble() / avgSpend.toDouble()).toInt()}x your daily average",
-                    severity = InsightSeverity.CAUTION
+                    severity = InsightSeverity.CAUTION,
+                    actionLabel = "Review"
                 )
             }
         }
@@ -2125,6 +2206,12 @@ class HomeViewModel @Inject constructor(
     }
 }
 
+/** Per-day activity summary used to render the Home screen heatmap. */
+data class DayActivity(
+    val count: Int,
+    val amount: BigDecimal,
+)
+
 data class HomeUiState(
     val userName: String = "User",
     val profileImageUri: String? = null,
@@ -2142,6 +2229,9 @@ data class HomeUiState(
     val monthlyChangePercent: Int = 0,
     val recentTransactions: List<TransactionEntity> = emptyList(), // kept for widget compat
     val recentItems: List<HomeRecentItem> = emptyList(),
+    // Date-independent, most-recent-first transactions — used by the reference layout's
+    // "Recent transactions" preview so it isn't tied to the date navigator's selected day.
+    val globalRecentItems: List<HomeRecentItem> = emptyList(),
     val activeSubscriptionCount: Int = 0,
     val spendingPeriodLabel: String = "",
     val useFinancialMonth: Boolean = true,
@@ -2158,7 +2248,7 @@ data class HomeUiState(
     val isScanning: Boolean = false,
     val showBreakdownDialog: Boolean = false,
     val isUnifiedMode: Boolean = false,
-    val transactionHeatmap: Map<Long, Int> = emptyMap(),
+    val transactionHeatmap: Map<Long, DayActivity> = emptyMap(),
     val isBalanceReady: Boolean = false,
     val lastMonthSpendingHistory: List<BigDecimal> = emptyList(),
     val payPeriodStartEpochDay: Long = -1L,

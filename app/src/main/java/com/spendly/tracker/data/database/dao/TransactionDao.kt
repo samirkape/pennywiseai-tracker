@@ -101,6 +101,23 @@ interface TransactionDao {
     fun getUncategorizedTransactionCount(): Flow<Int>
 
     @Query("""
+        SELECT COUNT(*) FROM transactions
+        WHERE is_deleted = 0
+        AND is_excluded_from_tracking = 0
+        AND date_time BETWEEN :startDate AND :endDate
+        AND (category IS NULL OR TRIM(category) = '' OR category = 'Others')
+    """)
+    fun getUncategorizedTransactionCountForPeriod(startDate: LocalDateTime, endDate: LocalDateTime): Flow<Int>
+
+    @Query("""
+        SELECT COUNT(*) FROM transactions
+        WHERE is_deleted = 0
+        AND is_excluded_from_tracking = 0
+        AND date_time BETWEEN :startDate AND :endDate
+    """)
+    fun getTrackedTransactionCountForPeriod(startDate: LocalDateTime, endDate: LocalDateTime): Flow<Int>
+
+    @Query("""
         SELECT DISTINCT category FROM transactions
         WHERE is_deleted = 0
         AND date_time BETWEEN :startDate AND :endDate
@@ -209,6 +226,31 @@ interface TransactionDao {
         updatedAt: LocalDateTime,
     ): Int
 
+    /**
+     * Fetches transactions eligible for SMS date reconciliation: not deleted, not
+     * manually date-edited by the user, and with the original SMS body still
+     * available so the transaction date can be re-derived from the text (see
+     * [com.spendly.parser.core.bank.BankParser.extractMessageDateTime]).
+     */
+    @Query(
+        """
+        SELECT id, date_time, sms_body, sms_sender, bank_name FROM transactions
+        WHERE is_deleted = 0
+        AND date_manually_edited = 0
+        AND sms_body IS NOT NULL
+        AND sms_body != ''
+        """
+    )
+    suspend fun getTransactionsForDateReconciliation(): List<TransactionDateReconciliationRow>
+
+    @Query(
+        """
+        UPDATE transactions SET date_time = :dateTime, updated_at = :updatedAt
+        WHERE id = :id
+        """
+    )
+    suspend fun updateTransactionDateTime(id: Long, dateTime: LocalDateTime, updatedAt: LocalDateTime): Int
+
     @Delete
     suspend fun deleteTransaction(transaction: TransactionEntity)
     
@@ -220,10 +262,10 @@ interface TransactionDao {
 
     @Query("UPDATE transactions SET linked_transaction_id = NULL")
     suspend fun clearAllLinkedTransactionIds()
-    
+
     @Query(
         """
-        UPDATE transactions SET category = :newCategory, updated_at = :updatedAt
+        UPDATE transactions SET category = :newCategory, category_manually_edited = 1, updated_at = :updatedAt
         WHERE is_deleted = 0
         AND LOWER(merchant_name) = LOWER(:merchantName)
         AND ((:applySince = 0) OR (date_time >= :sinceCutoff))
@@ -242,6 +284,7 @@ interface TransactionDao {
         UPDATE transactions SET
             transaction_type = :transactionType,
             transfer_kind = :transferKind,
+            transaction_type_manually_edited = 1,
             updated_at = :updatedAt
         WHERE is_deleted = 0
         AND LOWER(merchant_name) = LOWER(:merchantName)
@@ -261,7 +304,7 @@ interface TransactionDao {
 
     @Query(
         """
-        UPDATE transactions SET merchant_name = :newMerchantName, updated_at = :updatedAt
+        UPDATE transactions SET merchant_name = :newMerchantName, merchant_manually_edited = :manuallyEdited, updated_at = :updatedAt
         WHERE is_deleted = 0 AND LOWER(merchant_name) = LOWER(:oldMerchantName)
         """
     )
@@ -269,6 +312,7 @@ interface TransactionDao {
         oldMerchantName: String,
         newMerchantName: String,
         updatedAt: LocalDateTime,
+        manuallyEdited: Boolean = true,
     )
 
     @Query("SELECT COUNT(*) FROM transactions WHERE merchant_name = :merchantName AND id != :excludeId")
@@ -318,11 +362,12 @@ interface TransactionDao {
     """)
     suspend fun getRepresentativeSmsBodyForMerchant(merchantName: String): String?
 
-    @Query("UPDATE transactions SET merchant_name = :newMerchantName, updated_at = :updatedAt WHERE id = :transactionId")
+    @Query("UPDATE transactions SET merchant_name = :newMerchantName, merchant_manually_edited = :manuallyEdited, updated_at = :updatedAt WHERE id = :transactionId")
     suspend fun updateMerchantNameById(
         transactionId: Long,
         newMerchantName: String,
         updatedAt: LocalDateTime,
+        manuallyEdited: Boolean = true,
     )
 
     @Query("""
@@ -590,13 +635,46 @@ interface TransactionDao {
 
     @Query(
         """
-        UPDATE transactions SET category = :category, updated_at = :updatedAt
+        UPDATE transactions SET category = :category, category_manually_edited = 0, updated_at = :updatedAt
         WHERE id = :id AND is_deleted = 0
         """
     )
     suspend fun updateTransactionCategoryById(
         id: Long,
         category: String,
+        updatedAt: LocalDateTime,
+    ): Int
+
+    /**
+     * Reparse-in-place update used by Full Resync to fix a transaction whose SMS was
+     * parsed incorrectly. Only writes fields that come from parsing — never touches
+     * user-owned columns (tags, group_id, receipt_path, is_excluded_from_tracking, etc.)
+     * and skips is_deleted rows so a deleted transaction is never resurrected. Merchant
+     * name and category are only overwritten if the user hasn't manually edited them.
+     */
+    @Query(
+        """
+        UPDATE transactions SET
+            amount = :amount,
+            transaction_type = CASE WHEN transaction_type_manually_edited = 0 THEN :transactionType ELSE transaction_type END,
+            merchant_name = CASE WHEN merchant_manually_edited = 0 THEN :merchantName ELSE merchant_name END,
+            category = CASE WHEN category_manually_edited = 0 THEN :category ELSE category END,
+            account_number = :accountNumber,
+            balance_after = :balanceAfter,
+            reference = :reference,
+            updated_at = :updatedAt
+        WHERE id = :id AND is_deleted = 0
+        """
+    )
+    suspend fun updateParsedFieldsById(
+        id: Long,
+        amount: BigDecimal,
+        transactionType: TransactionType,
+        merchantName: String,
+        category: String,
+        accountNumber: String?,
+        balanceAfter: BigDecimal?,
+        reference: String?,
         updatedAt: LocalDateTime,
     ): Int
 
@@ -634,6 +712,24 @@ interface TransactionDao {
         WHERE id = :id
     """)
     suspend fun updateTransferKind(id: Long, transferKind: String, updatedAt: LocalDateTime): Int
+
+    @Query("""
+        UPDATE transactions SET transfer_kind = :transferKind, category = :category, updated_at = :updatedAt
+        WHERE id = :id
+    """)
+    suspend fun updateTransferKindAndCategory(id: Long, transferKind: String, category: String, updatedAt: LocalDateTime): Int
+
+    @Query("""
+        SELECT strftime('%Y-%m', date_time) AS yearMonth, SUM(amount) AS total, COUNT(*) AS count
+        FROM transactions
+        WHERE is_deleted = 0
+        AND is_excluded_from_tracking = 0
+        AND LOWER(merchant_name) = LOWER(:merchantName)
+        AND transaction_type IN ('EXPENSE', 'CREDIT')
+        GROUP BY yearMonth
+        ORDER BY yearMonth ASC
+    """)
+    fun getMonthlyTotalsForMerchant(merchantName: String): Flow<List<MerchantMonthlyTotal>>
 }
 
 data class TransactionIdCategoryRow(
@@ -647,6 +743,12 @@ data class MerchantCategoryStats(
     @ColumnInfo(name = "total") val total: Int,
 )
 
+data class MerchantMonthlyTotal(
+    @ColumnInfo(name = "yearMonth") val yearMonth: String,
+    @ColumnInfo(name = "total") val total: BigDecimal,
+    @ColumnInfo(name = "count") val count: Int,
+)
+
 data class BulkCategoryPreviewDaoRow(
     @ColumnInfo(name = "id") val id: Long,
     @ColumnInfo(name = "merchant_name") val merchantName: String,
@@ -654,4 +756,13 @@ data class BulkCategoryPreviewDaoRow(
     @ColumnInfo(name = "amount") val amount: BigDecimal,
     @ColumnInfo(name = "currency") val currency: String,
     @ColumnInfo(name = "date_time") val dateTime: LocalDateTime,
+)
+
+/** Minimal projection used by [TransactionDao.getTransactionsForDateReconciliation]. */
+data class TransactionDateReconciliationRow(
+    @ColumnInfo(name = "id") val id: Long,
+    @ColumnInfo(name = "date_time") val dateTime: LocalDateTime,
+    @ColumnInfo(name = "sms_body") val smsBody: String,
+    @ColumnInfo(name = "sms_sender") val smsSender: String?,
+    @ColumnInfo(name = "bank_name") val bankName: String?,
 )

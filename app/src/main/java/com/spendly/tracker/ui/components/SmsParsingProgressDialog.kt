@@ -119,6 +119,7 @@ private fun ProgressDetails(workInfo: WorkInfo) {
     val processedMessages = workInfo.progress.getInt(OptimizedSmsReaderWorker.PROGRESS_PROCESSED, 0)
     val parsedTransactions = workInfo.progress.getInt(OptimizedSmsReaderWorker.PROGRESS_PARSED, 0)
     val savedTransactions = workInfo.progress.getInt(OptimizedSmsReaderWorker.PROGRESS_SAVED, 0)
+    val updatedTransactions = workInfo.progress.getInt(OptimizedSmsReaderWorker.PROGRESS_UPDATED, 0)
     val timeElapsed = workInfo.progress.getLong(OptimizedSmsReaderWorker.PROGRESS_TIME_ELAPSED, 0L)
     val estimatedTimeRemaining = workInfo.progress.getLong(OptimizedSmsReaderWorker.PROGRESS_ESTIMATED_TIME_REMAINING, 0L)
     val currentBatch = workInfo.progress.getInt(OptimizedSmsReaderWorker.PROGRESS_CURRENT_BATCH, 0)
@@ -145,7 +146,7 @@ private fun ProgressDetails(workInfo: WorkInfo) {
         }
 
         // Transaction details
-        if (parsedTransactions > 0 || savedTransactions > 0) {
+        if (parsedTransactions > 0 || savedTransactions > 0 || updatedTransactions > 0) {
             val detailsText = buildAnnotatedString {
                 if (parsedTransactions > 0) {
                     withStyle(style = SpanStyle(fontWeight = FontWeight.Medium)) {
@@ -158,6 +159,12 @@ private fun ProgressDetails(workInfo: WorkInfo) {
                 if (savedTransactions > 0) {
                     withStyle(style = SpanStyle(fontWeight = FontWeight.Medium)) {
                         append("$savedTransactions saved")
+                    }
+                }
+                if (updatedTransactions > 0) {
+                    if (parsedTransactions > 0 || savedTransactions > 0) append(" • ")
+                    withStyle(style = SpanStyle(fontWeight = FontWeight.Medium)) {
+                        append("$updatedTransactions fixed")
                     }
                 }
             }

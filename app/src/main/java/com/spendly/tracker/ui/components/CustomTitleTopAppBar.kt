@@ -268,8 +268,8 @@ private fun TitleForLargeTopAppBar(
         if (isHomeScreen) {
             Text(
                 text = title,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Start,
                 modifier = modifier
                     .fillMaxWidth()
@@ -374,8 +374,8 @@ private fun RegularTopAppBar(
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = stringResource(R.string.app_name),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
                             textAlign = TextAlign.Start,
                         )
                     }

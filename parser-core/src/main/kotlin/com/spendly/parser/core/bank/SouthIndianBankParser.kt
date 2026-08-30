@@ -2,10 +2,6 @@ package com.spendly.parser.core.bank
 
 import com.spendly.parser.core.ParsedTransaction
 import com.spendly.parser.core.TransactionType
-import kotlinx.datetime.Instant
-import kotlinx.datetime.LocalDateTime
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 import java.math.BigDecimal
 
 /**
@@ -66,8 +62,7 @@ class SouthIndianBankParser : BaseIndianBankParser() {
         val balance = extractBalance(smsBody)
 
         // Parse date/time from message if available, otherwise use SMS timestamp
-        val dateTime = extractDateTime(smsBody) ?: Instant.fromEpochMilliseconds(timestamp)
-            .toLocalDateTime(TimeZone.currentSystemDefault())
+        val resolvedTimestamp = extractMessageDateTime(smsBody) ?: timestamp
 
         return ParsedTransaction(
             amount = amount,
@@ -78,7 +73,7 @@ class SouthIndianBankParser : BaseIndianBankParser() {
             balance = balance,
             smsBody = smsBody,
             sender = sender,
-            timestamp = timestamp,
+            timestamp = resolvedTimestamp,
             bankName = getBankName()
         )
     }
@@ -326,47 +321,6 @@ class SouthIndianBankParser : BaseIndianBankParser() {
         }
 
         return super.extractBalance(message)
-    }
-
-    /**
-     * Extract date and time from message.
-     * Format: "20-08-25 12:13:23" (YY-MM-DD HH:MM:SS)
-     */
-    private fun extractDateTime(message: String): LocalDateTime? {
-        // Pattern for "20-08-25 12:13:23" format
-        val dateTimePattern = Regex("""(\d{2}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})""")
-        dateTimePattern.find(message)?.let { match ->
-            val dateStr = match.groupValues[1]
-            val timeStr = match.groupValues[2]
-
-            return try {
-                // Parse YY-MM-DD format
-                val parts = dateStr.split("-")
-                if (parts.size == 3) {
-                    val year = 2000 + parts[0].toInt()
-                    val month = parts[1].toInt()
-                    val day = parts[2].toInt()
-
-                    // Parse HH:MM:SS format
-                    val timeParts = timeStr.split(":")
-                    if (timeParts.size == 3) {
-                        val hour = timeParts[0].toInt()
-                        val minute = timeParts[1].toInt()
-                        val second = timeParts[2].toInt()
-
-                        LocalDateTime(year, month, day, hour, minute, second)
-                    } else {
-                        null
-                    }
-                } else {
-                    null
-                }
-            } catch (e: Exception) {
-                null
-            }
-        }
-
-        return null
     }
 
     override fun isTransactionMessage(message: String): Boolean {

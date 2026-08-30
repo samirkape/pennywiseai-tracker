@@ -10,14 +10,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.Refresh
@@ -71,7 +74,7 @@ fun HomeSubscriptionsGoalRow(
     // Instead, both cards use defaultMinSize to stay visually consistent.
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
         SubscriptionsMiniCard(
             activeCount = activeSubscriptionCount,
@@ -87,6 +90,126 @@ fun HomeSubscriptionsGoalRow(
             onClick = onNavigateToGoals,
             modifier = Modifier.weight(1f)
         )
+    }
+}
+
+@Composable
+fun HomeSubscriptionsGoalRowReference(
+        activeSubscriptionCount: Int,
+        totalSubscriptionAmount: BigDecimal,
+        upcomingSubscriptions: List<SubscriptionEntity>,
+        currency: String,
+        activeGoals: List<GoalEntity>,
+        onNavigateToSubscriptions: () -> Unit,
+        onNavigateToGoals: () -> Unit,
+        modifier: Modifier = Modifier
+    ) {
+        val dateFmt = DateTimeFormatter.ofPattern("MMM d")
+        val nextDate = upcomingSubscriptions
+            .mapNotNull { it.nextPaymentDate }
+            .sorted()
+            .firstOrNull()
+        val subFooter = buildString {
+            append("$activeSubscriptionCount active")
+            if (nextDate != null) append(" \u00B7 next ${nextDate.format(dateFmt)}")
+        }
+
+        val primaryGoal = activeGoals.firstOrNull()
+        val goalProgress = if (primaryGoal != null && primaryGoal.targetAmount > BigDecimal.ZERO) {
+            primaryGoal.currentAmount
+                .divide(primaryGoal.targetAmount, 4, java.math.RoundingMode.HALF_UP)
+                .toFloat().coerceIn(0f, 1f)
+        } else {
+            0f
+        }
+        val progressText = "${(goalProgress * 100).toInt()}% funded"
+        val goalFooter = primaryGoal?.name ?: "No active goal"
+
+        Row(
+            modifier = modifier.fillMaxWidth().height(IntrinsicSize.Max),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            SpendlyCardV2(
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                onClick = onNavigateToSubscriptions,
+                contentPadding = Spacing.md
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Refresh,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.size(13.dp),
+                    )
+                    Text(
+                        text = "Subscriptions",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = CurrencyFormatter.formatCurrency(totalSubscriptionAmount, currency),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = subFooter,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            SpendlyCardV2(
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                onClick = onNavigateToGoals,
+                contentPadding = Spacing.md
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.EmojiEvents,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.size(13.dp),
+                    )
+                    Text(
+                        text = "Goals",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = progressText,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            RoundedCornerShape(2.dp)
+                        )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(goalProgress)
+                            .background(
+                                MaterialTheme.colorScheme.primary,
+                                RoundedCornerShape(2.dp)
+                            )
+                    )
+                }
+            }
     }
 }
 
@@ -118,6 +241,7 @@ private fun SubscriptionsMiniCard(
                 tint = MaterialTheme.colorScheme.spendAmber, modifier = Modifier.size(15.dp))
             Text("SUBSCRIPTIONS", style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.spendAmber, letterSpacing = 0.66.sp,
+                fontWeight = FontWeight.Medium,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
 
@@ -196,7 +320,7 @@ private fun GoalsPagerCard(
                 Icon(Icons.Outlined.EmojiEvents, contentDescription = null,
                     tint = greenColor, modifier = Modifier.size(15.dp))
                 Text("GOALS", style = MaterialTheme.typography.labelSmall,
-                    color = greenColor, letterSpacing = 0.66.sp)
+                    color = greenColor, letterSpacing = 0.66.sp, fontWeight = FontWeight.Medium)
             }
             Text("Set a savings goal\nto get started",
                 style = MaterialTheme.typography.labelSmall,
@@ -213,7 +337,7 @@ private fun GoalsPagerCard(
                 Icon(Icons.Outlined.EmojiEvents, contentDescription = null,
                     tint = greenColor, modifier = Modifier.size(15.dp))
                 Text("GOALS", style = MaterialTheme.typography.labelSmall,
-                    color = greenColor, letterSpacing = 0.66.sp,
+                    color = greenColor, letterSpacing = 0.66.sp, fontWeight = FontWeight.Medium,
                     modifier = Modifier.weight(1f))
                 if (goals.size > 1) {
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp),
@@ -308,4 +432,3 @@ private fun GoalDonutContent(
         color = MaterialTheme.colorScheme.textMuted, textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth(), maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
-

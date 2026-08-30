@@ -5,6 +5,7 @@ import android.app.Application
 import android.os.Bundle
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.spendly.tracker.data.backup.AutoBackupManager
 import com.spendly.tracker.data.manager.AdManager
 import com.spendly.tracker.data.manager.PremiumManager
 import com.spendly.tracker.data.manager.SmsScanManager
@@ -45,6 +46,9 @@ class SpendlyApplication : Application(), Configuration.Provider {
     @Inject
     lateinit var premiumManager: PremiumManager
 
+    @Inject
+    lateinit var autoBackupManager: AutoBackupManager
+
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var activityReferences = 0
     private var isInForeground = false
@@ -70,6 +74,13 @@ class SpendlyApplication : Application(), Configuration.Provider {
         PrepaidRenewalReminderWorker.enqueuePeriodic(this)
         adManager.initialize()
         premiumManager.connect()
+        scheduleAutoBackup()
+    }
+
+    private fun scheduleAutoBackup() {
+        applicationScope.launch(Dispatchers.IO) {
+            runCatching { autoBackupManager.performAutoBackup() }
+        }
     }
 
     /**

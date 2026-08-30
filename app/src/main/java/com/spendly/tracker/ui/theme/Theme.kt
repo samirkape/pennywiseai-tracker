@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
@@ -87,53 +88,60 @@ private val DarkColorScheme = darkColorScheme(
     scrim = md_theme_dark_scrim,
 )
 
+// These extensions branch on whether *this resolved ColorScheme* is dark, not on the system
+// theme setting — SpendlyTheme's `darkTheme` param can be forced independently of the system
+// (in-app theme override), and isSystemInDarkTheme() would then disagree with the colors
+// actually on screen, producing a light pastel card on an otherwise dark-themed screen.
+private val ColorScheme.isEffectivelyDark: Boolean
+    get() = background.luminance() < 0.5f
+
 // Custom color extensions
 val ColorScheme.success: Color
     @Composable
-    get() = if (isSystemInDarkTheme()) success_dark else success_light
+    get() = if (isEffectivelyDark) success_dark else success_light
 
 val ColorScheme.warning: Color
     @Composable
-    get() = if (isSystemInDarkTheme()) warning_dark else warning_light
+    get() = if (isEffectivelyDark) warning_dark else warning_light
 
 val ColorScheme.income: Color
     @Composable
-    get() = if (isSystemInDarkTheme()) income_dark else income_light
+    get() = if (isEffectivelyDark) income_dark else income_light
 
 val ColorScheme.expense: Color
     @Composable
-    get() = if (isSystemInDarkTheme()) expense_dark else expense_light
+    get() = if (isEffectivelyDark) expense_dark else expense_light
 
 // ── Earthy semantic extensions (home_v2.md §ColorScheme Semantic Extensions) ──
 val ColorScheme.spendGreen: Color
-    @Composable get() = if (isSystemInDarkTheme()) Earthy_Green_Dark else Earthy_Green
+    @Composable get() = if (isEffectivelyDark) Earthy_Green_Dark else Earthy_Green
 
 val ColorScheme.spendGreenBg: Color
-    @Composable get() = if (isSystemInDarkTheme()) Earthy_GreenBg_Dark else Earthy_GreenBg
+    @Composable get() = if (isEffectivelyDark) Earthy_GreenBg_Dark else Earthy_GreenBg
 
 val ColorScheme.spendAmber: Color
-    @Composable get() = if (isSystemInDarkTheme()) Earthy_Amber_Dark else Earthy_Amber
+    @Composable get() = if (isEffectivelyDark) Earthy_Amber_Dark else Earthy_Amber
 
 val ColorScheme.spendAmberBg: Color
-    @Composable get() = if (isSystemInDarkTheme()) Earthy_AmberBg_Dark else Earthy_AmberBg
+    @Composable get() = if (isEffectivelyDark) Earthy_AmberBg_Dark else Earthy_AmberBg
 
 val ColorScheme.spendRed: Color
-    @Composable get() = if (isSystemInDarkTheme()) Earthy_Red_Dark else Earthy_Red
+    @Composable get() = if (isEffectivelyDark) Earthy_Red_Dark else Earthy_Red
 
 val ColorScheme.spendRedBg: Color
-    @Composable get() = if (isSystemInDarkTheme()) Earthy_RedBg_Dark else Earthy_RedBg
+    @Composable get() = if (isEffectivelyDark) Earthy_RedBg_Dark else Earthy_RedBg
 
 val ColorScheme.spendPurple: Color
-    @Composable get() = if (isSystemInDarkTheme()) Earthy_Purple_Dark else Earthy_Purple
+    @Composable get() = if (isEffectivelyDark) Earthy_Purple_Dark else Earthy_Purple
 
 val ColorScheme.spendPurpleBg: Color
-    @Composable get() = if (isSystemInDarkTheme()) Earthy_PurpleBg_Dark else Earthy_PurpleBg
+    @Composable get() = if (isEffectivelyDark) Earthy_PurpleBg_Dark else Earthy_PurpleBg
 
 val ColorScheme.textMuted: Color
-    @Composable get() = if (isSystemInDarkTheme()) Earthy_TextMuted_Dark else Earthy_TextMuted
+    @Composable get() = if (isEffectivelyDark) Earthy_TextMuted_Dark else Earthy_TextMuted
 
 val ColorScheme.cardBorder: Color
-    @Composable get() = if (isSystemInDarkTheme()) Earthy_CardBorder_Dark else Earthy_CardBorder
+    @Composable get() = if (isEffectivelyDark) Earthy_CardBorder_Dark else Earthy_CardBorder
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable

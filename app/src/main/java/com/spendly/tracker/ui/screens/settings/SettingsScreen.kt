@@ -892,7 +892,19 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                 }
             },
             confirmButton = {
-                Row {
+                Column {
+                    TextButton(
+                        onClick = {
+                            settingsViewModel.saveBackupToDownloads()
+                            showExportOptionsDialog = false
+                            settingsViewModel.clearImportExportMessage()
+                        }
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null)
+                        Spacer(modifier = Modifier.width(Spacing.xs))
+                        Text("Save to Downloads")
+                    }
+
                     TextButton(
                         onClick = {
                             exportSaveLauncher.launch(fileName)

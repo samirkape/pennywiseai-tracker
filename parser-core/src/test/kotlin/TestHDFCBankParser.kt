@@ -182,6 +182,21 @@ Avl bal INR 1,276.99""",
                 )
             ),
 
+            // P2M UPI debit where the SMS drops the '@' delimiter from the VPA entirely
+            ParserTestCase(
+                name = "UPI Debit to Merchant VPA - Missing '@' Delimiter",
+                message = "HDFC Bank: Rs 199.00 debited from a/c **2518 on 15-07-23 to VPA netflixupi.payuhdfcbank(UPI Ref No 319622371691). Not you? Call on 18002586161 to report",
+                sender = "CP-HDFCBK-S",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("199.00"),
+                    currency = "INR",
+                    type = com.spendly.parser.core.TransactionType.EXPENSE,
+                    accountLast4 = "2518",
+                    merchant = "netflixupi",
+                    reference = "319622371691"
+                )
+            ),
+
             // NEFT deposit (salary/income)
             ParserTestCase(
                 name = "NEFT Credit Deposit - Income",
