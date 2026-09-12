@@ -427,6 +427,17 @@ interface TransactionDao {
     // Method to check if transaction exists by hash (including deleted)
     @Query("SELECT * FROM transactions WHERE transaction_hash = :transactionHash LIMIT 1")
     suspend fun getTransactionByHash(transactionHash: String): TransactionEntity?
+
+    /**
+     * Fallback identity lookup for reparse-in-place (Full Resync). transaction_hash
+     * includes the parsed amount, so a parser fix that corrects a previously-wrong
+     * amount changes the hash for that SMS — the hash lookup then misses the existing
+     * row entirely and the SMS looks brand new, which either duplicates an active
+     * transaction or resurrects a deleted one. Exact sms_body + sms_sender match is
+     * a hash-independent way to find the same underlying SMS (including deleted rows).
+     */
+    @Query("SELECT * FROM transactions WHERE sms_body = :smsBody AND sms_sender = :smsSender LIMIT 1")
+    suspend fun getTransactionBySmsAndSender(smsBody: String, smsSender: String): TransactionEntity?
     
     @Query("""
         SELECT * FROM transactions
@@ -647,21 +658,32 @@ interface TransactionDao {
 
     /**
      * Reparse-in-place update used by Full Resync to fix a transaction whose SMS was
-     * parsed incorrectly. Only writes fields that come from parsing — never touches
-     * user-owned columns (tags, group_id, receipt_path, is_excluded_from_tracking, etc.)
-     * and skips is_deleted rows so a deleted transaction is never resurrected. Merchant
-     * name and category are only overwritten if the user hasn't manually edited them.
+     * parsed incorrectly. Only writes objectively-structural fields that a parser bug
+     * fix would actually change — never touches user-owned columns (tags, group_id,
+     * receipt_path, is_excluded_from_tracking, etc.) and skips is_deleted rows so a
+     * deleted transaction is never resurrected.
+     *
+     * merchant_name / category / transaction_type are deliberately excluded, even
+     * though *_manually_edited flags exist for them: those flags only cover edits made
+     * after the flag columns were introduced (they default to 0 on migration), so they
+     * cannot distinguish a pre-existing manual categorization/rename from raw parser
+     * output. Auto-overwriting them here previously reset manually-categorized
+     * transactions to "Other". Fixing those fields for already-imported transactions
+     * needs an explicit, previewable, opt-in action — not a silent resync side effect.
+     *
+     * Also refreshes transaction_hash to the freshly-computed value: since the hash
+     * includes amount, correcting the amount changes the row's own canonical hash. If
+     * we didn't update it here, every future resync would keep missing this row by
+     * hash and fall back to the sms_body/sms_sender lookup indefinitely.
      */
     @Query(
         """
         UPDATE transactions SET
             amount = :amount,
-            transaction_type = CASE WHEN transaction_type_manually_edited = 0 THEN :transactionType ELSE transaction_type END,
-            merchant_name = CASE WHEN merchant_manually_edited = 0 THEN :merchantName ELSE merchant_name END,
-            category = CASE WHEN category_manually_edited = 0 THEN :category ELSE category END,
             account_number = :accountNumber,
             balance_after = :balanceAfter,
             reference = :reference,
+            transaction_hash = :transactionHash,
             updated_at = :updatedAt
         WHERE id = :id AND is_deleted = 0
         """
@@ -669,12 +691,10 @@ interface TransactionDao {
     suspend fun updateParsedFieldsById(
         id: Long,
         amount: BigDecimal,
-        transactionType: TransactionType,
-        merchantName: String,
-        category: String,
         accountNumber: String?,
         balanceAfter: BigDecimal?,
         reference: String?,
+        transactionHash: String,
         updatedAt: LocalDateTime,
     ): Int
 
@@ -725,7 +745,10 @@ interface TransactionDao {
         WHERE is_deleted = 0
         AND is_excluded_from_tracking = 0
         AND LOWER(merchant_name) = LOWER(:merchantName)
-        AND transaction_type IN ('EXPENSE', 'CREDIT')
+        AND (
+            transaction_type IN ('EXPENSE', 'CREDIT', 'INVESTMENT')
+            OR (transaction_type = 'TRANSFER' AND transfer_kind = 'CC_BILL_PAYMENT')
+        )
         GROUP BY yearMonth
         ORDER BY yearMonth ASC
     """)

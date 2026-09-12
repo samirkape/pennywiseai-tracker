@@ -922,8 +922,9 @@ fun HomeScreen(
                 text = {
                     Text(
                         "This will reprocess all SMS messages, including ones already imported, " +
-                        "and fix any that were parsed incorrectly. Your manual edits " +
-                        "(renamed merchants, categories, notes) are preserved.\n\n" +
+                        "and fix amount, account, and balance details that were extracted " +
+                        "incorrectly. Merchant names, categories, and other edits you've made " +
+                        "are never changed.\n\n" +
                         "This may take a few seconds depending on your message history."
                     )
                 },

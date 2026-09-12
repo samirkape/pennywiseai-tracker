@@ -543,7 +543,8 @@ class HDFCBankParser : BaseIndianBankParser() {
             "spent", "received", "transferred", "paid",
             "sent", // HDFC uses "Sent Rs.X From HDFC Bank"
             "deducted", // Add support for "deducted from" pattern
-            "txn" // HDFC uses "Txn Rs.X" for card transactions
+            "txn", // HDFC uses "Txn Rs.X" for card transactions
+            "refund" // HDFC uses "Rs.X refunded by MERCHANT ... adjusted against ... Card"
         )
 
         return hdfcTransactionKeywords.any { lowerMessage.contains(it) }

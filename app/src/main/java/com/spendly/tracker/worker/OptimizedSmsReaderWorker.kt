@@ -603,8 +603,13 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
             val entity = parsed.toEntity()
 
             // getTransactionByHash returns rows where is_deleted=1 too, so
-            // soft-deleted transactions are never re-imported.
+            // soft-deleted transactions are never re-imported. Fall back to an exact
+            // sms_body + sms_sender match when the hash itself doesn't match — this
+            // covers the case where a parser fix corrected the amount, which changes
+            // the hash (it's part of the hash input) and would otherwise make this
+            // look like a brand-new transaction, duplicating or resurrecting it.
             val existing = transactionRepository.getTransactionByHash(entity.transactionHash)
+                ?: transactionRepository.getTransactionBySmsAndSender(parsed.smsBody, parsed.sender)
             if (existing != null) {
                 if (existing.isDeleted) return false // never resurrect a user-deleted transaction
                 return updateExistingTransaction(existing, entity, stats)
@@ -656,42 +661,42 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
      * Reparse-in-place: a transaction with this hash already exists (e.g. Full Resync
      * re-reading the whole SMS inbox). If the current parser now extracts different
      * values than what's stored, fix the stored row instead of silently skipping it.
-     * Never touches user-owned columns; merchant/category are only overwritten when
-     * the user hasn't manually edited them (enforced in the DAO query itself).
+     *
+     * Deliberately limited to objectively-structural fields (amount, account number,
+     * balance, reference) — never merchant name, category, or transaction type. Those
+     * three have *_manually_edited flags, but the flags only cover edits made after the
+     * flag columns existed (they default to false for every pre-existing row), so they
+     * cannot tell a manual categorization/rename made before this feature shipped apart
+     * from raw parser output. Auto-"fixing" them here previously reset manually
+     * categorized transactions to "Other" — never touch user-owned columns.
      */
     private suspend fun updateExistingTransaction(
         existing: TransactionEntity,
         freshlyParsed: TransactionEntity,
         stats: ProcessingStats,
     ): Boolean {
-        val resolvedMerchant = MerchantAliasResolver.resolveExact(freshlyParsed.merchantName, merchantAliasCache)
-        val resolvedCategory = merchantMappingCache[resolvedMerchant] ?: freshlyParsed.category
-
         val amountChanged = existing.amount.compareTo(freshlyParsed.amount) != 0
         val balanceChanged = when {
             existing.balanceAfter == null && freshlyParsed.balanceAfter == null -> false
             existing.balanceAfter == null || freshlyParsed.balanceAfter == null -> true
             else -> existing.balanceAfter.compareTo(freshlyParsed.balanceAfter) != 0
         }
+        val hashChanged = existing.transactionHash != freshlyParsed.transactionHash
         val changed = amountChanged ||
             balanceChanged ||
-            (!existing.transactionTypeManuallyEdited && existing.transactionType != freshlyParsed.transactionType) ||
+            hashChanged ||
             existing.accountNumber != freshlyParsed.accountNumber ||
-            existing.reference != freshlyParsed.reference ||
-            (!existing.merchantManuallyEdited && existing.merchantName != resolvedMerchant) ||
-            (!existing.categoryManuallyEdited && existing.category != resolvedCategory)
+            existing.reference != freshlyParsed.reference
 
         if (!changed) return false
 
         val rows = transactionRepository.updateParsedFieldsById(
             id = existing.id,
             amount = freshlyParsed.amount,
-            transactionType = freshlyParsed.transactionType,
-            merchantName = resolvedMerchant,
-            category = resolvedCategory,
             accountNumber = freshlyParsed.accountNumber,
             balanceAfter = freshlyParsed.balanceAfter,
             reference = freshlyParsed.reference,
+            transactionHash = freshlyParsed.transactionHash,
             updatedAt = LocalDateTime.now(),
         )
         if (rows > 0) {

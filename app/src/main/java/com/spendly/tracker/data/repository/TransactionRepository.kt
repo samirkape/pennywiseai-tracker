@@ -327,27 +327,29 @@ class TransactionRepository @Inject constructor(
         transactionDao.getTransactionByHash(transactionHash)
 
     /**
+     * Fallback identity lookup for reparse-in-place. See [TransactionDao.getTransactionBySmsAndSender].
+     */
+    suspend fun getTransactionBySmsAndSender(smsBody: String, smsSender: String): TransactionEntity? =
+        transactionDao.getTransactionBySmsAndSender(smsBody, smsSender)
+
+    /**
      * Reparse-in-place update for Full Resync. See [TransactionDao.updateParsedFieldsById].
      */
     suspend fun updateParsedFieldsById(
         id: Long,
         amount: BigDecimal,
-        transactionType: TransactionType,
-        merchantName: String,
-        category: String,
         accountNumber: String?,
         balanceAfter: BigDecimal?,
         reference: String?,
+        transactionHash: String,
         updatedAt: LocalDateTime,
     ): Int = transactionDao.updateParsedFieldsById(
         id = id,
         amount = amount,
-        transactionType = transactionType,
-        merchantName = merchantName,
-        category = category,
         accountNumber = accountNumber,
         balanceAfter = balanceAfter,
         reference = reference,
+        transactionHash = transactionHash,
         updatedAt = updatedAt,
     )
 
