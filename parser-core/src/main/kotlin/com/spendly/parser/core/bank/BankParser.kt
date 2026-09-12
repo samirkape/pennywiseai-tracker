@@ -6,6 +6,8 @@ import com.spendly.parser.core.Constants
 import com.spendly.parser.core.ParsedTransaction
 import com.spendly.parser.core.TransactionType
 import java.math.BigDecimal
+import java.time.LocalDateTime
+import java.time.ZoneId
 
 /**
  * Base class for bank-specific message parsers.
@@ -70,12 +72,116 @@ abstract class BankParser {
             creditLimit = availableLimit,  // TODO: This is actually available limit, will be fixed in SmsReaderWorker
             smsBody = smsBody,
             sender = sender,
-            timestamp = timestamp,
+            // Prefer the transaction date/time reported inside the SMS body (as sent by the
+            // bank) over the SMS inbox receipt timestamp, since delivery delays can cause the
+            // two to diverge. Falls back to the SMS timestamp when no date/time can be parsed.
+            timestamp = extractMessageDateTime(smsBody) ?: timestamp,
             bankName = getBankName(),
             isFromCard = detectIsCard(smsBody),
             currency = getCurrency()
         )
     }
+
+    /**
+     * Attempts to extract the transaction date/time embedded in the SMS body text
+     * (e.g. "18-07-26 15:07:53", "2026-07-18-14:29:23", or "01/8/25 03:15 PM"),
+     * returning it as epoch milliseconds in the device's default time zone.
+     * Returns null when no recognizable date/time is found -- including messages
+     * that omit the time entirely, or use a format not covered below -- in which
+     * case callers should fall back to the SMS receipt timestamp.
+     *
+     * Public so historical transactions can be re-derived from their stored SMS
+     * body text (see `TransactionRepository.reconcileTransactionDatesFromSms`).
+     */
+    open fun extractMessageDateTime(message: String): Long? {
+        for (pattern in DATE_TIME_PATTERNS) {
+            val match = pattern.regex.find(message) ?: continue
+            val (year, month, day) = pattern.dateOf(match) ?: continue
+            val (hour, minute, second) = pattern.timeOf(match) ?: continue
+
+            if (month !in 1..12 || day !in 1..31 || hour !in 0..23 || minute !in 0..59 || second !in 0..59) {
+                continue
+            }
+
+            val localDateTime = try {
+                LocalDateTime.of(year, month, day, hour, minute, second)
+            } catch (e: Exception) {
+                continue
+            }
+
+            return localDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        }
+
+        return null
+    }
+
+    /** Describes one supported "date [separator] time" layout found in bank SMS bodies. */
+    private class DateTimePattern(
+        val regex: Regex,
+        private val yearFirst: Boolean,
+        /** True when group 6 is an AM/PM marker instead of an optional seconds value. */
+        private val hasAmPm: Boolean = false
+    ) {
+        fun dateOf(match: MatchResult): Triple<Int, Int, Int>? {
+            val g1 = match.groupValues[1].toIntOrNull() ?: return null
+            val g2 = match.groupValues[2].toIntOrNull() ?: return null
+            val g3 = match.groupValues[3].toIntOrNull() ?: return null
+
+            return if (yearFirst) {
+                Triple(g1, g2, g3) // yyyy, MM, dd
+            } else {
+                val year = if (g3 < 100) 2000 + g3 else g3
+                Triple(year, g2, g1) // dd, MM, yy(yy) -> yyyy, MM, dd
+            }
+        }
+
+        fun timeOf(match: MatchResult): Triple<Int, Int, Int>? {
+            var hour = match.groupValues[4].toIntOrNull() ?: return null
+            val minute = match.groupValues[5].toIntOrNull() ?: return null
+
+            if (hasAmPm) {
+                // Group 6 holds "AM"/"PM" here; there are no seconds in this layout.
+                when (match.groupValues[6].uppercase()) {
+                    "PM" -> if (hour < 12) hour += 12
+                    "AM" -> if (hour == 12) hour = 0
+                    else -> return null
+                }
+                return Triple(hour, minute, 0)
+            }
+
+            val second = match.groupValues[6].takeIf { it.isNotEmpty() }?.toIntOrNull() ?: 0
+            return Triple(hour, minute, second)
+        }
+    }
+
+    companion object {
+        // Order matters: yyyy-first patterns are tried before dd-first ones to avoid
+        // misreading "2026-07-18" as day=2026. Patterns that fail range/validity
+        // checks (e.g. month > 12) are skipped, so ambiguous dd/MM vs MM/dd inputs
+        // safely fall through to the SMS receipt timestamp instead of a wrong date.
+        private val DATE_TIME_PATTERNS = listOf(
+            // 2026-07-18-14:29:23 / 2026-07-18 14:29:23 / 2026/07/18 14:29:23
+            // (negative lookahead avoids swallowing a trailing AM/PM marker as if 24-hour)
+            DateTimePattern(
+                Regex("""\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ -](\d{1,2}):(\d{2})(?::(\d{2}))?(?!\s*[AaPp][Mm])\b"""),
+                yearFirst = true
+            ),
+            // 18-07-26 15:07:53 / 18/07/2026 15:07:53 / 18-07-2026 15:07
+            DateTimePattern(
+                Regex("""\b(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})[ -](\d{1,2}):(\d{2})(?::(\d{2}))?(?!\s*[AaPp][Mm])\b"""),
+                yearFirst = false
+            ),
+            // 01/8/25 03:15 PM / 10/01/25 8:00 AM / 3/18/26, 6:39 PM
+            DateTimePattern(
+                Regex(
+                    """\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4}),?\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])\b"""
+                ),
+                yearFirst = false,
+                hasAmPm = true
+            )
+        )
+    }
+
 
     /**
      * Checks if the message is a transaction message (not OTP, promotional, etc.)

@@ -135,7 +135,7 @@ fun CategoryChip(
  * Helper function to parse color string to Compose Color.
  * Handles hex colors like "#FF0000" or "FF0000".
  */
-private fun parseColor(colorString: String, fallback: Color): Color {
+internal fun parseColor(colorString: String, fallback: Color): Color {
     return try {
         val cleanColor = if (colorString.startsWith("#")) colorString else "#$colorString"
         Color(android.graphics.Color.parseColor(cleanColor))

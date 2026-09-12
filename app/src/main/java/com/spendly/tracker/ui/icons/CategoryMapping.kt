@@ -177,6 +177,12 @@ object CategoryMapping {
             color = Color(0xFF00BCD4),
             fallbackIcon = Icons.Default.AirplanemodeActive
         ),
+        "Social" to CategoryInfo(
+            displayName = "Social",
+            icon = Icons.Default.Face,
+            color = Color(0xFFE91E63),
+            fallbackIcon = Icons.Default.Face
+        ),
         "Others" to CategoryInfo(
             displayName = "Others",
             icon = Icons.Default.Category,

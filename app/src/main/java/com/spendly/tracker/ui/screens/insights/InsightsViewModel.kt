@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.spendly.tracker.data.preferences.UserPreferencesRepository
+import com.spendly.tracker.data.repository.InsightsRepository
 import com.spendly.tracker.data.repository.SalaryMonthOverrideRepository
 import com.spendly.tracker.data.repository.TransactionRepository
 import com.spendly.tracker.domain.usecase.ComputeInsightsUseCase
@@ -12,8 +13,10 @@ import com.spendly.tracker.presentation.common.getDateRangeForYearMonth
 import com.spendly.tracker.utils.DateRangeUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -31,6 +34,7 @@ import kotlin.math.roundToInt
 class InsightsViewModel @Inject constructor(
     private val computeInsightsUseCase: ComputeInsightsUseCase,
     transactionRepository: TransactionRepository,
+    private val insightsRepository: InsightsRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val salaryMonthOverrideRepository: SalaryMonthOverrideRepository,
     private val savedStateHandle: SavedStateHandle,
@@ -108,9 +112,16 @@ class InsightsViewModel @Inject constructor(
             initialValue = YearMonth.now().atDay(1) to YearMonth.now().atEndOfMonth(),
         )
 
+    private val _isLoadingInsights = MutableStateFlow(false)
+    val isLoadingInsights: StateFlow<Boolean> = _isLoadingInsights.asStateFlow()
+
+    // Cleared to empty as soon as the selected period changes (before the recompute for the new
+    // period lands), so the UI never renders one period's insights under another period's label.
     val insights: StateFlow<List<SmartInsight>> = insightsParams
         .flatMapLatest { p ->
             flow {
+                _isLoadingInsights.value = true
+                emit(emptyList())
                 val currentRange = p.resolveDateRange()
                 val prevRange = p.resolvePreviousDateRange()
                 emit(
@@ -120,6 +131,7 @@ class InsightsViewModel @Inject constructor(
                         previousDateRange = prevRange,
                     )
                 )
+                _isLoadingInsights.value = false
             }
         }
         .stateIn(
@@ -148,20 +160,37 @@ class InsightsViewModel @Inject constructor(
             budgetPeriodEndDay = budgetPeriodEndDay,
         )
 
-    val uncategorizedTransactionPercentage: StateFlow<Int?> =
-        transactionRepository.getUncategorizedTransactionSummary()
-            .map { summary ->
-                if (summary.totalCount == 0) {
-                    null
-                } else {
-                    ((summary.uncategorizedCount.toDouble() / summary.totalCount) * 100).roundToInt()
-                }
-            }
-            .stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(5000),
-                initialValue = null,
+    /**
+     * All-time highlights (lifetime total spend, all-time top merchant, etc). Read directly from
+     * the insights cache — populated by [com.spendly.tracker.worker.InsightsWorker] — so flipping
+     * the month selector never triggers a recompute here.
+     */
+    val lifetimeInsights: StateFlow<List<SmartInsight>> = insightsRepository.getLifetimeInsights()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val uncategorizedTransactionPercentage: StateFlow<Int?> = activePeriodRange
+        .flatMapLatest { (startDate, endDate) ->
+            transactionRepository.getUncategorizedTransactionSummaryForPeriod(
+                startDate.atStartOfDay(),
+                endDate.atTime(23, 59, 59)
             )
+        }
+        .map { summary ->
+            if (summary.totalCount == 0) {
+                null
+            } else {
+                ((summary.uncategorizedCount.toDouble() / summary.totalCount) * 100).roundToInt()
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = null,
+        )
 
     fun navigateToPreviousMonth() {
         savedStateHandle["selectedMonth"] = selectedMonth.value.minusMonths(1).toString()

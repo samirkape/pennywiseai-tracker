@@ -32,10 +32,10 @@ After making changes, always build and install the release APK on the connected 
 ./gradlew :app:assembleStandardRelease --quiet && \
 adb install -r app/build/outputs/apk/standard/release/app-standard-arm64-v8a-release.apk
 ```
-- The connected device ID is `R5CW61GQRTB` (use `-s R5CW61GQRTB` if multiple devices are connected)
+- The connected device ID is `adb-R5CW61GQRTB-LwHw2L._adb-tls-connect._tcp` (use `-s adb-R5CW61GQRTB-LwHw2L._adb-tls-connect._tcp` if multiple devices are connected)
 - The release app package is `com.spendly.tracker` (separate from the debug build)
-- After install, relaunch with: `adb -s R5CW61GQRTB shell am force-stop com.spendly.tracker && adb -s R5CW61GQRTB shell am start -n com.spendly.tracker/com.spendly.tracker.MainActivity`
-- You can take a screenshot to verify UI changes: `adb -s R5CW61GQRTB exec-out screencap -p > /tmp/screen.png`
+- After install, relaunch with: `adb -s adb-R5CW61GQRTB-LwHw2L._adb-tls-connect._tcp shell am force-stop com.spendly.tracker && adb -s adb-R5CW61GQRTB-LwHw2L._adb-tls-connect._tcp shell am start -n com.spendly.tracker/com.spendly.tracker.MainActivity`
+- You can take a screenshot to verify UI changes: `adb -s adb-R5CW61GQRTB-LwHw2L._adb-tls-connect._tcp exec-out screencap -p > /tmp/screen.png`
 
 # Important
 Never use pii in comments, code anywhere

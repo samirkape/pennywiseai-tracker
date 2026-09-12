@@ -47,7 +47,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -435,6 +437,7 @@ fun TransactionDetailScreen(
     onNavigateToLoanDetail: (Long) -> Unit = {},
     onFindSimilar: (String) -> Unit = {},
     onNavigateToTransactionDetail: (Long) -> Unit = {},
+    onMerchantClick: (String) -> Unit = {},
     viewModel: TransactionDetailViewModel = hiltViewModel()
 ) {
     val transaction by viewModel.transaction.collectAsStateWithLifecycle()
@@ -723,6 +726,7 @@ fun TransactionDetailScreen(
                 onNavigateToLoanDetail = onNavigateToLoanDetail,
                 onFindSimilar = onFindSimilar,
                 onNavigateToTransactionDetail = onNavigateToTransactionDetail,
+                onMerchantClick = onMerchantClick,
                 accountProfileId = accountProfileId,
                 hazeState = hazeState,
                 modifier = Modifier.padding(paddingValues)
@@ -983,6 +987,7 @@ private fun TransactionDetailContent(
     onNavigateToLoanDetail: (Long) -> Unit,
     onFindSimilar: (String) -> Unit,
     onNavigateToTransactionDetail: (Long) -> Unit,
+    onMerchantClick: (String) -> Unit,
     accountProfileId: Long?,
     hazeState: HazeState,
     modifier: Modifier = Modifier
@@ -1040,6 +1045,7 @@ private fun TransactionDetailContent(
                     onNavigateToLoanDetail = onNavigateToLoanDetail,
                     onFindSimilar = onFindSimilar,
                     onNavigateToTransactionDetail = onNavigateToTransactionDetail,
+                    onMerchantClick = onMerchantClick,
                     accountProfileId = accountProfileId
                 )
             }
@@ -1103,6 +1109,7 @@ private fun TransactionReceipt(
     onNavigateToLoanDetail: (Long) -> Unit,
     onFindSimilar: (String) -> Unit = {},
     onNavigateToTransactionDetail: (Long) -> Unit = {},
+    onMerchantClick: (String) -> Unit = {},
     accountProfileId: Long? = null
 ) {
     val currentGroup by viewModel.currentGroup.collectAsStateWithLifecycle()
@@ -1167,7 +1174,8 @@ private fun TransactionReceipt(
                     text = transaction.merchantName,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.clickable { onMerchantClick(transaction.merchantName) }
                 )
 
                 Spacer(modifier = Modifier.height(Spacing.sm))
@@ -1400,7 +1408,8 @@ private fun TransactionReceipt(
                 label = "Date & Time",
                 value = transaction.dateTime.format(
                     DateTimeFormatter.ofPattern("EEE, MMM d, yyyy \u00b7 h:mm a")
-                )
+                ),
+                badge = if (transaction.dateManuallyEdited) "Manually edited" else null
             )
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -1708,7 +1717,8 @@ private fun DetailInfoRow(
     icon: ImageVector,
     label: String,
     value: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    badge: String? = null
 ) {
     Row(
         modifier = modifier
@@ -1723,11 +1733,20 @@ private fun DetailInfoRow(
             modifier = Modifier.size(Dimensions.Icon.medium),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-        )
+        Column {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+            if (badge != null) {
+                Text(
+                    text = badge,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
+        }
         Spacer(modifier = Modifier.weight(1f))
         Text(
             text = value,
@@ -1795,6 +1814,7 @@ private fun TransferFlowRow(
 @Composable
 private fun ExpandableSmsSection(smsBody: String) {
     var expanded by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
 
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -1826,12 +1846,30 @@ private fun ExpandableSmsSection(smsBody: String) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Icon(
-                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(Dimensions.Icon.medium)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    if (expanded) {
+                        IconButton(
+                            onClick = { clipboard.setText(AnnotatedString(smsBody)) },
+                            modifier = Modifier.size(Dimensions.Icon.medium)
+                        ) {
+                            Icon(
+                                Icons.Default.ContentCopy,
+                                contentDescription = "Copy SMS text",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(Dimensions.Icon.small)
+                            )
+                        }
+                    }
+                    Icon(
+                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(Dimensions.Icon.medium)
+                    )
+                }
             }
 
             AnimatedVisibility(

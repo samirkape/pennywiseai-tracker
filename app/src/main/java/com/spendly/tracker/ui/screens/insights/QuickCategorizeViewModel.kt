@@ -2,19 +2,25 @@ package com.spendly.tracker.ui.screens.insights
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.spendly.tracker.data.database.entity.CategoryEntity
 import com.spendly.tracker.data.database.entity.TransactionEntity
+import com.spendly.tracker.data.repository.CategoryRepository
 import com.spendly.tracker.data.repository.TransactionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import javax.inject.Inject
 
 @HiltViewModel
 class QuickCategorizeViewModel @Inject constructor(
-    private val transactionRepository: TransactionRepository
+    private val transactionRepository: TransactionRepository,
+    categoryRepository: CategoryRepository
 ) : ViewModel() {
 
     private val _uncategorizedTransactions = MutableStateFlow<List<TransactionEntity>>(emptyList())
@@ -22,6 +28,13 @@ class QuickCategorizeViewModel @Inject constructor(
 
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    val categories: StateFlow<List<CategoryEntity>> = combine(
+        categoryRepository.getExpenseCategories(),
+        categoryRepository.getIncomeCategories()
+    ) { expense, income ->
+        (expense + income).sortedBy { it.displayOrder }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         loadUncategorized()

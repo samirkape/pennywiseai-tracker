@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Label
@@ -35,9 +36,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.spendly.tracker.data.database.entity.CategoryEntity
 import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
-import com.spendly.tracker.ui.icons.CategoryMapping
+import com.spendly.tracker.ui.components.parseColor
+import com.spendly.tracker.ui.icons.CategoryIcons
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.utils.CurrencyFormatter
@@ -52,6 +55,7 @@ fun QuickCategorizeScreen(
     onBack: () -> Unit = {}
 ) {
     val transactions by viewModel.uncategorizedTransactions.collectAsStateWithLifecycle()
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val hazeState = remember { HazeState() }
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -91,10 +95,12 @@ fun QuickCategorizeScreen(
                 else -> {
                     CategorizeContent(
                         transactions = transactions,
+                        categories = categories,
                         onCategorize = { id, category, bulk ->
                             viewModel.categorizeTransaction(id, category, bulk)
                         },
-                        onSkip = { id -> viewModel.skipTransaction(id) }
+                        onSkip = { id -> viewModel.skipTransaction(id) },
+                        onEdit = { id -> }
                     )
                 }
             }
@@ -105,8 +111,10 @@ fun QuickCategorizeScreen(
 @Composable
 private fun CategorizeContent(
     transactions: List<TransactionEntity>,
+    categories: List<CategoryEntity>,
     onCategorize: (Long, String, Boolean) -> Unit,
-    onSkip: (Long) -> Unit
+    onSkip: (Long) -> Unit,
+    onEdit: (Long) -> Unit = {}
 ) {
     val currentTransaction = transactions.firstOrNull() ?: return
     var selectedCategory by remember { mutableStateOf<String?>(null) }
@@ -120,7 +128,8 @@ private fun CategorizeContent(
         // Card representation of the transaction
         TransactionCard(
             transaction = currentTransaction,
-            onSkip = { onSkip(currentTransaction.id) }
+            onSkip = { onSkip(currentTransaction.id) },
+            onEdit = { onEdit(currentTransaction.id) }
         )
 
         Spacer(modifier = Modifier.height(Spacing.lg))
@@ -141,14 +150,13 @@ private fun CategorizeContent(
             verticalArrangement = Arrangement.spacedBy(Spacing.sm),
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
-            items(CategoryMapping.categories.keys.toList()) { category ->
-                val info = CategoryMapping.categories[category]!!
+            items(categories, key = { it.id }) { category ->
                 CategorySelectChip(
-                    name = category,
-                    icon = info.icon,
-                    color = info.color,
-                    isSelected = selectedCategory == category,
-                    onClick = { selectedCategory = category }
+                    name = category.name,
+                    icon = CategoryIcons.getIcon(CategoryIcons.resolveKey(category.name, category.icon)),
+                    color = parseColor(category.color, MaterialTheme.colorScheme.primary),
+                    isSelected = selectedCategory == category.name,
+                    onClick = { selectedCategory = category.name }
                 )
             }
         }
@@ -199,7 +207,8 @@ private fun CategorizeContent(
 @Composable
 private fun TransactionCard(
     transaction: TransactionEntity,
-    onSkip: () -> Unit
+    onSkip: () -> Unit,
+    onEdit: () -> Unit = {}
 ) {
     var showSms by remember { mutableStateOf(false) }
     val hasSms = !transaction.smsBody.isNullOrBlank()
@@ -255,15 +264,29 @@ private fun TransactionCard(
                     )
                 }
 
-                IconButton(
-                    onClick = onSkip,
-                    modifier = Modifier.align(Alignment.TopEnd)
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(Spacing.xs)
                 ) {
-                    Icon(
-                        Icons.Default.Close,
-                        contentDescription = "Skip",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                    IconButton(
+                        onClick = onEdit
+                    ) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    IconButton(
+                        onClick = onSkip
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Skip",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
                 }
             }
 

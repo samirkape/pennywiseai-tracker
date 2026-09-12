@@ -58,6 +58,7 @@ class PayPeriodExplorerViewModel @Inject constructor(
         val periodEnd = LocalDate.ofEpochDay(periodEndEpochDay)
         val today = LocalDate.now()
         val lastDay = minOf(today, periodEnd)
+        android.util.Log.d("PayPeriodExplorer", "start() called: periodStart=$periodStart, periodEnd=$periodEnd, today=$today, lastDay=$lastDay")
         if (lastDay.isBefore(periodStart)) {
             _uiState.value = PayPeriodExplorerUiState(
                 periodStart = periodStart,

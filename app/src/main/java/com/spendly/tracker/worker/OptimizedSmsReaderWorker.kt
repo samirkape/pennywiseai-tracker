@@ -13,6 +13,7 @@ import com.spendly.parser.core.bank.*
 import com.spendly.tracker.data.database.entity.AccountBalanceEntity
 import com.spendly.tracker.data.database.entity.MerchantAliasEntity
 import com.spendly.tracker.data.database.entity.CardType
+import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.database.entity.TransactionType
 import com.spendly.tracker.data.database.entity.UnrecognizedSmsEntity
 import com.spendly.tracker.data.mapper.toEntity
@@ -80,6 +81,7 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
         const val PROGRESS_PROCESSED                = "progress_processed"
         const val PROGRESS_PARSED                   = "progress_parsed"
         const val PROGRESS_SAVED                    = "progress_saved"
+        const val PROGRESS_UPDATED                  = "progress_updated"
         const val PROGRESS_BLOCKED                  = "progress_blocked"
         const val PROGRESS_TIME_ELAPSED             = "progress_time_elapsed"
         const val PROGRESS_ESTIMATED_TIME_REMAINING = "progress_estimated_time_remaining"
@@ -234,6 +236,7 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
         val processed = AtomicInteger(0)
         val parsed    = AtomicInteger(0)
         val saved     = AtomicInteger(0)
+        val updated   = AtomicInteger(0)
         val blocked   = AtomicInteger(0)
         val startTime = System.currentTimeMillis()
 
@@ -300,18 +303,6 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
             val forceResync = inputData.getBoolean(INPUT_FORCE_RESYNC, false)
             val scanFromTimestamp = inputData.getLong(INPUT_SCAN_FROM_TIMESTAMP, -1L)
             Log.i(TAG, "Starting SMS worker (forceResync=$forceResync, scanFromTimestamp=$scanFromTimestamp)")
-
-            if (forceResync) {
-                // try/finally ensures endSection even if the suspend calls throw
-                Trace.beginSection("clearDatabase")
-                try {
-                    transactionRepository.deleteAllTransactions()
-                    accountBalanceRepository.deleteAllBalances()
-                } finally {
-                    Trace.endSection()
-                }
-                Log.i(TAG, "Force resync: database cleared")
-            }
 
             Trace.beginSection("readSmsMessages")
             val scanBatch = try {
@@ -425,8 +416,10 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
                             stats.parsed.incrementAndGet()
                             Trace.beginSection("saveTransaction")
                             try {
+                                // saveTransaction increments stats.saved (insert) or
+                                // stats.updated (reparse-in-place fix) itself, since only
+                                // it knows which case occurred.
                                 if (saveTransaction(result.parsed, result.sms, stats)) {
-                                    stats.saved.incrementAndGet()
                                     widgetNeedsUpdate = true
                                 }
                             } finally {
@@ -610,8 +603,17 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
             val entity = parsed.toEntity()
 
             // getTransactionByHash returns rows where is_deleted=1 too, so
-            // soft-deleted transactions are never re-imported.
-            if (transactionRepository.getTransactionByHash(entity.transactionHash) != null) return false
+            // soft-deleted transactions are never re-imported. Fall back to an exact
+            // sms_body + sms_sender match when the hash itself doesn't match — this
+            // covers the case where a parser fix corrected the amount, which changes
+            // the hash (it's part of the hash input) and would otherwise make this
+            // look like a brand-new transaction, duplicating or resurrecting it.
+            val existing = transactionRepository.getTransactionByHash(entity.transactionHash)
+                ?: transactionRepository.getTransactionBySmsAndSender(parsed.smsBody, parsed.sender)
+            if (existing != null) {
+                if (existing.isDeleted) return false // never resurrect a user-deleted transaction
+                return updateExistingTransaction(existing, entity, stats)
+            }
 
             val resolvedMerchant = MerchantAliasResolver.resolveExact(entity.merchantName, merchantAliasCache)
             val withName = if (resolvedMerchant != entity.merchantName) {
@@ -646,12 +648,62 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
 
             if (ruleApps.isNotEmpty()) ruleRepository.saveRuleApplications(ruleApps)
             processBalanceUpdate(parsed, finalEntity, rowId)
+            stats.saved.incrementAndGet()
             true
 
         } catch (e: Exception) {
             Log.e(TAG, "Error saving transaction: ${e.message}")
             false
         }
+    }
+
+    /**
+     * Reparse-in-place: a transaction with this hash already exists (e.g. Full Resync
+     * re-reading the whole SMS inbox). If the current parser now extracts different
+     * values than what's stored, fix the stored row instead of silently skipping it.
+     *
+     * Deliberately limited to objectively-structural fields (amount, account number,
+     * balance, reference) — never merchant name, category, or transaction type. Those
+     * three have *_manually_edited flags, but the flags only cover edits made after the
+     * flag columns existed (they default to false for every pre-existing row), so they
+     * cannot tell a manual categorization/rename made before this feature shipped apart
+     * from raw parser output. Auto-"fixing" them here previously reset manually
+     * categorized transactions to "Other" — never touch user-owned columns.
+     */
+    private suspend fun updateExistingTransaction(
+        existing: TransactionEntity,
+        freshlyParsed: TransactionEntity,
+        stats: ProcessingStats,
+    ): Boolean {
+        val amountChanged = existing.amount.compareTo(freshlyParsed.amount) != 0
+        val balanceChanged = when {
+            existing.balanceAfter == null && freshlyParsed.balanceAfter == null -> false
+            existing.balanceAfter == null || freshlyParsed.balanceAfter == null -> true
+            else -> existing.balanceAfter.compareTo(freshlyParsed.balanceAfter) != 0
+        }
+        val hashChanged = existing.transactionHash != freshlyParsed.transactionHash
+        val changed = amountChanged ||
+            balanceChanged ||
+            hashChanged ||
+            existing.accountNumber != freshlyParsed.accountNumber ||
+            existing.reference != freshlyParsed.reference
+
+        if (!changed) return false
+
+        val rows = transactionRepository.updateParsedFieldsById(
+            id = existing.id,
+            amount = freshlyParsed.amount,
+            accountNumber = freshlyParsed.accountNumber,
+            balanceAfter = freshlyParsed.balanceAfter,
+            reference = freshlyParsed.reference,
+            transactionHash = freshlyParsed.transactionHash,
+            updatedAt = LocalDateTime.now(),
+        )
+        if (rows > 0) {
+            stats.updated.incrementAndGet()
+            return true
+        }
+        return false
     }
 
     // ─── Balance update ───────────────────────────────────────────────────────
@@ -785,6 +837,7 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
                 PROGRESS_PROCESSED                to p,
                 PROGRESS_PARSED                   to stats.parsed.get(),
                 PROGRESS_SAVED                    to stats.saved.get(),
+                PROGRESS_UPDATED                  to stats.updated.get(),
                 PROGRESS_BLOCKED                  to stats.blocked.get(),
                 PROGRESS_TIME_ELAPSED             to stats.elapsedMs(),
                 PROGRESS_ESTIMATED_TIME_REMAINING to (eta * 1000L),
@@ -987,6 +1040,7 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
         │  Processed : ${stats.processed.get()}
         │  Parsed    : ${stats.parsed.get()}
         │  Saved     : ${stats.saved.get()}
+        │  Updated   : ${stats.updated.get()}
         │  Elapsed   : ${elapsedMs}ms
         │  Speed     : ${"%.1f".format(stats.msgPerSec())} msg/s
         └──────────────────────────────────────────────

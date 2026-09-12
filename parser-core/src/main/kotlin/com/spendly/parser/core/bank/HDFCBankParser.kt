@@ -244,6 +244,14 @@ class HDFCBankParser : BaseIndianBankParser() {
                     return cleanMerchantName(vpaName)
                 }
             }
+
+            // Rare gateway variant where the '@' delimiter is missing, e.g. "VPA netflixupi.payuhdfcbank(UPI Ref No ...)"
+            CompiledPatterns.HDFC.VPA_NO_AT_PATTERN.find(message)?.let { match ->
+                val vpaName = match.groupValues[1].trim()
+                if (vpaName.length > 3 && !vpaName.all { it.isDigit() }) {
+                    return cleanMerchantName(vpaName)
+                }
+            }
         }
 
         // Pattern 4: "spent on Card XX1234 at merchant on date"
@@ -535,7 +543,8 @@ class HDFCBankParser : BaseIndianBankParser() {
             "spent", "received", "transferred", "paid",
             "sent", // HDFC uses "Sent Rs.X From HDFC Bank"
             "deducted", // Add support for "deducted from" pattern
-            "txn" // HDFC uses "Txn Rs.X" for card transactions
+            "txn", // HDFC uses "Txn Rs.X" for card transactions
+            "refund" // HDFC uses "Rs.X refunded by MERCHANT ... adjusted against ... Card"
         )
 
         return hdfcTransactionKeywords.any { lowerMessage.contains(it) }

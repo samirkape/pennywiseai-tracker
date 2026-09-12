@@ -78,6 +78,8 @@ object CompiledPatterns {
             Regex("""Info:\s*(?:UPI/)?([^/\.\n]+?)(?:/|$)""", RegexOption.IGNORE_CASE)
         val VPA_WITH_NAME = Regex("""VPA\s+[^@\s]+@[^\s]+\s*\(([^)]+)\)""", RegexOption.IGNORE_CASE)
         val VPA_PATTERN = Regex("""VPA\s+([^@\s]+)@""", RegexOption.IGNORE_CASE)
+        // Rare gateway variant that drops the '@' delimiter entirely, e.g. "VPA netflixupi.payuhdfcbank("
+        val VPA_NO_AT_PATTERN = Regex("""VPA\s+([A-Za-z0-9_-]+)\.[A-Za-z]+\s*\(""", RegexOption.IGNORE_CASE)
         val SPENT_PATTERN = Regex("""at\s+([^\.\n]+?)\s+on\s+\d{2}""", RegexOption.IGNORE_CASE)
         val DEBIT_FOR_PATTERN =
             Regex("""debited\s+for\s+([^\.\n]+?)\s+on\s+\d{2}""", RegexOption.IGNORE_CASE)

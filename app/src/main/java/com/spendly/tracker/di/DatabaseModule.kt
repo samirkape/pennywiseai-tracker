@@ -47,7 +47,7 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
-    
+
     /**
      * Provides the singleton instance of SpendlyDatabase.
      * 
@@ -88,7 +88,9 @@ object DatabaseModule {
                 SpendlyDatabase.MIGRATION_56_57,
                 SpendlyDatabase.MIGRATION_58_59,
                 SpendlyDatabase.MIGRATION_59_60,
-                SpendlyDatabase.MIGRATION_60_61
+                SpendlyDatabase.MIGRATION_60_61,
+                SpendlyDatabase.MIGRATION_62_63,
+                SpendlyDatabase.MIGRATION_63_64
             )
             .fallbackToDestructiveMigrationOnDowngrade()
 
@@ -105,7 +107,7 @@ object DatabaseModule {
 
         return database
     }
-    
+
     /**
      * Provides the TransactionDao from the database.
      * 

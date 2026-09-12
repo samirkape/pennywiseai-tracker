@@ -101,6 +101,23 @@ interface TransactionDao {
     fun getUncategorizedTransactionCount(): Flow<Int>
 
     @Query("""
+        SELECT COUNT(*) FROM transactions
+        WHERE is_deleted = 0
+        AND is_excluded_from_tracking = 0
+        AND date_time BETWEEN :startDate AND :endDate
+        AND (category IS NULL OR TRIM(category) = '' OR category = 'Others')
+    """)
+    fun getUncategorizedTransactionCountForPeriod(startDate: LocalDateTime, endDate: LocalDateTime): Flow<Int>
+
+    @Query("""
+        SELECT COUNT(*) FROM transactions
+        WHERE is_deleted = 0
+        AND is_excluded_from_tracking = 0
+        AND date_time BETWEEN :startDate AND :endDate
+    """)
+    fun getTrackedTransactionCountForPeriod(startDate: LocalDateTime, endDate: LocalDateTime): Flow<Int>
+
+    @Query("""
         SELECT DISTINCT category FROM transactions
         WHERE is_deleted = 0
         AND date_time BETWEEN :startDate AND :endDate
@@ -209,6 +226,31 @@ interface TransactionDao {
         updatedAt: LocalDateTime,
     ): Int
 
+    /**
+     * Fetches transactions eligible for SMS date reconciliation: not deleted, not
+     * manually date-edited by the user, and with the original SMS body still
+     * available so the transaction date can be re-derived from the text (see
+     * [com.spendly.parser.core.bank.BankParser.extractMessageDateTime]).
+     */
+    @Query(
+        """
+        SELECT id, date_time, sms_body, sms_sender, bank_name FROM transactions
+        WHERE is_deleted = 0
+        AND date_manually_edited = 0
+        AND sms_body IS NOT NULL
+        AND sms_body != ''
+        """
+    )
+    suspend fun getTransactionsForDateReconciliation(): List<TransactionDateReconciliationRow>
+
+    @Query(
+        """
+        UPDATE transactions SET date_time = :dateTime, updated_at = :updatedAt
+        WHERE id = :id
+        """
+    )
+    suspend fun updateTransactionDateTime(id: Long, dateTime: LocalDateTime, updatedAt: LocalDateTime): Int
+
     @Delete
     suspend fun deleteTransaction(transaction: TransactionEntity)
     
@@ -220,10 +262,10 @@ interface TransactionDao {
 
     @Query("UPDATE transactions SET linked_transaction_id = NULL")
     suspend fun clearAllLinkedTransactionIds()
-    
+
     @Query(
         """
-        UPDATE transactions SET category = :newCategory, updated_at = :updatedAt
+        UPDATE transactions SET category = :newCategory, category_manually_edited = 1, updated_at = :updatedAt
         WHERE is_deleted = 0
         AND LOWER(merchant_name) = LOWER(:merchantName)
         AND ((:applySince = 0) OR (date_time >= :sinceCutoff))
@@ -242,6 +284,7 @@ interface TransactionDao {
         UPDATE transactions SET
             transaction_type = :transactionType,
             transfer_kind = :transferKind,
+            transaction_type_manually_edited = 1,
             updated_at = :updatedAt
         WHERE is_deleted = 0
         AND LOWER(merchant_name) = LOWER(:merchantName)
@@ -261,7 +304,7 @@ interface TransactionDao {
 
     @Query(
         """
-        UPDATE transactions SET merchant_name = :newMerchantName, updated_at = :updatedAt
+        UPDATE transactions SET merchant_name = :newMerchantName, merchant_manually_edited = :manuallyEdited, updated_at = :updatedAt
         WHERE is_deleted = 0 AND LOWER(merchant_name) = LOWER(:oldMerchantName)
         """
     )
@@ -269,6 +312,7 @@ interface TransactionDao {
         oldMerchantName: String,
         newMerchantName: String,
         updatedAt: LocalDateTime,
+        manuallyEdited: Boolean = true,
     )
 
     @Query("SELECT COUNT(*) FROM transactions WHERE merchant_name = :merchantName AND id != :excludeId")
@@ -318,11 +362,12 @@ interface TransactionDao {
     """)
     suspend fun getRepresentativeSmsBodyForMerchant(merchantName: String): String?
 
-    @Query("UPDATE transactions SET merchant_name = :newMerchantName, updated_at = :updatedAt WHERE id = :transactionId")
+    @Query("UPDATE transactions SET merchant_name = :newMerchantName, merchant_manually_edited = :manuallyEdited, updated_at = :updatedAt WHERE id = :transactionId")
     suspend fun updateMerchantNameById(
         transactionId: Long,
         newMerchantName: String,
         updatedAt: LocalDateTime,
+        manuallyEdited: Boolean = true,
     )
 
     @Query("""
@@ -382,6 +427,17 @@ interface TransactionDao {
     // Method to check if transaction exists by hash (including deleted)
     @Query("SELECT * FROM transactions WHERE transaction_hash = :transactionHash LIMIT 1")
     suspend fun getTransactionByHash(transactionHash: String): TransactionEntity?
+
+    /**
+     * Fallback identity lookup for reparse-in-place (Full Resync). transaction_hash
+     * includes the parsed amount, so a parser fix that corrects a previously-wrong
+     * amount changes the hash for that SMS — the hash lookup then misses the existing
+     * row entirely and the SMS looks brand new, which either duplicates an active
+     * transaction or resurrects a deleted one. Exact sms_body + sms_sender match is
+     * a hash-independent way to find the same underlying SMS (including deleted rows).
+     */
+    @Query("SELECT * FROM transactions WHERE sms_body = :smsBody AND sms_sender = :smsSender LIMIT 1")
+    suspend fun getTransactionBySmsAndSender(smsBody: String, smsSender: String): TransactionEntity?
     
     @Query("""
         SELECT * FROM transactions
@@ -590,13 +646,55 @@ interface TransactionDao {
 
     @Query(
         """
-        UPDATE transactions SET category = :category, updated_at = :updatedAt
+        UPDATE transactions SET category = :category, category_manually_edited = 0, updated_at = :updatedAt
         WHERE id = :id AND is_deleted = 0
         """
     )
     suspend fun updateTransactionCategoryById(
         id: Long,
         category: String,
+        updatedAt: LocalDateTime,
+    ): Int
+
+    /**
+     * Reparse-in-place update used by Full Resync to fix a transaction whose SMS was
+     * parsed incorrectly. Only writes objectively-structural fields that a parser bug
+     * fix would actually change — never touches user-owned columns (tags, group_id,
+     * receipt_path, is_excluded_from_tracking, etc.) and skips is_deleted rows so a
+     * deleted transaction is never resurrected.
+     *
+     * merchant_name / category / transaction_type are deliberately excluded, even
+     * though *_manually_edited flags exist for them: those flags only cover edits made
+     * after the flag columns were introduced (they default to 0 on migration), so they
+     * cannot distinguish a pre-existing manual categorization/rename from raw parser
+     * output. Auto-overwriting them here previously reset manually-categorized
+     * transactions to "Other". Fixing those fields for already-imported transactions
+     * needs an explicit, previewable, opt-in action — not a silent resync side effect.
+     *
+     * Also refreshes transaction_hash to the freshly-computed value: since the hash
+     * includes amount, correcting the amount changes the row's own canonical hash. If
+     * we didn't update it here, every future resync would keep missing this row by
+     * hash and fall back to the sms_body/sms_sender lookup indefinitely.
+     */
+    @Query(
+        """
+        UPDATE transactions SET
+            amount = :amount,
+            account_number = :accountNumber,
+            balance_after = :balanceAfter,
+            reference = :reference,
+            transaction_hash = :transactionHash,
+            updated_at = :updatedAt
+        WHERE id = :id AND is_deleted = 0
+        """
+    )
+    suspend fun updateParsedFieldsById(
+        id: Long,
+        amount: BigDecimal,
+        accountNumber: String?,
+        balanceAfter: BigDecimal?,
+        reference: String?,
+        transactionHash: String,
         updatedAt: LocalDateTime,
     ): Int
 
@@ -634,6 +732,27 @@ interface TransactionDao {
         WHERE id = :id
     """)
     suspend fun updateTransferKind(id: Long, transferKind: String, updatedAt: LocalDateTime): Int
+
+    @Query("""
+        UPDATE transactions SET transfer_kind = :transferKind, category = :category, updated_at = :updatedAt
+        WHERE id = :id
+    """)
+    suspend fun updateTransferKindAndCategory(id: Long, transferKind: String, category: String, updatedAt: LocalDateTime): Int
+
+    @Query("""
+        SELECT strftime('%Y-%m', date_time) AS yearMonth, SUM(amount) AS total, COUNT(*) AS count
+        FROM transactions
+        WHERE is_deleted = 0
+        AND is_excluded_from_tracking = 0
+        AND LOWER(merchant_name) = LOWER(:merchantName)
+        AND (
+            transaction_type IN ('EXPENSE', 'CREDIT', 'INVESTMENT')
+            OR (transaction_type = 'TRANSFER' AND transfer_kind = 'CC_BILL_PAYMENT')
+        )
+        GROUP BY yearMonth
+        ORDER BY yearMonth ASC
+    """)
+    fun getMonthlyTotalsForMerchant(merchantName: String): Flow<List<MerchantMonthlyTotal>>
 }
 
 data class TransactionIdCategoryRow(
@@ -647,6 +766,12 @@ data class MerchantCategoryStats(
     @ColumnInfo(name = "total") val total: Int,
 )
 
+data class MerchantMonthlyTotal(
+    @ColumnInfo(name = "yearMonth") val yearMonth: String,
+    @ColumnInfo(name = "total") val total: BigDecimal,
+    @ColumnInfo(name = "count") val count: Int,
+)
+
 data class BulkCategoryPreviewDaoRow(
     @ColumnInfo(name = "id") val id: Long,
     @ColumnInfo(name = "merchant_name") val merchantName: String,
@@ -654,4 +779,13 @@ data class BulkCategoryPreviewDaoRow(
     @ColumnInfo(name = "amount") val amount: BigDecimal,
     @ColumnInfo(name = "currency") val currency: String,
     @ColumnInfo(name = "date_time") val dateTime: LocalDateTime,
+)
+
+/** Minimal projection used by [TransactionDao.getTransactionsForDateReconciliation]. */
+data class TransactionDateReconciliationRow(
+    @ColumnInfo(name = "id") val id: Long,
+    @ColumnInfo(name = "date_time") val dateTime: LocalDateTime,
+    @ColumnInfo(name = "sms_body") val smsBody: String,
+    @ColumnInfo(name = "sms_sender") val smsSender: String?,
+    @ColumnInfo(name = "bank_name") val bankName: String?,
 )

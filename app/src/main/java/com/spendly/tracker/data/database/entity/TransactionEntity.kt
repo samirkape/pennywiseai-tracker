@@ -113,7 +113,40 @@ data class TransactionEntity(
     val transferKind: String? = null,
 
     @ColumnInfo(name = "prepaid_expense_id", defaultValue = "NULL")
-    val prepaidExpenseId: Long? = null
+    val prepaidExpenseId: Long? = null,
+
+    /**
+     * True when the user manually changed this transaction's date/time via the
+     * date/time picker in Transaction Details, overriding the date originally
+     * parsed from the SMS. Used to show a "manually edited" indicator so users
+     * aren't confused when it no longer matches the SMS text.
+     */
+    @ColumnInfo(name = "date_manually_edited", defaultValue = "0")
+    val dateManuallyEdited: Boolean = false,
+
+    /**
+     * True when the user manually renamed this transaction's merchant, overriding
+     * the name originally extracted from the SMS. Reparse passes (e.g. Full Resync)
+     * must not overwrite the merchant name while this is set.
+     */
+    @ColumnInfo(name = "merchant_manually_edited", defaultValue = "0")
+    val merchantManuallyEdited: Boolean = false,
+
+    /**
+     * True when the user manually changed this transaction's category, overriding
+     * the category originally derived from parsing/rules. Reparse passes must not
+     * overwrite the category while this is set.
+     */
+    @ColumnInfo(name = "category_manually_edited", defaultValue = "0")
+    val categoryManuallyEdited: Boolean = false,
+
+    /**
+     * True when the user manually changed this transaction's type (e.g. Expense to
+     * Investment), overriding the type originally derived from parsing. Reparse passes
+     * must not overwrite the transaction type while this is set.
+     */
+    @ColumnInfo(name = "transaction_type_manually_edited", defaultValue = "0")
+    val transactionTypeManuallyEdited: Boolean = false
 )
 
 /**

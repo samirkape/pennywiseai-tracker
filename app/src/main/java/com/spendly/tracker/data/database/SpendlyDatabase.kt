@@ -77,7 +77,7 @@ import com.spendly.tracker.data.database.dao.PrepaidExpenseDao
  */
 @Database(
     entities = [TransactionEntity::class, SubscriptionEntity::class, ChatMessage::class, MerchantMappingEntity::class, MerchantAliasEntity::class, CategoryEntity::class, AccountBalanceEntity::class, UnrecognizedSmsEntity::class, CardEntity::class, RuleEntity::class, RuleApplicationEntity::class, ExchangeRateEntity::class, BudgetEntity::class, BudgetCategoryEntity::class, BudgetMonthSnapshotEntity::class, BudgetCategoryMonthSnapshotEntity::class, TransactionSplitEntity::class, BankNotificationEntity::class, LoanEntity::class, TransactionGroupEntity::class, ProfileEntity::class, SalaryMonthOverrideEntity::class, TransactionReceiptEntity::class, InsightsCacheEntity::class, GoalEntity::class, GoalContributionEntity::class, PrepaidExpenseEntity::class, PrepaidAllocationEntity::class],
-    version = 61,
+    version = 64,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -134,6 +134,8 @@ import com.spendly.tracker.data.database.dao.PrepaidExpenseDao
         // 55→56 is a manual migration registered in DatabaseModule (ensure Credit Card Payment category exists)
         // 56→57 is a manual migration registered in DatabaseModule (add icon column to categories)
         // 60→61 is a manual migration registered in DatabaseModule (add prepaid_expenses + prepaid_allocations tables, prepaid_expense_id column on transactions)
+        AutoMigration(from = 61, to = 62),
+        // 62→63 is a manual migration registered in DatabaseModule (add merchant_manually_edited + category_manually_edited columns)
     ]
 )
 @TypeConverters(Converters::class)
@@ -203,7 +205,9 @@ abstract class SpendlyDatabase : RoomDatabase() {
                         MIGRATION_53_54,
                         MIGRATION_58_59,
                         MIGRATION_59_60,
-                        MIGRATION_60_61
+                        MIGRATION_60_61,
+                        MIGRATION_62_63,
+                        MIGRATION_63_64
                     )
                     .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
@@ -806,6 +810,19 @@ abstract class SpendlyDatabase : RoomDatabase() {
 
                 db.execSQL("ALTER TABLE `transactions` ADD COLUMN `prepaid_expense_id` INTEGER DEFAULT NULL")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_prepaid_expense_id` ON `transactions` (`prepaid_expense_id`)")
+            }
+        }
+
+        val MIGRATION_62_63 = object : Migration(62, 63) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `transactions` ADD COLUMN `merchant_manually_edited` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `transactions` ADD COLUMN `category_manually_edited` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRATION_63_64 = object : Migration(63, 64) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `transactions` ADD COLUMN `transaction_type_manually_edited` INTEGER NOT NULL DEFAULT 0")
             }
         }
 

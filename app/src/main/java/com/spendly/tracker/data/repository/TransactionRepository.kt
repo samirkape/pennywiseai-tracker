@@ -1,6 +1,7 @@
 package com.spendly.tracker.data.repository
 
 import com.spendly.tracker.data.database.dao.BulkCategoryPreviewDaoRow
+import com.spendly.tracker.data.database.dao.MerchantMonthlyTotal
 import com.spendly.tracker.data.database.dao.PrepaidExpenseDao
 import com.spendly.tracker.data.database.dao.TransactionDao
 import com.spendly.tracker.data.database.dao.TransactionReceiptDao
@@ -94,7 +95,8 @@ class TransactionRepository @Inject constructor(
             merchantRenameUndoStack.removeFirstOrNull()
         } ?: return 0
         for ((id, oldName) in pairs) {
-            transactionDao.updateMerchantNameById(id, oldName, LocalDateTime.now())
+            // Undo restores the pre-rename value, so it's no longer a manual edit
+            transactionDao.updateMerchantNameById(id, oldName, LocalDateTime.now(), manuallyEdited = false)
         }
         return pairs.size
     }
@@ -270,7 +272,10 @@ class TransactionRepository @Inject constructor(
 
     fun getAllMerchants(): Flow<List<String>> =
         transactionDao.getAllMerchants()
-    
+
+    fun getMonthlyTotalsForMerchant(merchantName: String): Flow<List<MerchantMonthlyTotal>> =
+        transactionDao.getMonthlyTotalsForMerchant(merchantName)
+
     suspend fun getTotalAmountByTypeAndPeriod(
         type: TransactionType,
         startDate: LocalDateTime,
@@ -320,6 +325,33 @@ class TransactionRepository @Inject constructor(
     // Helper method to check if transaction exists by hash
     suspend fun getTransactionByHash(transactionHash: String): TransactionEntity? =
         transactionDao.getTransactionByHash(transactionHash)
+
+    /**
+     * Fallback identity lookup for reparse-in-place. See [TransactionDao.getTransactionBySmsAndSender].
+     */
+    suspend fun getTransactionBySmsAndSender(smsBody: String, smsSender: String): TransactionEntity? =
+        transactionDao.getTransactionBySmsAndSender(smsBody, smsSender)
+
+    /**
+     * Reparse-in-place update for Full Resync. See [TransactionDao.updateParsedFieldsById].
+     */
+    suspend fun updateParsedFieldsById(
+        id: Long,
+        amount: BigDecimal,
+        accountNumber: String?,
+        balanceAfter: BigDecimal?,
+        reference: String?,
+        transactionHash: String,
+        updatedAt: LocalDateTime,
+    ): Int = transactionDao.updateParsedFieldsById(
+        id = id,
+        amount = amount,
+        accountNumber = accountNumber,
+        balanceAfter = balanceAfter,
+        reference = reference,
+        transactionHash = transactionHash,
+        updatedAt = updatedAt,
+    )
 
     suspend fun getTransactionByReference(reference: String): TransactionEntity? =
         transactionDao.getTransactionByReference(reference)
@@ -670,6 +702,20 @@ class TransactionRepository @Inject constructor(
             )
         }
 
+    fun getUncategorizedTransactionSummaryForPeriod(
+        startDate: LocalDateTime,
+        endDate: LocalDateTime,
+    ): Flow<UncategorizedTransactionSummary> =
+        combine(
+            transactionDao.getUncategorizedTransactionCountForPeriod(startDate, endDate),
+            transactionDao.getTrackedTransactionCountForPeriod(startDate, endDate),
+        ) { uncategorizedCount, totalCount ->
+            UncategorizedTransactionSummary(
+                uncategorizedCount = uncategorizedCount,
+                totalCount = totalCount,
+            )
+        }
+
     // ========== Transaction Split Methods ==========
 
     /**
@@ -811,11 +857,70 @@ class TransactionRepository @Inject constructor(
     fun getPendingSelfTransferCount(): Flow<Int> =
         transactionDao.getPendingSelfTransferCount()
 
-    suspend fun updateTransferKind(id: Long, transferKind: String) =
-        transactionDao.updateTransferKind(id, transferKind, LocalDateTime.now())
+    suspend fun updateTransferKind(id: Long, transferKind: String) {
+        val updatedAt = LocalDateTime.now()
+        if (transferKind == com.spendly.tracker.data.database.entity.TransferKind.SELF_TRANSFER) {
+            transactionDao.updateTransferKindAndCategory(id, transferKind, "", updatedAt)
+        } else {
+            transactionDao.updateTransferKind(id, transferKind, updatedAt)
+        }
+    }
+
+    /**
+     * Re-derives the `date_time` of past transactions from their stored SMS body text,
+     * for transactions whose date currently reflects the SMS receipt/scan timestamp
+     * instead of the date printed inside the message (see [com.spendly.parser.core.bank.BankParser.extractMessageDateTime]).
+     * Only rows where the re-parsed date differs from the stored one are updated.
+     */
+    suspend fun reconcileTransactionDatesFromSms(): TransactionDateReconciliationResult {
+        val candidates = transactionDao.getTransactionsForDateReconciliation()
+        var updated = 0
+        var unchanged = 0
+        var unparsable = 0
+        val now = LocalDateTime.now()
+
+        for (row in candidates) {
+            val parser = com.spendly.parser.core.bank.BankParserFactory.getParser(row.smsSender ?: "", row.smsBody)
+                ?: row.bankName?.let { com.spendly.parser.core.bank.BankParserFactory.getParserByName(it) }
+
+            val extractedMillis = parser?.extractMessageDateTime(row.smsBody)
+            if (extractedMillis == null) {
+                unparsable++
+                continue
+            }
+
+            val extractedDateTime = LocalDateTime.ofInstant(
+                java.time.Instant.ofEpochMilli(extractedMillis),
+                java.time.ZoneId.systemDefault()
+            )
+
+            if (extractedDateTime == row.dateTime) {
+                unchanged++
+                continue
+            }
+
+            transactionDao.updateTransactionDateTime(row.id, extractedDateTime, now)
+            updated++
+        }
+
+        return TransactionDateReconciliationResult(
+            scanned = candidates.size,
+            updated = updated,
+            unchanged = unchanged,
+            unparsable = unparsable
+        )
+    }
 }
 
 data class UncategorizedTransactionSummary(
     val uncategorizedCount: Int,
     val totalCount: Int,
+)
+
+/** Summary of [TransactionRepository.reconcileTransactionDatesFromSms]. */
+data class TransactionDateReconciliationResult(
+    val scanned: Int,
+    val updated: Int,
+    val unchanged: Int,
+    val unparsable: Int,
 )

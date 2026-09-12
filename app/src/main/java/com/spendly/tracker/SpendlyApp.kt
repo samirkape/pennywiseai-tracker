@@ -3,12 +3,21 @@ package com.spendly.tracker
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -22,6 +31,7 @@ import com.spendly.tracker.navigation.OnBoarding
 import com.spendly.tracker.navigation.SpendlyNavHost
 import com.spendly.tracker.ui.theme.SpendlyTheme
 import com.spendly.tracker.ui.viewmodel.AppLockViewModel
+import com.spendly.tracker.ui.viewmodel.AutoRestoreViewModel
 import com.spendly.tracker.ui.viewmodel.ThemeViewModel
 import com.spendly.tracker.widget.RecentTransactionsWidgetUpdateWorker
 import com.spendly.tracker.worker.InsightsWorker
@@ -30,6 +40,7 @@ import com.spendly.tracker.worker.InsightsWorker
 fun SpendlyApp(
     themeViewModel: ThemeViewModel = hiltViewModel(),
     appLockViewModel: AppLockViewModel = hiltViewModel(),
+    autoRestoreViewModel: AutoRestoreViewModel = hiltViewModel(),
     editTransactionId: Long? = null,
     openAddTransaction: Boolean = false,
     openTransactions: Boolean = false,
@@ -41,6 +52,7 @@ fun SpendlyApp(
 ) {
     val themeUiState by themeViewModel.themeUiState.collectAsStateWithLifecycle()
     val appLockUiState by appLockViewModel.uiState.collectAsStateWithLifecycle()
+    val autoRestoreState by autoRestoreViewModel.restorePromptState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     val darkTheme = themeUiState.isDarkTheme ?: isSystemInDarkTheme()
@@ -139,6 +151,24 @@ fun SpendlyApp(
         }
     }
 
+    // Check for auto-backup after onboarding is complete and DB might be empty
+    LaunchedEffect(themeUiState.hasCompletedOnboarding) {
+        if (themeUiState.hasCompletedOnboarding) {
+            autoRestoreViewModel.checkForAutoBackup()
+        }
+    }
+
+    // Confirm to the user when an auto-restore finishes successfully
+    LaunchedEffect(autoRestoreState.restoreComplete) {
+        if (autoRestoreState.restoreComplete) {
+            android.widget.Toast.makeText(
+                context,
+                "Your data has been restored",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
     // Keep widgets and insights current when app launches
     LaunchedEffect(Unit) {
         RecentTransactionsWidgetUpdateWorker.enqueueOneShot(context.applicationContext)
@@ -161,5 +191,44 @@ fun SpendlyApp(
             startDestination = startDestination,
             onEditComplete = onEditComplete
         )
+
+        if (autoRestoreState.shouldShow) {
+            AlertDialog(
+                onDismissRequest = { autoRestoreViewModel.dismissRestorePrompt() },
+                title = { Text("Restore Previous Data?") },
+                text = {
+                    Column {
+                        Text(
+                            if (autoRestoreState.backupTimestamp != null)
+                                "A backup from ${autoRestoreState.backupTimestamp} was found. " +
+                                "Would you like to restore your data?"
+                            else
+                                "A previous backup was found. Would you like to restore your data?"
+                        )
+                        if (autoRestoreState.errorMessage != null) {
+                            Spacer(modifier = androidx.compose.ui.Modifier.height(8.dp))
+                            Text(
+                                text = "Restore failed: ${autoRestoreState.errorMessage}",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    if (autoRestoreState.isRestoring) {
+                        CircularProgressIndicator()
+                    } else {
+                        TextButton(onClick = { autoRestoreViewModel.restoreFromAutoBackup() }) {
+                            Text(if (autoRestoreState.errorMessage != null) "Retry" else "Restore")
+                        }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { autoRestoreViewModel.dismissRestorePrompt() }) {
+                        Text("Start Fresh")
+                    }
+                }
+            )
+        }
     }
 }

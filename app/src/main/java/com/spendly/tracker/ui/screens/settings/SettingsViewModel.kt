@@ -20,6 +20,7 @@ import com.spendly.tracker.data.repository.ModelRepository
 import com.spendly.tracker.data.repository.ModelState
 import com.spendly.tracker.data.repository.UnrecognizedSmsRepository
 import com.spendly.tracker.data.preferences.UserPreferencesRepository
+import com.spendly.tracker.data.backup.AutoBackupManager
 import com.spendly.tracker.data.backup.BackupExporter
 import com.spendly.tracker.data.backup.BackupImporter
 import com.spendly.tracker.data.backup.ExportResult
@@ -54,6 +55,7 @@ class SettingsViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val backupExporter: BackupExporter,
     private val backupImporter: BackupImporter,
+    private val autoBackupManager: AutoBackupManager,
     private val salaryMonthOverrideRepository: SalaryMonthOverrideRepository,
     private val smsScanManager: SmsScanManager,
     private val premiumManager: PremiumManager
@@ -644,6 +646,23 @@ class SettingsViewModel @Inject constructor(
             shareBackupFile(file)
         }
     }
+
+    fun saveBackupToDownloads() {
+        viewModelScope.launch {
+            try {
+                _exportedBackupFile.value?.let { file ->
+                    autoBackupManager.saveToDownloads(file).onSuccess {
+                        _importExportMessage.value = "Backup saved to Downloads/Spendly/"
+                        _exportedBackupFile.value = null
+                    }.onFailure { e ->
+                        _importExportMessage.value = "Failed to save: ${e.message}"
+                    }
+                }
+            } catch (e: Exception) {
+                _importExportMessage.value = "Failed to save to Downloads: ${e.message}"
+            }
+        }
+    }
     
     private fun shareBackupFile(file: File) {
         try {
@@ -753,6 +772,34 @@ class SettingsViewModel @Inject constructor(
         val info = _postRestoreScanInfo.value ?: return
         smsScanManager.scheduleScanFromTimestamp(info.fromTimestamp)
         _postRestoreScanInfo.value = null
+    }
+
+    private val _isReconcilingDates = MutableStateFlow(false)
+    val isReconcilingDates: StateFlow<Boolean> = _isReconcilingDates.asStateFlow()
+
+    /**
+     * Re-derives past transactions' dates from their stored SMS body text, fixing
+     * cases where the saved date reflects the SMS scan/receipt timestamp rather
+     * than the date actually printed in the message.
+     */
+    fun reconcileTransactionDates() {
+        if (_isReconcilingDates.value) return
+        viewModelScope.launch {
+            _isReconcilingDates.value = true
+            try {
+                val result = transactionRepository.reconcileTransactionDatesFromSms()
+                _importExportMessage.value = if (result.updated > 0) {
+                    "Updated ${result.updated} of ${result.scanned} transaction date(s) from their original SMS text."
+                } else {
+                    "Checked ${result.scanned} transactions — all dates already match their SMS text."
+                }
+            } catch (e: Exception) {
+                _importExportMessage.value = "Date reconciliation failed: ${e.message}"
+                Log.e("SettingsViewModel", "Date reconciliation error", e)
+            } finally {
+                _isReconcilingDates.value = false
+            }
+        }
     }
     
     fun clearImportExportMessage() {

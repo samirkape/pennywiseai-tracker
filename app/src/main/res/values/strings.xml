@@ -334,6 +334,16 @@
     <string name="home_also_invested">Also invested this month</string>
     <string name="home_pace_on_track">on track</string>
     <string name="home_pace_above_last">above last</string>
+    <string name="home_hero_projected_month_end">Projected month-end</string>
+    <string name="home_hero_projected_subtitle">At current pace</string>
+    <string name="home_hero_daily_budget_left">Daily budget left</string>
+    <string name="home_hero_days_remaining">%1$d days remaining</string>
+    <string name="home_hero_no_days_remaining">No days remaining</string>
+    <string name="home_recent_transactions">Recent transactions</string>
+    <string name="home_view_all_transactions">View all transactions</string>
+    <string name="home_insight_title">Insight</string>
+    <string name="home_view_all_insights">View all insights</string>
+    <string name="home_insight_default_action">Review transactions \u2192</string>
     <string name="home_income_today_none">this period</string>
     <string name="home_income_today_one">+1 today</string>
     <string name="home_income_today_many">+%1$d today</string>
@@ -365,7 +375,7 @@
     <string name="home_action_budgets">Budgets</string>
     <string name="home_action_analytics">Analytics</string>
     <string name="home_action_full_resync">Full resync</string>
-    <string name="home_action_full_resync_subtitle">Reprocess all SMS from scratch</string>
+    <string name="home_action_full_resync_subtitle">Reprocess all SMS and fix past transactions</string>
     <string name="home_actions_fab">Quick actions</string>
 
     <!-- Home activity feed -->
