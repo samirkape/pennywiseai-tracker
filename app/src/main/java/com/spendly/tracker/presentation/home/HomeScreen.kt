@@ -118,6 +118,8 @@ fun HomeScreen(
     onNavigateToSubscriptions: () -> Unit = {},
     onNavigateToBudgets: () -> Unit = {},
     onNavigateToLoans: () -> Unit = {},
+    onNavigateToPrepaidExpenses: () -> Unit = {},
+    onNavigateToTransactionGroups: () -> Unit = {},
     onLoanClick: (Long) -> Unit = {},
     onNavigateToGoals: () -> Unit = {},
     onNavigateToAddScreen: () -> Unit = {},
@@ -458,6 +460,18 @@ fun HomeScreen(
                 )
             }
 
+            // Section 7: Shortcuts (moved from Settings)
+            item {
+                HomeShortcutsCard(
+                    prepaidCount = uiState.activePrepaidCount,
+                    loanCount = uiState.openLoanCount,
+                    groupCount = uiState.transactionGroupCount,
+                    onPrepaidExpenses = onNavigateToPrepaidExpenses,
+                    onLoans = onNavigateToLoans,
+                    onTransactionGroups = onNavigateToTransactionGroups,
+                    modifier = Modifier.padding(horizontal = Dimensions.Padding.content)
+                )
+            }
 
             // 2. Feed header — day zone (20ms)
             item {

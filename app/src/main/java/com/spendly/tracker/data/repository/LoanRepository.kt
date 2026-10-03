@@ -32,10 +32,13 @@ class LoanRepository @Inject constructor(
     fun getTransactionsForLoan(loanId: Long): Flow<List<TransactionEntity>> =
         loanDao.getTransactionsForLoan(loanId)
 
-    fun getRecentUnlinkedRepayments(direction: LoanDirection, limit: Int = 20): Flow<List<TransactionEntity>> {
+    fun getRecentUnlinkedRepayments(direction: LoanDirection, limit: Int = 500): Flow<List<TransactionEntity>> {
         val repaymentType = if (direction == LoanDirection.LENT) "INCOME" else "EXPENSE"
         return loanDao.getRecentUnlinkedTransactionsByType(repaymentType, limit)
     }
+
+    fun getUnlinkedLoanCategoryTransactions(): Flow<List<TransactionEntity>> =
+        loanDao.getUnlinkedLoanCategoryTransactions()
 
     fun getRecentPersonNames(): Flow<List<String>> = loanDao.getRecentPersonNames()
 
@@ -76,6 +79,80 @@ class LoanRepository @Inject constructor(
         loanDao.linkTransaction(sourceTransactionId, loanId)
         return loanId
     }
+
+    /**
+     * Groups unlinked Loan-category transactions by person and currency and turns each group
+     * into a loan. Returns the number of transactions that were linked.
+     */
+    suspend fun backfillFromLoanCategory(): Int {
+        val unlinked = loanDao.getUnlinkedLoanCategoryTransactions().first()
+        var linked = 0
+        unlinked
+            .groupBy { personKey(it) to it.currency }
+            .forEach { (_, txs) ->
+                linked += importTransactionsAsLoan(txs.first().merchantName.trim().ifBlank { "Unknown" }, txs)
+            }
+        return linked
+    }
+
+    /**
+     * Links [transactions] to a loan for [personName]. Direction is inferred from the earliest
+     * transaction (expense = lent, income = borrowed). Reuses an active loan for the same person
+     * and direction, otherwise creates one; status is derived from what has been repaid.
+     */
+    suspend fun importTransactionsAsLoan(
+        personName: String,
+        transactions: List<TransactionEntity>,
+        directionOverride: LoanDirection? = null
+    ): Int {
+        val txs = transactions.filter { it.loanId == null && !it.isDeleted }.sortedBy { it.dateTime }
+        if (txs.isEmpty()) return 0
+        val first = txs.first()
+        val direction = directionOverride ?: inferDirection(txs)
+
+        val loanId = loanDao.getActiveLoanByPersonAndDirection(personName, direction.name)?.id
+            ?: loanDao.insertLoan(
+                LoanEntity(
+                    personName = personName,
+                    direction = direction,
+                    originalAmount = first.amount,
+                    remainingAmount = first.amount,
+                    currency = first.currency,
+                    createdAt = first.dateTime
+                )
+            )
+        txs.forEach { loanDao.linkTransaction(it.id, loanId) }
+        recalculateRemaining(loanId)
+
+        val loan = loanDao.getLoanById(loanId)
+        if (loan?.status == LoanStatus.SETTLED && loan.settledAt != null) {
+            loanDao.updateLoan(loan.copy(settledAt = txs.last().dateTime))
+        }
+        return txs.size
+    }
+
+    // The side with the larger total is the original amount; ties fall back to the earliest transaction.
+    private fun inferDirection(sortedTxs: List<TransactionEntity>): LoanDirection {
+        val expenses = sortedTxs.filter { it.transactionType == TransactionType.EXPENSE }
+            .fold(BigDecimal.ZERO) { acc, t -> acc + t.amount }
+        val income = sortedTxs.filter { it.transactionType == TransactionType.INCOME }
+            .fold(BigDecimal.ZERO) { acc, t -> acc + t.amount }
+        return when {
+            expenses > income -> LoanDirection.LENT
+            income > expenses -> LoanDirection.BORROWED
+            sortedTxs.first().transactionType == TransactionType.INCOME -> LoanDirection.BORROWED
+            else -> LoanDirection.LENT
+        }
+    }
+
+    suspend fun switchDirection(loanId: Long) {
+        val loan = loanDao.getLoanById(loanId) ?: return
+        val flipped = if (loan.direction == LoanDirection.LENT) LoanDirection.BORROWED else LoanDirection.LENT
+        loanDao.updateLoan(loan.copy(direction = flipped, updatedAt = LocalDateTime.now()))
+        recalculateRemaining(loanId)
+    }
+
+    private fun personKey(tx: TransactionEntity) = tx.merchantName.trim().lowercase()
 
     suspend fun recordRepayment(loanId: Long, transactionId: Long) {
         loanDao.linkTransaction(transactionId, loanId)
@@ -180,14 +257,36 @@ class LoanRepository @Inject constructor(
         loanDao.deleteLoan(loan)
     }
 
+    suspend fun reconcileActiveLoans() {
+        loanDao.getActiveLoans().first().forEach { recalculateRemaining(it.id) }
+    }
+
     private suspend fun recalculateRemaining(loanId: Long) {
         val loan = loanDao.getLoanById(loanId) ?: return
-        val repaymentType = if (loan.direction == LoanDirection.LENT) "INCOME" else "EXPENSE"
-        val totalRepaid = loanDao.getTotalRepaidByType(loanId, repaymentType)
-        val remaining = (loan.originalAmount - totalRepaid).coerceAtLeast(BigDecimal.ZERO)
+        val linkedTransactions = loanDao.getTransactionsForLoan(loanId).first()
+            .filter { !it.isDeleted }
+
+        val repaymentType = if (loan.direction == LoanDirection.LENT) {
+            TransactionType.INCOME
+        } else {
+            TransactionType.EXPENSE
+        }
+
+        val originalTotal = linkedTransactions
+            .filter { it.transactionType != repaymentType }
+            .fold(BigDecimal.ZERO) { acc, transaction -> acc + transaction.amount }
+
+        val totalRepaid = linkedTransactions
+            .filter { it.transactionType == repaymentType }
+            .fold(BigDecimal.ZERO) { acc, transaction -> acc + transaction.amount }
+
+        val effectiveOriginalAmount = if (originalTotal > BigDecimal.ZERO) originalTotal else loan.originalAmount
+        val remaining = (effectiveOriginalAmount - totalRepaid).coerceAtLeast(BigDecimal.ZERO)
         val newStatus = if (remaining <= BigDecimal.ZERO) LoanStatus.SETTLED else LoanStatus.ACTIVE
+
         loanDao.updateLoan(
             loan.copy(
+                originalAmount = effectiveOriginalAmount,
                 remainingAmount = remaining,
                 status = newStatus,
                 settledAt = if (newStatus == LoanStatus.SETTLED) loan.settledAt ?: LocalDateTime.now() else null,

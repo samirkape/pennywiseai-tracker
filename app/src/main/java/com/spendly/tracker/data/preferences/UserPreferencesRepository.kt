@@ -110,6 +110,9 @@ class UserPreferencesRepository @Inject constructor(
         // Analytics card density
         val COMPACT_ANALYTICS_CARDS = booleanPreferencesKey("compact_analytics_cards")
 
+        // Refunds
+        val AUTO_LINK_REFUNDS = booleanPreferencesKey("auto_link_refunds")
+
         // Cover Style
         val COVER_STYLE = stringPreferencesKey("cover_style")
 
@@ -701,6 +704,17 @@ class UserPreferencesRepository @Inject constructor(
     suspend fun setCompactAnalyticsCardsEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.COMPACT_ANALYTICS_CARDS] = enabled
+        }
+    }
+
+    val autoLinkRefundsEnabled: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.AUTO_LINK_REFUNDS] ?: true
+        }
+
+    suspend fun setAutoLinkRefundsEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.AUTO_LINK_REFUNDS] = enabled
         }
     }
 

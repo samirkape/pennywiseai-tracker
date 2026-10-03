@@ -109,6 +109,13 @@ class LoanDetailViewModel @Inject constructor(
         }
     }
 
+    fun switchDirection() {
+        viewModelScope.launch {
+            loanRepository.switchDirection(loanId)
+            refreshLoan()
+        }
+    }
+
     fun reopenLoan() {
         viewModelScope.launch {
             loanRepository.reopenLoan(loanId)

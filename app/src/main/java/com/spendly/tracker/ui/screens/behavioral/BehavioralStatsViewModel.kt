@@ -214,7 +214,7 @@ class BehavioralStatsViewModel @Inject constructor(
                 endDom = endDom,
             )
 
-            transactionRepository.getTransactionsBetweenDates(
+            transactionRepository.getNetTransactionsBetweenDates(
                 startDate = dateRange.first,
                 endDate = dateRange.second
             ).mapLatest { transactions ->
@@ -262,14 +262,13 @@ class BehavioralStatsViewModel @Inject constructor(
         val anchor = when (period) {
             TimePeriod.THIS_MONTH, TimePeriod.CALENDAR_MONTH -> YearMonth.now()
             TimePeriod.LAST_MONTH -> YearMonth.now().minusMonths(1)
-            TimePeriod.ALL, TimePeriod.CURRENT_FY -> null
-            TimePeriod.CUSTOM -> return
+            TimePeriod.LAST_3_MONTHS, TimePeriod.LAST_6_MONTHS, TimePeriod.THIS_YEAR, TimePeriod.ALL, TimePeriod.CURRENT_FY, TimePeriod.CUSTOM -> null
         }
         savedStateHandle["periodAnchorMonth"] = anchor?.toString()
         when (period) {
             TimePeriod.CALENDAR_MONTH -> savedStateHandle[periodNavUsesCalendarKey] = true
             TimePeriod.THIS_MONTH, TimePeriod.LAST_MONTH -> savedStateHandle[periodNavUsesCalendarKey] = false
-            TimePeriod.ALL, TimePeriod.CURRENT_FY -> savedStateHandle.remove<Boolean>(periodNavUsesCalendarKey)
+            TimePeriod.LAST_3_MONTHS, TimePeriod.LAST_6_MONTHS, TimePeriod.THIS_YEAR, TimePeriod.ALL, TimePeriod.CURRENT_FY -> savedStateHandle.remove<Boolean>(periodNavUsesCalendarKey)
             TimePeriod.CUSTOM -> Unit
         }
     }
@@ -282,7 +281,7 @@ class BehavioralStatsViewModel @Inject constructor(
     private fun naturalAnchorForPeriod(period: TimePeriod): YearMonth? = when (period) {
         TimePeriod.THIS_MONTH, TimePeriod.CALENDAR_MONTH -> YearMonth.now()
         TimePeriod.LAST_MONTH -> YearMonth.now().minusMonths(1)
-        else -> null
+        TimePeriod.LAST_3_MONTHS, TimePeriod.LAST_6_MONTHS, TimePeriod.THIS_YEAR, TimePeriod.ALL, TimePeriod.CURRENT_FY, TimePeriod.CUSTOM -> null
     }
 
     private fun resolveDateRange(
@@ -654,4 +653,3 @@ class BehavioralStatsViewModel @Inject constructor(
             .take(10)
     }
 }
-

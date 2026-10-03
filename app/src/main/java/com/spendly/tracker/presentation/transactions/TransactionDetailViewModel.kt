@@ -98,6 +98,7 @@ class TransactionDetailViewModel @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val receiptManager: ReceiptManager,
     private val updateTransactionUseCase: UpdateTransactionUseCase,
+    private val refundLinker: com.spendly.tracker.domain.usecase.RefundLinker,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : ViewModel() {
     
@@ -412,6 +413,7 @@ class TransactionDetailViewModel @Inject constructor(
                 loadAccountProfileId(it)
                 loadLinkedGoal(transactionId)
                 loadSimilarTransactions(it.merchantName)
+                refreshRefundState(it)
             }
         }
     }
@@ -1560,6 +1562,84 @@ class TransactionDetailViewModel @Inject constructor(
     }
 
     // ========== Loan Management ==========
+
+    // ── Refund linking ──
+    private val _refundOriginal = MutableStateFlow<TransactionEntity?>(null)
+    /** For a linked refund (INCOME): the expense it reverses. */
+    val refundOriginal: StateFlow<TransactionEntity?> = _refundOriginal.asStateFlow()
+
+    private val _refundedAmount = MutableStateFlow(java.math.BigDecimal.ZERO)
+    /** For an expense: total of refunds linked to it. */
+    val refundedAmount: StateFlow<java.math.BigDecimal> = _refundedAmount.asStateFlow()
+
+    private val _showLinkRefundSheet = MutableStateFlow(false)
+    val showLinkRefundSheet: StateFlow<Boolean> = _showLinkRefundSheet.asStateFlow()
+
+    private val _refundCandidates = MutableStateFlow<List<com.spendly.tracker.domain.usecase.RefundMatcher.Candidate>>(emptyList())
+    val refundCandidates: StateFlow<List<com.spendly.tracker.domain.usecase.RefundMatcher.Candidate>> = _refundCandidates.asStateFlow()
+
+    private suspend fun refreshRefundState(txn: TransactionEntity) {
+        _refundOriginal.value = txn.refundOfTransactionId?.let { transactionRepository.getTransactionById(it) }
+        _refundedAmount.value = transactionRepository.getRefundsOf(txn.id)
+            .fold(java.math.BigDecimal.ZERO) { acc, r -> acc + r.amount }
+    }
+
+    fun showLinkRefundSheet() {
+        val txn = _transaction.value ?: return
+        viewModelScope.launch {
+            _refundCandidates.value = refundLinker.rankedCandidates(txn)
+            _showLinkRefundSheet.value = true
+        }
+    }
+
+    private val _refundSearchResults = MutableStateFlow<List<com.spendly.tracker.domain.usecase.RefundMatcher.Candidate>>(emptyList())
+    val refundSearchResults: StateFlow<List<com.spendly.tracker.domain.usecase.RefundMatcher.Candidate>> = _refundSearchResults.asStateFlow()
+
+    private var refundSearchJob: kotlinx.coroutines.Job? = null
+
+    /** Searches all earlier debits (not just suggested matches); blank query clears results. */
+    fun searchRefundOriginals(query: String) {
+        val txn = _transaction.value ?: return
+        refundSearchJob?.cancel()
+        if (query.isBlank()) {
+            _refundSearchResults.value = emptyList()
+            return
+        }
+        refundSearchJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(250)
+            _refundSearchResults.value = refundLinker.searchOriginals(txn, query)
+        }
+    }
+
+    fun hideLinkRefundSheet() {
+        refundSearchJob?.cancel()
+        _refundSearchResults.value = emptyList()
+        _showLinkRefundSheet.value = false
+    }
+
+    fun linkRefundTo(originalId: Long) {
+        val txn = _transaction.value ?: return
+        viewModelScope.launch {
+            if (refundLinker.linkManually(txn.id, originalId)) {
+                val updated = transactionRepository.getTransactionById(txn.id)
+                _transaction.value = updated
+                updated?.let { refreshRefundState(it) }
+                _showLinkRefundSheet.value = false
+            } else {
+                _errorMessage.value = "Could not link refund to that expense"
+            }
+        }
+    }
+
+    fun unlinkRefund() {
+        val txn = _transaction.value ?: return
+        viewModelScope.launch {
+            refundLinker.unlink(txn.id)
+            val updated = transactionRepository.getTransactionById(txn.id)
+            _transaction.value = updated
+            updated?.let { refreshRefundState(it) }
+        }
+    }
 
     private val _loan = MutableStateFlow<LoanEntity?>(null)
     val loan: StateFlow<LoanEntity?> = _loan.asStateFlow()

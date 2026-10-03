@@ -367,15 +367,25 @@ class BackupImporter @Inject constructor(
     private suspend fun importTransactionsForRestore(transactions: List<TransactionEntity>) {
         val transactionDao = database.transactionDao()
         val linksToRestore = mutableListOf<Pair<Long, Long>>()
+        val refundLinksToRestore = mutableListOf<Pair<Long, Long>>()
 
         transactions.forEach { transaction ->
             val linkedId = transaction.linkedTransactionId
             if (linkedId != null) {
                 linksToRestore += transaction.id to linkedId
             }
+            transaction.refundOfTransactionId?.let { refundLinksToRestore += transaction.id to it }
             transactionDao.insertTransactionForRestore(
-                transaction.copy(linkedTransactionId = null)
+                transaction.copy(linkedTransactionId = null, refundOfTransactionId = null)
             )
+        }
+
+        val restoredIds = transactions.mapTo(HashSet()) { it.id }
+        val refundManualById = transactions.associate { it.id to it.refundLinkManuallyEdited }
+        refundLinksToRestore.forEach { (refundId, originalId) ->
+            if (originalId in restoredIds) {
+                transactionDao.setRefundOf(refundId, originalId, refundManualById[refundId] == true)
+            }
         }
 
         val transferKindById = transactions.associate { it.id to it.transferKind }
@@ -385,6 +395,17 @@ class BackupImporter @Inject constructor(
                 linkedId = linkedId,
                 transferKind = transferKindById[transactionId],
             )
+        }
+    }
+
+    private suspend fun applyPendingRefundLinks(
+        pending: List<Triple<Long, Long, Boolean>>,
+        oldToNewTransactionIdMap: Map<Long, Long>
+    ) {
+        val transactionDao = database.transactionDao()
+        pending.forEach { (refundId, oldOriginalId, manual) ->
+            val newOriginalId = oldToNewTransactionIdMap[oldOriginalId] ?: return@forEach
+            transactionDao.setRefundOf(refundId, newOriginalId, manual)
         }
     }
 
@@ -443,6 +464,7 @@ class BackupImporter @Inject constructor(
 
                 // Transactions ─────────────────────────────────────────────
                 val oldToNewTransactionIdMap = mutableMapOf<Long, Long>()
+                val pendingRefundLinks = mutableListOf<Triple<Long, Long, Boolean>>()
 
                 backup.database.transactions.forEach { transaction ->
                     val hash = transaction.transactionHash
@@ -465,10 +487,14 @@ class BackupImporter @Inject constructor(
                         val remapped = transaction.copy(
                             id = 0,
                             loanId  = transaction.loanId?.let  { oldToNewLoanIdMap[it]  ?: it },
-                            groupId = transaction.groupId?.let { oldToNewGroupIdMap[it] ?: it }
+                            groupId = transaction.groupId?.let { oldToNewGroupIdMap[it] ?: it },
+                            refundOfTransactionId = null
                         )
                         val newId = database.transactionDao().insertTransaction(remapped)
                         if (oldId != 0L) oldToNewTransactionIdMap[oldId] = newId
+                        transaction.refundOfTransactionId?.let {
+                            pendingRefundLinks += Triple(newId, it, transaction.refundLinkManuallyEdited)
+                        }
                         importedTransactions++
                     } else {
                         // Duplicate: preserve local version (including local excluded state).
@@ -493,6 +519,7 @@ class BackupImporter @Inject constructor(
                 }
 
                 // Receipts ─────────────────────────────────────────────────
+                applyPendingRefundLinks(pendingRefundLinks, oldToNewTransactionIdMap)
                 importReceiptsWithMerge(backup.database.transactionReceipts, oldToNewTransactionIdMap)
 
                 // Other entities ───────────────────────────────────────────
@@ -621,6 +648,7 @@ class BackupImporter @Inject constructor(
 
             // Transactions
             val oldToNewTransactionIdMap = mutableMapOf<Long, Long>()
+            val pendingRefundLinks = mutableListOf<Triple<Long, Long, Boolean>>()
             if (f.transactions) {
                 backup.database.transactions.forEach { transaction ->
                     val hash = transaction.transactionHash
@@ -633,10 +661,14 @@ class BackupImporter @Inject constructor(
                         val remapped = transaction.copy(
                             id = 0,
                             loanId  = transaction.loanId?.let  { oldToNewLoanIdMap[it]  ?: it },
-                            groupId = transaction.groupId?.let { oldToNewGroupIdMap[it] ?: it }
+                            groupId = transaction.groupId?.let { oldToNewGroupIdMap[it] ?: it },
+                            refundOfTransactionId = null
                         )
                         val newId = database.transactionDao().insertTransaction(remapped)
                         if (oldId != 0L) oldToNewTransactionIdMap[oldId] = newId
+                        transaction.refundOfTransactionId?.let {
+                            pendingRefundLinks += Triple(newId, it, transaction.refundLinkManuallyEdited)
+                        }
                         importedTransactions++
                     } else {
                         skippedDuplicates++
@@ -644,6 +676,7 @@ class BackupImporter @Inject constructor(
                 }
 
                 // Receipts
+                applyPendingRefundLinks(pendingRefundLinks, oldToNewTransactionIdMap)
                 importReceiptsWithMerge(backup.database.transactionReceipts, oldToNewTransactionIdMap)
 
                 // Transaction splits

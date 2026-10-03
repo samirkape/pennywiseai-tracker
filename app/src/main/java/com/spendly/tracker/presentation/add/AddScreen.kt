@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun AddScreen(
     viewModel: AddViewModel = hiltViewModel(),
+    initialTab: Int = 0,
     onNavigateBack: () -> Unit = {}
 ) {
     val transactionUiState by viewModel.transactionUiState.collectAsState()
@@ -42,7 +43,7 @@ fun AddScreen(
                     onSave = onNavigateBack,
                 )
             } else {
-                val pagerState = rememberPagerState(pageCount = { 3 })
+                val pagerState = rememberPagerState(initialPage = initialTab.coerceIn(0, 2), pageCount = { 3 })
                 val coroutineScope = rememberCoroutineScope()
                 val tabs = listOf("Transaction", "Subscription", "Prepaid")
 

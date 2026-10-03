@@ -3,6 +3,8 @@ package com.spendly.tracker.presentation.loans
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -99,6 +101,16 @@ fun LoanDetailScreen(
                                 )
                             }
                             DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        if (loan.direction == LoanDirection.LENT) "Mark as borrowed"
+                                        else "Mark as lent"
+                                    )
+                                },
+                                onClick = { showMenu = false; viewModel.switchDirection() },
+                                leadingIcon = { Icon(Icons.Default.SwapHoriz, null) }
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
                                 onClick = { showMenu = false; viewModel.showDeleteDialog() },
                                 leadingIcon = {
@@ -139,12 +151,22 @@ fun LoanDetailScreen(
             if (isDark) income_dark else income_light
         }
         val progressColor = if (isDark) income_dark else income_light
-        val progress = if (loan.originalAmount > BigDecimal.ZERO) {
-            (BigDecimal.ONE - loan.remainingAmount.divide(
-                loan.originalAmount, 2, java.math.RoundingMode.HALF_UP
+        val repaymentType = if (loan.direction == LoanDirection.LENT)
+            TransactionType.INCOME else TransactionType.EXPENSE
+        val activeLinked = uiState.linkedTransactions.filter { !it.isDeleted }
+        val linkedOriginal = activeLinked
+            .filter { it.transactionType != repaymentType }
+            .fold(BigDecimal.ZERO) { acc, t -> acc + t.amount }
+        val totalRepaid = activeLinked
+            .filter { it.transactionType == repaymentType }
+            .fold(BigDecimal.ZERO) { acc, t -> acc + t.amount }
+        val originalAmount = if (linkedOriginal > BigDecimal.ZERO) linkedOriginal else loan.originalAmount
+        val normalizedRemaining = (originalAmount - totalRepaid).coerceAtLeast(BigDecimal.ZERO)
+        val progress = if (originalAmount > BigDecimal.ZERO) {
+            (BigDecimal.ONE - normalizedRemaining.divide(
+                originalAmount, 2, java.math.RoundingMode.HALF_UP
             )).toFloat().coerceIn(0f, 1f)
         } else 0f
-        val totalRepaid = loan.originalAmount - loan.remainingAmount
 
         val lazyListState = rememberLazyListState()
 
@@ -169,9 +191,9 @@ fun LoanDetailScreen(
                 LoanHeroCard(
                     personName = loan.personName,
                     direction = loan.direction,
-                    status = loan.status,
-                    remainingAmount = loan.remainingAmount,
-                    originalAmount = loan.originalAmount,
+                    status = if (normalizedRemaining <= BigDecimal.ZERO) LoanStatus.SETTLED else LoanStatus.ACTIVE,
+                    remainingAmount = normalizedRemaining,
+                    originalAmount = originalAmount,
                     totalRepaid = totalRepaid,
                     currency = loan.currency,
                     progress = progress,
@@ -196,9 +218,7 @@ fun LoanDetailScreen(
                 }
             } else {
                 items(uiState.linkedTransactions, key = { it.id }) { txn ->
-                    val isOriginal = if (loan.direction == LoanDirection.LENT)
-                        txn.transactionType == TransactionType.EXPENSE
-                    else txn.transactionType == TransactionType.INCOME
+                    val isOriginal = txn.transactionType != repaymentType
                     LoanTransactionItem(
                         transaction = txn,
                         isOriginal = isOriginal,
@@ -574,6 +594,7 @@ private fun RecordPaymentBottomSheet(
     onManualPayment: (BigDecimal) -> Unit
 ) {
     var manualAmount by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
     var useManualEntry by remember { mutableStateOf(recentUnlinkedTransactions.isEmpty()) }
     val isDark = isSystemInDarkTheme()
     val loanColor = if (isDark) loan_dark else loan_light
@@ -623,7 +644,54 @@ private fun RecordPaymentBottomSheet(
             }
 
             if (!useManualEntry && recentUnlinkedTransactions.isNotEmpty()) {
-                recentUnlinkedTransactions.take(5).forEach { txn ->
+                val query = searchQuery.trim()
+                val filtered = if (query.isEmpty()) {
+                    recentUnlinkedTransactions.take(5)
+                } else {
+                    recentUnlinkedTransactions.filter { txn ->
+                        txn.merchantName.contains(query, ignoreCase = true) ||
+                            txn.amount.toPlainString().contains(query) ||
+                            txn.dateTime.format(DateTimeFormatter.ofPattern("d MMM"))
+                                .contains(query, ignoreCase = true)
+                    }
+                }
+                TextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search by name, amount or date") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear search")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent
+                    )
+                )
+                if (filtered.isEmpty()) {
+                    Text(
+                        "No matching transactions",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.md)
+                ) {
+                filtered.forEach { txn ->
                     SpendlyCardV2(
                         modifier = Modifier.fillMaxWidth(),
                         onClick = { onLinkTransaction(txn.id) }
@@ -648,6 +716,7 @@ private fun RecordPaymentBottomSheet(
                             )
                         }
                     }
+                }
                 }
             } else {
                 Row(

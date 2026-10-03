@@ -85,7 +85,7 @@ private data class AnalyticsHeroMetric(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Period chip row
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────��───────────────────────────────────────────────────
 
 @Composable
 fun AnalyticsReferencePeriodChipRow(
@@ -99,6 +99,10 @@ fun AnalyticsReferencePeriodChipRow(
             TimePeriod.THIS_MONTH,
             TimePeriod.CALENDAR_MONTH,
             TimePeriod.LAST_MONTH,
+            TimePeriod.LAST_3_MONTHS,
+            TimePeriod.LAST_6_MONTHS,
+            TimePeriod.THIS_YEAR,
+            TimePeriod.CURRENT_FY,
             TimePeriod.CUSTOM,
         )
     }
@@ -113,6 +117,10 @@ fun AnalyticsReferencePeriodChipRow(
                 TimePeriod.THIS_MONTH -> "Pay month"
                 TimePeriod.CALENDAR_MONTH -> "Calendar month"
                 TimePeriod.LAST_MONTH -> "Last month"
+                TimePeriod.LAST_3_MONTHS -> "Last 3 months"
+                TimePeriod.LAST_6_MONTHS -> "Last 6 months"
+                TimePeriod.THIS_YEAR -> "This year"
+                TimePeriod.CURRENT_FY -> "This FY"
                 TimePeriod.CUSTOM -> "Custom"
                 else -> period.label
             }
@@ -144,7 +152,7 @@ fun AnalyticsReferencePeriodChipRow(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────��───────────────────────
 // Date navigator
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -178,7 +186,7 @@ fun AnalyticsReferenceDateNavigator(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────��──────────────────────────────────────────────────────────────────
 // Segmented tab control
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -236,7 +244,7 @@ fun AnalyticsReferenceOverviewTabs(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────��─────────────────────────
 // Hero summary card
 // ─────────────────────────────────────────────────────────────────────────────
 

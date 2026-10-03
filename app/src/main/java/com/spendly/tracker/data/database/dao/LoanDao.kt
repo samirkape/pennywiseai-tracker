@@ -82,4 +82,15 @@ interface LoanDao {
         LIMIT :limit
     """)
     fun getRecentUnlinkedTransactionsByType(type: String, limit: Int = 20): Flow<List<TransactionEntity>>
+
+    @Query("""
+        SELECT * FROM transactions
+        WHERE loan_id IS NULL AND is_deleted = 0
+        AND category LIKE 'loan%' COLLATE NOCASE
+        ORDER BY date_time ASC
+    """)
+    fun getUnlinkedLoanCategoryTransactions(): Flow<List<TransactionEntity>>
+
+    @Query("UPDATE loans SET created_at = :createdAt WHERE id = :loanId")
+    suspend fun updateCreatedAt(loanId: Long, createdAt: java.time.LocalDateTime)
 }

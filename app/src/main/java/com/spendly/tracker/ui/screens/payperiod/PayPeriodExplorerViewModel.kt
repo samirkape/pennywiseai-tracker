@@ -86,7 +86,7 @@ class PayPeriodExplorerViewModel @Inject constructor(
         collectJob = viewModelScope.launch {
             combine(
                 combine(
-                    transactionRepository.getTransactionsBetweenDates(periodStart, lastDay),
+                    transactionRepository.getNetTransactionsBetweenDates(periodStart, lastDay),
                     userPreferencesRepository.selectedProfileId,
                     accountBalanceRepository.getAllLatestBalances(),
                 ) { txs, profileId, balances ->

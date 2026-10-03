@@ -78,18 +78,14 @@ fun parseYearMonthNavPeriod(period: String): YearMonth? {
     return YearMonth.parse(period)
 }
 
-/** Default period chip. */
-fun defaultTimePeriod(useFinancialMonth: Boolean): TimePeriod = TimePeriod.THIS_MONTH
-
-/** Navigation query value for [defaultTimePeriod]. */
-fun defaultTimePeriodNavParam(useFinancialMonth: Boolean): String =
-    defaultTimePeriod(useFinancialMonth).name
-
 enum class TimePeriod(val label: String) {
     THIS_MONTH("This Month"),
     CALENDAR_MONTH("Calendar Month"),
     LAST_MONTH("Last Month"),
-    CURRENT_FY("Current FY"),
+    LAST_3_MONTHS("Last 3 Months"),
+    LAST_6_MONTHS("Last 6 Months"),
+    THIS_YEAR("This Year"),
+    CURRENT_FY("This Financial Year"),
     ALL("All time"),
     CUSTOM("Custom Range")
 }
@@ -229,26 +225,43 @@ fun getDateRangeForPeriod(
                 lastMonth.atDay(1) to lastMonth.atEndOfMonth()
             }
         }
-        TimePeriod.CURRENT_FY -> {
-            // Indian Financial Year: April 1 to March 31
-            val currentYear = today.year
-            val currentMonth = today.monthValue
-            val fyStart = if (currentMonth >= 4) {
-                LocalDate.of(currentYear, 4, 1)  // Apr 1 of current year
+        TimePeriod.LAST_3_MONTHS -> {
+            if (useFinancialMonth) {
+                rollingPayPeriodRangeForLastPeriods(
+                    periods = 3,
+                    monthStartDay = monthStartDay,
+                    useFixedBudgetPeriodEnd = useFixedBudgetPeriodEnd,
+                    budgetPeriodEndDay = budgetPeriodEndDay,
+                    monthStartOverrides = monthStartOverrides,
+                )
             } else {
-                LocalDate.of(currentYear - 1, 4, 1)  // Apr 1 of previous year
+                rollingCalendarRangeForLastMonths(3)
             }
-            fyStart to today
         }
+        TimePeriod.LAST_6_MONTHS -> {
+            if (useFinancialMonth) {
+                rollingPayPeriodRangeForLastPeriods(
+                    periods = 6,
+                    monthStartDay = monthStartDay,
+                    useFixedBudgetPeriodEnd = useFixedBudgetPeriodEnd,
+                    budgetPeriodEndDay = budgetPeriodEndDay,
+                    monthStartOverrides = monthStartOverrides,
+                )
+            } else {
+                rollingCalendarRangeForLastMonths(6)
+            }
+        }
+        TimePeriod.THIS_YEAR -> {
+            val start = LocalDate.of(today.year, 1, 1)
+            start to today
+        }
+        TimePeriod.CURRENT_FY -> currentFinancialYearRange()
         TimePeriod.ALL -> {
             // Use a reasonable date range for "All Time" - 10 years back to today
             val start = today.minusYears(10)
             start to today
         }
-        TimePeriod.CUSTOM -> {
-            // Custom range is handled separately in ViewModel
-            null
-        }
+        TimePeriod.CUSTOM -> null
     }
 }
 
@@ -304,3 +317,54 @@ fun filterAccountsByProfile(
             (selectedProfileId == null || account.profileId == selectedProfileId)
     }
 }
+
+private fun rollingCalendarRangeForLastMonths(months: Long): Pair<LocalDate, LocalDate> {
+    val today = LocalDate.now()
+    val start = today.minusMonths(months - 1).withDayOfMonth(1)
+    return start to today
+}
+
+private fun rollingPayPeriodRangeForLastPeriods(
+    periods: Int,
+    monthStartDay: Int,
+    useFixedBudgetPeriodEnd: Boolean,
+    budgetPeriodEndDay: Int,
+    monthStartOverrides: Map<String, Int>,
+): Pair<LocalDate, LocalDate> {
+    val today = LocalDate.now()
+    var start = DateRangeUtils.calculateBudgetPeriodRange(
+        today,
+        monthStartDay,
+        useFixedBudgetPeriodEnd,
+        budgetPeriodEndDay,
+        monthStartOverrides,
+    ).first
+    repeat(periods - 1) {
+        val previousPeriodEnd = start.minusDays(1)
+        start = DateRangeUtils.calculateBudgetPeriodRange(
+            previousPeriodEnd,
+            monthStartDay,
+            useFixedBudgetPeriodEnd,
+            budgetPeriodEndDay,
+            monthStartOverrides,
+        ).first
+    }
+    return start to today
+}
+
+private fun currentFinancialYearRange(): Pair<LocalDate, LocalDate> {
+    val today = LocalDate.now()
+    val fyStart = if (today.monthValue >= 4) {
+        LocalDate.of(today.year, 4, 1)
+    } else {
+        LocalDate.of(today.year - 1, 4, 1)
+    }
+    return fyStart to today
+}
+
+/** Default period chip. */
+fun defaultTimePeriod(useFinancialMonth: Boolean): TimePeriod = TimePeriod.THIS_MONTH
+
+/** Navigation query value for [defaultTimePeriod]. */
+fun defaultTimePeriodNavParam(useFinancialMonth: Boolean): String =
+    defaultTimePeriod(useFinancialMonth).name

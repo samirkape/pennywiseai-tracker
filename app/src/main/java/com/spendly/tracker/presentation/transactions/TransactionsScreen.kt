@@ -95,6 +95,10 @@ fun TransactionsScreen(
     onNavigateToSettings: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val refundedByOriginal by viewModel.refundedByOriginal.collectAsState()
+    val refundNotes = remember(uiState.transactions, refundedByOriginal) {
+        buildRefundNotes(uiState.transactions, refundedByOriginal)
+    }
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedPeriod by viewModel.selectedPeriod.collectAsState()
     val useFinancialMonth by viewModel.useFinancialMonth.collectAsState()
@@ -709,6 +713,7 @@ fun TransactionsScreen(
                                         profileAccountKeys = profileAccountKeys,
                                         categoryForIconFallback = transaction.category,
                                         categoryIconKey = categoriesMap[transaction.category]?.icon,
+                                        refundNote = refundNotes[transaction.id],
                                         onClick = { onTransactionClick(transaction.id) },
                                         onExcludeToggle = { viewModel.toggleExcludedFromTracking(transaction) },
                                         onDelete = { viewModel.deleteTransaction(transaction) }
@@ -737,6 +742,7 @@ fun TransactionsScreen(
                                 profileAccountKeys = profileAccountKeys,
                                 categoryForIconFallback = transaction.category,
                                 categoryIconKey = categoriesMap[transaction.category]?.icon,
+                                refundNote = refundNotes[transaction.id],
                                 onClick = { onTransactionClick(transaction.id) },
                                 onExcludeToggle = { viewModel.toggleExcludedFromTracking(transaction) },
                                 onDelete = { viewModel.deleteTransaction(transaction) }
@@ -1142,5 +1148,32 @@ private fun EmptyTransactionsState(
             actionLabel = actionLabel,
             onAction = onAction
         )
+    }
+}
+
+/** Subtitle notes for refunded originals and for the refund rows linked to them. */
+private fun buildRefundNotes(
+    transactions: List<com.spendly.tracker.data.database.entity.TransactionEntity>,
+    refundedByOriginal: Map<Long, java.math.BigDecimal>
+): Map<Long, String> {
+    val byId = transactions.associateBy { it.id }
+    return buildMap {
+        transactions.forEach { tx ->
+            val refunded = refundedByOriginal[tx.id]
+            if (refunded != null && refunded.signum() > 0) {
+                val net = (tx.amount - refunded).max(java.math.BigDecimal.ZERO)
+                put(
+                    tx.id,
+                    if (net.signum() == 0) {
+                        "Fully refunded"
+                    } else {
+                        "${com.spendly.tracker.utils.CurrencyFormatter.formatCurrency(refunded, tx.currency)} refunded \u00B7 net ${com.spendly.tracker.utils.CurrencyFormatter.formatCurrency(net, tx.currency)}"
+                    }
+                )
+            } else if (tx.refundOfTransactionId != null) {
+                val original = byId[tx.refundOfTransactionId]
+                put(tx.id, if (original != null) "Refund of ${original.merchantName}" else "Linked refund")
+            }
+        }
     }
 }

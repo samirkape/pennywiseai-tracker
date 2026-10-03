@@ -49,7 +49,7 @@ class ComputeInsightsUseCase @Inject constructor(
         }
         val endDate = LocalDateTime.now()
 
-        val transactions = transactionRepository.getTransactionsBetweenDates(startDate, endDate).first()
+        val transactions = transactionRepository.getNetTransactionsBetweenDates(startDate, endDate).first()
         if (transactions.isEmpty()) return
 
         val insights = computeForMonth(
@@ -306,7 +306,7 @@ class ComputeInsightsUseCase @Inject constructor(
         val comparisonStart = previousDateRange.first.atStartOfDay()
         val periodEndExclusive = dateRange.second.plusDays(1).atStartOfDay()
         val transactions = transactionRepository
-            .getTransactionsBetweenDates(comparisonStart, periodEndExclusive)
+            .getNetTransactionsBetweenDates(comparisonStart, periodEndExclusive)
             .first()
 
         return computeForPeriod(

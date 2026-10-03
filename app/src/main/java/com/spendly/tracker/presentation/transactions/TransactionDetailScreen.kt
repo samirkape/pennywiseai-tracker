@@ -470,6 +470,9 @@ fun TransactionDetailScreen(
     val showMarkAsPrepaidSheet by viewModel.showMarkAsPrepaidSheet.collectAsStateWithLifecycle()
     val showMarkAsSubscriptionChooserSheet by viewModel.showMarkAsSubscriptionChooserSheet.collectAsStateWithLifecycle()
     val showMarkAsLoanSheet by viewModel.showMarkAsLoanSheet.collectAsStateWithLifecycle()
+    val showLinkRefundSheet by viewModel.showLinkRefundSheet.collectAsStateWithLifecycle()
+    val refundCandidates by viewModel.refundCandidates.collectAsStateWithLifecycle()
+    val refundSearchResults by viewModel.refundSearchResults.collectAsStateWithLifecycle()
     val recentPersonNames by viewModel.recentPersonNames.collectAsStateWithLifecycle()
 
     // Goal state
@@ -606,101 +609,14 @@ fun TransactionDetailScreen(
                     }
                 },
                 actionContent = {
-                    transaction?.let { txn ->
+                    transaction?.let {
                         if (!isEditMode) {
-                            val quickActions = remember(txn, loan, prepaidPlan, currentGroup, linkedGoalContributions) {
-                                buildList {
-                                    if (loan == null) {
-                                        add(
-                                            TransactionQuickAction(
-                                                icon = Icons.Default.SwapHoriz,
-                                                label = if (txn.transactionType == TransactionType.INCOME) {
-                                                    "Track as borrowed"
-                                                } else {
-                                                    "Track as lent"
-                                                },
-                                                onClick = { viewModel.showMarkAsLoanSheet() }
-                                            )
-                                        )
-                                    }
-                                    if (prepaidPlan == null && !txn.isRecurring && txn.transactionType == TransactionType.EXPENSE) {
-                                        add(
-                                            TransactionQuickAction(
-                                                icon = Icons.Default.EventRepeat,
-                                                label = "Mark as subscription",
-                                                onClick = { viewModel.showMarkAsSubscriptionChooserSheet() }
-                                            )
-                                        )
-                                    }
-                                    if (currentGroup == null) {
-                                        add(
-                                            TransactionQuickAction(
-                                                icon = Icons.Outlined.FolderOpen,
-                                                label = "Add to group",
-                                                onClick = { viewModel.showGroupSheet() }
-                                            )
-                                        )
-                                    }
-                                    if (linkedGoalContributions.isEmpty()) {
-                                        add(
-                                            TransactionQuickAction(
-                                                icon = Icons.Default.EmojiEvents,
-                                                label = "Link to goal",
-                                                onClick = { viewModel.showLinkGoalSheet() }
-                                            )
-                                        )
-                                    } else {
-                                        val n = linkedGoalContributions.size
-                                        add(
-                                            TransactionQuickAction(
-                                                icon = Icons.Default.EmojiEvents,
-                                                label = if (n == 1) "Edit goal" else "Edit $n goals",
-                                                onClick = { viewModel.showLinkGoalSheet() }
-                                            )
-                                        )
-                                    }
-                                }
-                            }
-                            var quickActionsMenuExpanded by remember { mutableStateOf(false) }
-
-                            Row {
-                                IconButton(onClick = { viewModel.showDeleteDialog() }) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "Delete Transaction",
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
-                                }
-                                Box {
-                                    IconButton(onClick = { quickActionsMenuExpanded = true }) {
-                                        Icon(
-                                            Icons.Default.MoreVert,
-                                            contentDescription = "More options"
-                                        )
-                                    }
-                                    DropdownMenu(
-                                        expanded = quickActionsMenuExpanded,
-                                        onDismissRequest = { quickActionsMenuExpanded = false }
-                                    ) {
-                                        quickActions.forEach { action ->
-                                            DropdownMenuItem(
-                                                text = { Text(action.label) },
-                                                leadingIcon = {
-                                                    Icon(
-                                                        action.icon,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(Dimensions.Icon.small)
-                                                    )
-                                                },
-                                                enabled = action.enabled,
-                                                onClick = {
-                                                    quickActionsMenuExpanded = false
-                                                    action.onClick()
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
+                            IconButton(onClick = { viewModel.showDeleteDialog() }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Delete Transaction",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
                             }
                         }
                     }
@@ -911,6 +827,17 @@ fun TransactionDetailScreen(
         )
     }
 
+    if (showLinkRefundSheet) {
+        LinkRefundBottomSheet(
+            candidates = refundCandidates,
+            searchResults = refundSearchResults,
+            currency = transaction?.currency ?: "INR",
+            onSearch = { viewModel.searchRefundOriginals(it) },
+            onDismiss = { viewModel.hideLinkRefundSheet() },
+            onSelect = { viewModel.linkRefundTo(it) }
+        )
+    }
+
     // Mark as Prepaid Bottom Sheet
     if (showMarkAsPrepaidSheet) {
         MarkAsPrepaidBottomSheet(
@@ -1115,6 +1042,8 @@ private fun TransactionReceipt(
     val currentGroup by viewModel.currentGroup.collectAsStateWithLifecycle()
     val linkedGoalContribution by viewModel.linkedGoalContribution.collectAsStateWithLifecycle()
     val linkedGoalContributions by viewModel.linkedGoalContributions.collectAsStateWithLifecycle()
+    val refundOriginal by viewModel.refundOriginal.collectAsStateWithLifecycle()
+    val refundedAmount by viewModel.refundedAmount.collectAsStateWithLifecycle()
     val isDark = isSystemInDarkTheme()
     val typeColor = when (transaction.transactionType) {
         TransactionType.INCOME -> if (isDark) income_dark else income_light
@@ -1296,6 +1225,139 @@ private fun TransactionReceipt(
                         ),
                         border = null
                     )
+                }
+            }
+        }
+
+        // ── Refund link info ──
+        refundOriginal?.let { original ->
+            DetailInfoRow(
+                icon = Icons.Default.Link,
+                label = "Refund of",
+                value = "${original.merchantName} · ${CurrencyFormatter.formatCurrency(original.amount, original.currency)}"
+            )
+        }
+        if (refundedAmount.signum() > 0) {
+            DetailInfoRow(
+                icon = Icons.Default.Link,
+                label = "Refunded",
+                value = "${CurrencyFormatter.formatCurrency(refundedAmount, transaction.currency)} · net ${CurrencyFormatter.formatCurrency((transaction.amount - refundedAmount).max(BigDecimal.ZERO), transaction.currency)}"
+            )
+        }
+
+        // ── Quick Actions ──
+        val quickActions = remember(transaction, loan, prepaidPlan, currentGroup, linkedGoalContributions, refundOriginal) {
+            buildList {
+                if (transaction.transactionType == TransactionType.INCOME) {
+                    add(
+                        TransactionQuickAction(
+                            icon = Icons.Default.Link,
+                            label = if (refundOriginal == null) "Link as refund" else "Unlink refund",
+                            onClick = {
+                                if (refundOriginal == null) viewModel.showLinkRefundSheet()
+                                else viewModel.unlinkRefund()
+                            }
+                        )
+                    )
+                }
+                if (loan == null) {
+                    add(
+                        TransactionQuickAction(
+                            icon = Icons.Default.SwapHoriz,
+                            label = if (transaction.transactionType == TransactionType.INCOME) {
+                                "Track as borrowed"
+                            } else {
+                                "Track as lent"
+                            },
+                            onClick = { viewModel.showMarkAsLoanSheet() }
+                        )
+                    )
+                }
+                if (prepaidPlan == null && !transaction.isRecurring && transaction.transactionType == TransactionType.EXPENSE) {
+                    add(
+                        TransactionQuickAction(
+                            icon = Icons.Default.EventRepeat,
+                            label = "Mark as subscription",
+                            onClick = { viewModel.showMarkAsSubscriptionChooserSheet() }
+                        )
+                    )
+                }
+                if (currentGroup == null) {
+                    add(
+                        TransactionQuickAction(
+                            icon = Icons.Outlined.FolderOpen,
+                            label = "Add to group",
+                            onClick = { viewModel.showGroupSheet() }
+                        )
+                    )
+                }
+                if (linkedGoalContributions.isEmpty()) {
+                    add(
+                        TransactionQuickAction(
+                            icon = Icons.Default.EmojiEvents,
+                            label = "Link to goal",
+                            onClick = { viewModel.showLinkGoalSheet() }
+                        )
+                    )
+                } else {
+                    val n = linkedGoalContributions.size
+                    add(
+                        TransactionQuickAction(
+                            icon = Icons.Default.EmojiEvents,
+                            label = if (n == 1) "Edit goal" else "Edit $n goals",
+                            onClick = { viewModel.showLinkGoalSheet() }
+                        )
+                    )
+                }
+            }
+        }
+        if (quickActions.isNotEmpty()) {
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val columns = when {
+                    maxWidth < 600.dp -> 2
+                    maxWidth < 840.dp -> 3
+                    else -> 4
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    quickActions.chunked(columns).forEach { rowActions ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                        ) {
+                            rowActions.forEach { action ->
+                                Surface(
+                                    onClick = action.onClick,
+                                    enabled = action.enabled,
+                                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainer
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                                    ) {
+                                        Icon(
+                                            action.icon,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(Dimensions.Icon.small)
+                                        )
+                                        Text(
+                                            action.label,
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                            repeat(columns - rowActions.size) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -3210,7 +3272,7 @@ private fun MarkAsSubscriptionChooserBottomSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MarkAsPrepaidBottomSheet(
+internal fun MarkAsPrepaidBottomSheet(
     transactionAmount: BigDecimal,
     transactionCurrency: String,
     onDismiss: () -> Unit,
@@ -3272,6 +3334,84 @@ private fun MarkAsPrepaidBottomSheet(
                 Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(Dimensions.Icon.small))
                 Spacer(modifier = Modifier.width(Spacing.xs))
                 Text("Confirm")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LinkRefundBottomSheet(
+    candidates: List<com.spendly.tracker.domain.usecase.RefundMatcher.Candidate>,
+    searchResults: List<com.spendly.tracker.domain.usecase.RefundMatcher.Candidate>,
+    currency: String,
+    onSearch: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onSelect: (Long) -> Unit
+) {
+    var query by remember { mutableStateOf("") }
+    val isSearching = query.isNotBlank()
+    val shown = if (isSearching) searchResults else candidates
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dimensions.Padding.content)
+                .padding(bottom = Spacing.xl)
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            Text(
+                text = "Which expense was refunded?",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "The refunded amount is removed from that expense in spending and budgets.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedTextField(
+                value = query,
+                onValueChange = {
+                    query = it
+                    onSearch(it)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                placeholder = { Text("Search all expenses by merchant, category or amount") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
+            )
+            Text(
+                text = if (isSearching) "Search results" else "Suggested matches",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (shown.isEmpty()) {
+                Text(
+                    text = if (isSearching) {
+                        "No expenses found that can still be refunded by this amount."
+                    } else {
+                        "No close matches. Search above to pick any expense (useful for partial refunds)."
+                    },
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            } else {
+                LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                    items(shown, key = { it.original.id }) { candidate ->
+                        val original = candidate.original
+                        ListItem(
+                            headlineContent = { Text(original.merchantName) },
+                            supportingContent = {
+                                Text("${original.dateTime.toLocalDate()} · ${original.category}")
+                            },
+                            trailingContent = {
+                                Text(CurrencyFormatter.formatCurrency(original.amount, currency))
+                            },
+                            modifier = Modifier.clickable { onSelect(original.id) }
+                        )
+                    }
+                }
             }
         }
     }

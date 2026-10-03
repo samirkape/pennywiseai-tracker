@@ -8,6 +8,7 @@ import com.spendly.tracker.data.database.entity.BudgetEntity
 import com.spendly.tracker.data.database.entity.BudgetPeriodType
 import com.spendly.tracker.data.database.entity.TransactionType
 import com.spendly.tracker.data.database.entity.TransactionWithSplits
+import com.spendly.tracker.domain.usecase.RefundAdjustments
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -160,7 +161,9 @@ class BudgetRepository @Inject constructor(
             budgetDao.getCategoriesForBudget(budget.id)
         }
 
-        return combine(transactionsWithSplitsFlow, categoriesFlow) { transactionsWithSplits, budgetCategories ->
+        val refundedFlow = transactionDao.observeLinkedRefunds().map { RefundAdjustments.refundedByOriginal(it) }
+
+        return combine(transactionsWithSplitsFlow, categoriesFlow, refundedFlow) { transactionsWithSplits, budgetCategories, refunded ->
             val categoryNames = budgetCategories.map { it.categoryName }.toSet()
 
             // Build category amounts considering splits
@@ -170,7 +173,14 @@ class BudgetRepository @Inject constructor(
 
             transactionsWithSplits.forEach { txWithSplits ->
                 // Get amounts by category (handles both split and non-split transactions)
-                val amountsByCategory = txWithSplits.getAmountByCategory()
+                val rawAmountsByCategory = txWithSplits.getAmountByCategory()
+                // Net out linked refunds, spread proportionally across splits.
+                val remainingFraction = RefundAdjustments.remainingFraction(txWithSplits.transaction, refunded)
+                val amountsByCategory = if (remainingFraction.compareTo(BigDecimal.ONE) == 0) {
+                    rawAmountsByCategory
+                } else {
+                    rawAmountsByCategory.mapValues { it.value.multiply(remainingFraction) }
+                }
 
                 amountsByCategory.forEach { (category, amount) ->
                     val categoryName = category.ifEmpty { "Others" }

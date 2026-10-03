@@ -22,6 +22,7 @@ class AddTransactionUseCase @Inject constructor(
     private val subscriptionRepository: SubscriptionRepository,
     private val accountBalanceRepository: AccountBalanceRepository,
     private val creditCardPaymentLinker: CreditCardPaymentLinker,
+    private val refundLinker: RefundLinker,
     private val ruleRepository: RuleRepository,
     private val ruleEngine: RuleEngine,
     private val processAutoGoalContributions: ProcessAutoGoalContributionsUseCase,
@@ -120,6 +121,13 @@ class AddTransactionUseCase @Inject constructor(
         if (transactionId != -1L) {
             runCatching {
                 creditCardPaymentLinker.linkIfApplicable(transaction.copy(id = transactionId))
+            }
+        }
+
+        // Match refund credits to the expense they reverse (setting-gated).
+        if (transactionId != -1L) {
+            runCatching {
+                refundLinker.autoLinkIfApplicable(transaction.copy(id = transactionId))
             }
         }
 

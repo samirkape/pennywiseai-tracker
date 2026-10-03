@@ -136,20 +136,11 @@ fun SpendlyNavHost(
                 onNavigateToBudgets = {
                     navController.navigate(BudgetGroups) { launchSingleTop = true }
                 },
-                onNavigateToSubscriptions = {
-                    navController.navigate(Subscriptions) { launchSingleTop = true }
-                },
-                onNavigateToPrepaidExpenses = {
-                    navController.navigate(PrepaidExpenses) { launchSingleTop = true }
-                },
                 onNavigateToExchangeRates = {
                     navController.navigate(ExchangeRates) { launchSingleTop = true }
                 },
                 onNavigateToImportStatement = {
                     navController.navigate(ImportStatement) { launchSingleTop = true }
-                },
-                onNavigateToTransactionGroups = {
-                    navController.navigate(TransactionGroups) { launchSingleTop = true }
                 },
                 onNavigateToPayPeriodSettings = {
                     navController.navigate(PayPeriodSettings) { launchSingleTop = true }
@@ -180,6 +171,9 @@ fun SpendlyNavHost(
             popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
         ) {
             com.spendly.tracker.presentation.prepaid.PrepaidExpensesScreen(
+                onAddPrepaidClick = {
+                    navController.navigate(AddTransaction(initialTab = 2)) { launchSingleTop = true }
+                },
                 onNavigateBack = {
                     navController.safePopBackStack()
                 }
@@ -267,8 +261,9 @@ fun SpendlyNavHost(
             exitTransition = { fadeOut(tween(200)) },
             popEnterTransition = { fadeIn(tween(300)) },
             popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        ) { backStackEntry ->
             com.spendly.tracker.presentation.add.AddScreen(
+                initialTab = backStackEntry.toRoute<AddTransaction>().initialTab,
                 onNavigateBack = {
                     navController.safePopBackStack()
                 }

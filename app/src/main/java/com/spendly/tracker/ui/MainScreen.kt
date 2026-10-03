@@ -252,6 +252,16 @@ fun MainScreen(
                             launchSingleTop = true
                         }
                     },
+                    onNavigateToPrepaidExpenses = {
+                        navController.navigate("prepaid_expenses") {
+                            launchSingleTop = true
+                        }
+                    },
+                    onNavigateToTransactionGroups = {
+                        rootNavController?.navigate(
+                            com.spendly.tracker.navigation.TransactionGroups
+                        ) { launchSingleTop = true }
+                    },
                     onNavigateToBudgets = {
                         navController.navigate(Constants.Routes.BUDGETS) {
                             popUpTo(navController.graph.startDestinationId) {
@@ -448,6 +458,11 @@ fun MainScreen(
 
             composable("prepaid_expenses") {
                 com.spendly.tracker.presentation.prepaid.PrepaidExpensesScreen(
+                    onAddPrepaidClick = {
+                        rootNavController?.navigate(
+                            com.spendly.tracker.navigation.AddTransaction(initialTab = 2)
+                        ) { launchSingleTop = true }
+                    },
                     onNavigateBack = {
                         if (navController.currentBackStackEntry?.lifecycle?.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) {
                             if (!navController.popBackStack()) {
@@ -741,21 +756,6 @@ fun MainScreen(
                             restoreState = true
                         }
                     },
-                    onNavigateToSubscriptions = {
-                        navController.navigate("subscriptions") {
-                            launchSingleTop = true
-                        }
-                    },
-                    onNavigateToPrepaidExpenses = {
-                        navController.navigate("prepaid_expenses") {
-                            launchSingleTop = true
-                        }
-                    },
-                    onNavigateToLoans = {
-                        rootNavController?.navigate(
-                            com.spendly.tracker.navigation.Loans
-                        ) { launchSingleTop = true }
-                    },
                     onNavigateToExchangeRates = {
                         rootNavController?.navigate(
                             com.spendly.tracker.navigation.ExchangeRates
@@ -770,11 +770,6 @@ fun MainScreen(
                         navController.navigate("import_statement") {
                             launchSingleTop = true
                         }
-                    },
-                    onNavigateToTransactionGroups = {
-                        rootNavController?.navigate(
-                            com.spendly.tracker.navigation.TransactionGroups
-                        ) { launchSingleTop = true }
                     },
                     onNavigateToPayPeriodSettings = {
                         rootNavController?.navigate(

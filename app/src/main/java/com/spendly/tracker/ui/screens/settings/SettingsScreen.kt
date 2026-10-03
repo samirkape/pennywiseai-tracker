@@ -82,10 +82,6 @@ fun SettingsScreen(
     onNavigateToManageAccounts: () -> Unit = {},
     onNavigateToRules: () -> Unit = {},
     onNavigateToBudgets: () -> Unit = {},
-    onNavigateToSubscriptions: () -> Unit = {},
-    onNavigateToPrepaidExpenses: () -> Unit = {},
-    onNavigateToLoans: () -> Unit = {},
-    onNavigateToTransactionGroups: () -> Unit = {},
     onNavigateToExchangeRates: () -> Unit = {},
     onNavigateToAppearance: () -> Unit = {},
     onNavigateToImportStatement: () -> Unit = {},
@@ -103,6 +99,7 @@ fun SettingsScreen(
     val appLockUiState by appLockViewModel.uiState.collectAsStateWithLifecycle()
     val smsScanMonths by settingsViewModel.smsScanMonths.collectAsStateWithLifecycle(initialValue = 3)
     val smsScanAllTime by settingsViewModel.smsScanAllTime.collectAsStateWithLifecycle(initialValue = false)
+    val autoLinkRefunds by settingsViewModel.autoLinkRefundsEnabled.collectAsStateWithLifecycle(initialValue = true)
     val baseCurrency by settingsViewModel.baseCurrency.collectAsStateWithLifecycle(initialValue = "")
     val monthStartDay by settingsViewModel.monthStartDay.collectAsStateWithLifecycle(initialValue = 1)
     val importExportMessage by settingsViewModel.importExportMessage.collectAsStateWithLifecycle()
@@ -313,6 +310,21 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                 )
             }
 
+            // ── Refunds ──
+            SectionHeaderV2(title = "Refunds")
+            SettingsGroup {
+                SettingsSwitchRow(
+                    icon = Icons.Default.Link,
+                    iconBgColor = green_light,
+                    iconTint = green_dark,
+                    title = "Auto-link refunds",
+                    subtitle = "Match incoming refunds to the original expense and net them out of spending and budgets",
+                    checked = autoLinkRefunds,
+                    onCheckedChange = { settingsViewModel.setAutoLinkRefundsEnabled(it) },
+                    position = ItemPosition.SINGLE
+                )
+            }
+
             // ── Security ──
             SectionHeaderV2(title = "Security")
             SettingsGroup {
@@ -367,42 +379,6 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                     title = "Budgets",
                     subtitle = "Track spending limits by category",
                     onClick = onNavigateToBudgets,
-                    position = ItemPosition.MIDDLE
-                )
-                SettingsNavItem(
-                    icon = Icons.Default.Subscriptions,
-                    iconBgColor = cyan_light,
-                    iconTint = cyan_dark,
-                    title = "Subscriptions",
-                    subtitle = "Recurring bills and services you track",
-                    onClick = onNavigateToSubscriptions,
-                    position = ItemPosition.MIDDLE
-                )
-                SettingsNavItem(
-                    icon = Icons.Default.Receipt,
-                    iconBgColor = cyan_light,
-                    iconTint = cyan_dark,
-                    title = "Prepaid Expenses",
-                    subtitle = "Pay once, spread the expense across months",
-                    onClick = onNavigateToPrepaidExpenses,
-                    position = ItemPosition.MIDDLE
-                )
-                SettingsNavItem(
-                    icon = Icons.Default.SwapHoriz,
-                    iconBgColor = amber_light,
-                    iconTint = amber_dark,
-                    title = "Lent & Borrowed",
-                    subtitle = "Track money lent to others and borrowed",
-                    onClick = onNavigateToLoans,
-                    position = ItemPosition.MIDDLE
-                )
-                SettingsNavItem(
-                    icon = Icons.Default.Folder,
-                    iconBgColor = MaterialTheme.colorScheme.secondaryContainer,
-                    iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    title = "Transaction Groups",
-                    subtitle = "Organise transactions under a topic",
-                    onClick = onNavigateToTransactionGroups,
                     position = ItemPosition.BOTTOM
                 )
             }

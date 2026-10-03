@@ -77,7 +77,7 @@ import com.spendly.tracker.data.database.dao.PrepaidExpenseDao
  */
 @Database(
     entities = [TransactionEntity::class, SubscriptionEntity::class, ChatMessage::class, MerchantMappingEntity::class, MerchantAliasEntity::class, CategoryEntity::class, AccountBalanceEntity::class, UnrecognizedSmsEntity::class, CardEntity::class, RuleEntity::class, RuleApplicationEntity::class, ExchangeRateEntity::class, BudgetEntity::class, BudgetCategoryEntity::class, BudgetMonthSnapshotEntity::class, BudgetCategoryMonthSnapshotEntity::class, TransactionSplitEntity::class, BankNotificationEntity::class, LoanEntity::class, TransactionGroupEntity::class, ProfileEntity::class, SalaryMonthOverrideEntity::class, TransactionReceiptEntity::class, InsightsCacheEntity::class, GoalEntity::class, GoalContributionEntity::class, PrepaidExpenseEntity::class, PrepaidAllocationEntity::class],
-    version = 64,
+    version = 65,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -207,7 +207,8 @@ abstract class SpendlyDatabase : RoomDatabase() {
                         MIGRATION_59_60,
                         MIGRATION_60_61,
                         MIGRATION_62_63,
-                        MIGRATION_63_64
+                        MIGRATION_63_64,
+                        MIGRATION_64_65
                     )
                     .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
@@ -823,6 +824,14 @@ abstract class SpendlyDatabase : RoomDatabase() {
         val MIGRATION_63_64 = object : Migration(63, 64) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `transactions` ADD COLUMN `transaction_type_manually_edited` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRATION_64_65 = object : Migration(64, 65) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `transactions` ADD COLUMN `refund_of_transaction_id` INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE `transactions` ADD COLUMN `refund_link_manually_edited` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_refund_of_transaction_id` ON `transactions` (`refund_of_transaction_id`)")
             }
         }
 

@@ -1,5 +1,7 @@
 package com.spendly.tracker.presentation.groups
 
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -18,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
@@ -56,6 +59,19 @@ fun TransactionGroupDetailScreen(
     }
 
     val group = uiState.group
+    val context = LocalContext.current
+    val shareGroup = {
+        if (group != null) {
+            shareGroupTransactions(
+                context = context,
+                groupName = group.name,
+                note = group.note,
+                transactions = uiState.linkedTransactions,
+                totalIncome = uiState.totalIncome,
+                totalExpense = uiState.totalExpense
+            )
+        }
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehaviorLarge.nestedScrollConnection),
@@ -82,6 +98,12 @@ fun TransactionGroupDetailScreen(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false }
                         ) {
+                            DropdownMenuItem(
+                                text = { Text("Share") },
+                                enabled = uiState.linkedTransactions.isNotEmpty(),
+                                onClick = { showMenu = false; shareGroup() },
+                                leadingIcon = { Icon(Icons.Default.Share, null) }
+                            )
                             DropdownMenuItem(
                                 text = { Text("Edit") },
                                 onClick = { showMenu = false; viewModel.showEditDialog() },
@@ -137,6 +159,17 @@ fun TransactionGroupDetailScreen(
         val merchantNames = remember(uiState.linkedTransactions) {
             uiState.linkedTransactions.map { it.merchantName }.distinct()
         }
+        val dateRange = remember(uiState.linkedTransactions) {
+            val dates = uiState.linkedTransactions.map { it.dateTime.toLocalDate() }
+            if (dates.isEmpty()) {
+                null
+            } else {
+                val fmt = DateTimeFormatter.ofPattern("d MMM yyyy")
+                val first = dates.min()
+                val last = dates.max()
+                if (first == last) first.format(fmt) else "${first.format(fmt)} – ${last.format(fmt)}"
+            }
+        }
 
         LazyColumn(
             state = lazyListState,
@@ -169,26 +202,45 @@ fun TransactionGroupDetailScreen(
                             GroupMerchantAvatarStack(merchantNames = merchantNames)
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = group.name,
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    text = if (merchantNames.size == 1) "1 merchant" else "${merchantNames.size} merchants",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                if (!group.note.isNullOrBlank()) {
+                                if (dateRange != null) {
                                     Text(
-                                        text = group.note,
+                                        text = dateRange,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
+                            FilledTonalIconButton(
+                                onClick = shareGroup,
+                                enabled = uiState.linkedTransactions.isNotEmpty()
+                            ) {
+                                Icon(Icons.Default.Share, contentDescription = "Share transactions")
+                            }
                         }
-                        Text(
-                            text = netFormatted,
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = netAmountColor
-                        )
+                        Column {
+                            Text(
+                                text = "Net balance",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = netFormatted,
+                                style = MaterialTheme.typography.headlineLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = netAmountColor
+                            )
+                        }
+                        if (!group.note.isNullOrBlank()) {
+                            Text(
+                                text = group.note,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         GroupSummaryStatPillRow(
                             transactionCount = uiState.linkedTransactions.size,
                             totalIncome = uiState.totalIncome,
@@ -300,6 +352,45 @@ fun TransactionGroupDetailScreen(
             }
         )
     }
+}
+
+private fun shareGroupTransactions(
+    context: Context,
+    groupName: String,
+    note: String?,
+    transactions: List<TransactionEntity>,
+    totalIncome: BigDecimal,
+    totalExpense: BigDecimal
+) {
+    if (transactions.isEmpty()) return
+    val currency = transactions.first().currency
+    val fmt = DateTimeFormatter.ofPattern("d MMM yyyy")
+    val text = buildString {
+        appendLine(groupName)
+        if (!note.isNullOrBlank()) appendLine(note)
+        appendLine()
+        transactions.forEach { txn ->
+            val sign = when (txn.transactionType) {
+                TransactionType.EXPENSE, TransactionType.CREDIT -> "-"
+                TransactionType.INCOME -> "+"
+                else -> ""
+            }
+            appendLine(
+                "${txn.dateTime.format(fmt)}  ${txn.merchantName}  " +
+                    "$sign${CurrencyFormatter.formatCurrency(txn.amount, txn.currency)}"
+            )
+        }
+        appendLine()
+        appendLine("Income: ${CurrencyFormatter.formatCurrency(totalIncome, currency)}")
+        appendLine("Expenses: ${CurrencyFormatter.formatCurrency(totalExpense, currency)}")
+        append("Net: ${CurrencyFormatter.formatCurrency(totalIncome - totalExpense, currency)}")
+    }
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, groupName)
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(Intent.createChooser(intent, "Share transactions"))
 }
 
 @Composable

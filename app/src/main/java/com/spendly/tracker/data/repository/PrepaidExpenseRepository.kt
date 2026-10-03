@@ -127,7 +127,11 @@ class PrepaidExpenseRepository @Inject constructor(
     ): Long {
         val transaction = transactionDao.getTransactionById(transactionId)
             ?: throw IllegalArgumentException("Transaction $transactionId not found")
-        require(transaction.prepaidExpenseId == null) { "Transaction is already part of a prepaid plan" }
+        // A stale link (plan deleted, or pointing at a plan sourced from another payment) must not block conversion.
+        val linkedPlan = transaction.prepaidExpenseId?.let { prepaidExpenseDao.getById(it) }
+        require(linkedPlan == null || linkedPlan.sourceTransactionId != transactionId) {
+            "Transaction is already part of a prepaid plan"
+        }
 
         val startDate = transaction.dateTime.toLocalDate()
         val effectiveCategory = category ?: transaction.category

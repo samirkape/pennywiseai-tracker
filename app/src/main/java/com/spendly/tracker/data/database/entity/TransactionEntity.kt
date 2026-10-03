@@ -13,7 +13,8 @@ import java.time.LocalDateTime
     indices = [
         Index(value = ["transaction_hash"], unique = true),
         Index(value = ["linked_transaction_id"]),
-        Index(value = ["prepaid_expense_id"])
+        Index(value = ["prepaid_expense_id"]),
+        Index(value = ["refund_of_transaction_id"])
     ]
 )
 data class TransactionEntity(
@@ -146,7 +147,22 @@ data class TransactionEntity(
      * must not overwrite the transaction type while this is set.
      */
     @ColumnInfo(name = "transaction_type_manually_edited", defaultValue = "0")
-    val transactionTypeManuallyEdited: Boolean = false
+    val transactionTypeManuallyEdited: Boolean = false,
+
+    /**
+     * For an INCOME row that reverses an earlier expense: the id of that original
+     * expense. Linked refunds are netted out of spend and budgets against the
+     * original's date.
+     */
+    @ColumnInfo(name = "refund_of_transaction_id", defaultValue = "NULL")
+    val refundOfTransactionId: Long? = null,
+
+    /**
+     * True when the user explicitly linked or unlinked this refund. Auto-matching
+     * must not touch the refund link while this is set.
+     */
+    @ColumnInfo(name = "refund_link_manually_edited", defaultValue = "0")
+    val refundLinkManuallyEdited: Boolean = false
 )
 
 /**

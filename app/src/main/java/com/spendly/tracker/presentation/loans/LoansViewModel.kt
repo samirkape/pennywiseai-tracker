@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.spendly.tracker.data.currency.CurrencyConversionService
 import com.spendly.tracker.data.database.entity.LoanEntity
 import com.spendly.tracker.data.database.entity.LoanStatus
+import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.database.entity.LoanDirection
 import com.spendly.tracker.data.preferences.UserPreferencesRepository
 import com.spendly.tracker.data.repository.LoanRepository
@@ -24,7 +25,9 @@ data class LoansUiState(
     val totalBorrowedRemaining: BigDecimal = BigDecimal.ZERO,
     val summaryCurrency: String = "INR",
     val isLoading: Boolean = true,
-    val showSettledLoans: Boolean = false
+    val showSettledLoans: Boolean = false,
+    val importCandidates: List<TransactionEntity> = emptyList(),
+    val showImportSheet: Boolean = false
 )
 
 @HiltViewModel
@@ -38,7 +41,13 @@ class LoansViewModel @Inject constructor(
     val uiState: StateFlow<LoansUiState> = _uiState.asStateFlow()
 
     init {
+        viewModelScope.launch { loanRepository.reconcileActiveLoans() }
         loadLoans()
+        viewModelScope.launch {
+            loanRepository.getUnlinkedLoanCategoryTransactions().collect { txs ->
+                _uiState.value = _uiState.value.copy(importCandidates = txs)
+            }
+        }
     }
 
     private fun loadLoans() {
@@ -84,7 +93,9 @@ class LoansViewModel @Inject constructor(
                     totalBorrowedRemaining = borrowed,
                     summaryCurrency = summaryCurrency,
                     isLoading = false,
-                    showSettledLoans = _uiState.value.showSettledLoans
+                    showSettledLoans = _uiState.value.showSettledLoans,
+                    importCandidates = _uiState.value.importCandidates,
+                    showImportSheet = _uiState.value.showImportSheet
                 )
             }
         }
@@ -130,5 +141,20 @@ class LoansViewModel @Inject constructor(
 
     fun toggleShowSettled() {
         _uiState.value = _uiState.value.copy(showSettledLoans = !_uiState.value.showSettledLoans)
+    }
+
+    fun setImportSheetVisible(visible: Boolean) {
+        _uiState.value = _uiState.value.copy(showImportSheet = visible)
+    }
+
+    fun importAllPastLoans() {
+        viewModelScope.launch { loanRepository.backfillFromLoanCategory() }
+    }
+
+    fun importSelected(personName: String, transactions: List<TransactionEntity>, direction: LoanDirection?) {
+        viewModelScope.launch {
+            loanRepository.importTransactionsAsLoan(personName.trim(), transactions, direction)
+            setImportSheetVisible(false)
+        }
     }
 }

@@ -26,6 +26,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.spendly.tracker.data.database.entity.LoanDirection
 import com.spendly.tracker.data.database.entity.LoanEntity
 import com.spendly.tracker.data.database.entity.LoanStatus
+import com.spendly.tracker.data.database.entity.TransactionEntity
+import com.spendly.tracker.data.database.entity.TransactionType
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
 import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.effects.overScrollVertical
@@ -47,6 +49,14 @@ fun LoansScreen(
     val scrollBehaviorSmall = TopAppBarDefaults.pinnedScrollBehavior()
     val scrollBehaviorLarge = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val hazeState = remember { HazeState() }
+
+    if (uiState.showImportSheet) {
+        ImportSheetHost(
+            candidates = uiState.importCandidates,
+            onDismiss = { viewModel.setImportSheetVisible(false) },
+            onImport = { name, txs, dir -> viewModel.importSelected(name, txs, dir) }
+        )
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehaviorLarge.nestedScrollConnection),
@@ -78,7 +88,7 @@ fun LoansScreen(
             return@Scaffold
         }
 
-        if (uiState.activeLoans.isEmpty() && uiState.settledLoans.isEmpty()) {
+        if (uiState.activeLoans.isEmpty() && uiState.settledLoans.isEmpty() && uiState.importCandidates.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize().padding(paddingValues),
                 contentAlignment = Alignment.Center
@@ -133,6 +143,16 @@ fun LoansScreen(
                 Spacer(modifier = Modifier.height(Spacing.sm))
             }
 
+            if (uiState.importCandidates.isNotEmpty()) {
+                item {
+                    ImportPastLoansCard(
+                        count = uiState.importCandidates.size,
+                        onImportAll = { viewModel.importAllPastLoans() },
+                        onChoose = { viewModel.setImportSheetVisible(true) }
+                    )
+                }
+            }
+
             // Active loans
             if (uiState.activeLoans.isNotEmpty()) {
                 item {
@@ -167,6 +187,124 @@ fun LoansScreen(
                         LoanListItem(loan = loan, onClick = { onNavigateToLoanDetail(loan.id) })
                     }
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ImportSheetHost(
+    candidates: List<TransactionEntity>,
+    onDismiss: () -> Unit,
+    onImport: (String, List<TransactionEntity>, LoanDirection?) -> Unit
+) {
+    var selectedIds by remember { mutableStateOf(setOf<Long>()) }
+    var personName by remember { mutableStateOf("") }
+    var nameEdited by remember { mutableStateOf(false) }
+    var direction by remember { mutableStateOf<LoanDirection?>(null) }
+    val dateFormat = remember { java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy") }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(horizontal = Dimensions.Padding.content)) {
+            Text("Select past loan transactions", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            Text(
+                "Pick transactions with one person. The first one decides if it was lent or borrowed.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(Spacing.sm))
+            OutlinedTextField(
+                value = personName,
+                onValueChange = { personName = it; nameEdited = true },
+                label = { Text("Person") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                FilterChip(
+                    selected = direction == null,
+                    onClick = { direction = null },
+                    label = { Text("Auto") }
+                )
+                FilterChip(
+                    selected = direction == LoanDirection.LENT,
+                    onClick = { direction = LoanDirection.LENT },
+                    label = { Text("Lent") }
+                )
+                FilterChip(
+                    selected = direction == LoanDirection.BORROWED,
+                    onClick = { direction = LoanDirection.BORROWED },
+                    label = { Text("Borrowed") }
+                )
+            }
+            LazyColumn(modifier = Modifier.weight(1f, fill = false).heightIn(max = 360.dp)) {
+                items(candidates, key = { it.id }) { tx ->
+                    val checked = tx.id in selectedIds
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                selectedIds = if (checked) selectedIds - tx.id else selectedIds + tx.id
+                                if (!nameEdited) {
+                                    personName = candidates.firstOrNull { it.id in selectedIds }?.merchantName.orEmpty()
+                                }
+                            }
+                            .padding(vertical = Spacing.xs),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(checked = checked, onCheckedChange = null)
+                        Spacer(modifier = Modifier.width(Spacing.sm))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(tx.merchantName, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                tx.dateTime.format(dateFormat),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            (if (tx.transactionType == TransactionType.INCOME) "+" else "-") +
+                                CurrencyFormatter.formatCurrency(tx.amount, tx.currency),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(Spacing.sm))
+            Button(
+                onClick = { onImport(personName, candidates.filter { it.id in selectedIds }, direction) },
+                enabled = selectedIds.isNotEmpty() && personName.isNotBlank(),
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Add as loan") }
+            Spacer(modifier = Modifier.height(Spacing.md))
+        }
+    }
+}
+
+@Composable
+private fun ImportPastLoansCard(
+    count: Int,
+    onImportAll: () -> Unit,
+    onChoose: () -> Unit
+) {
+    SpendlyCardV2(modifier = Modifier.fillMaxWidth()) {
+        Column {
+            Text(
+                "$count past transaction${if (count == 1) "" else "s"} in the Loan category",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                "Add them here, grouped by person. Fully repaid ones go to Settled.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                TextButton(onClick = onImportAll) { Text("Add all") }
+                TextButton(onClick = onChoose) { Text("Choose") }
             }
         }
     }
@@ -262,7 +400,10 @@ fun LoanListItem(
                         fontWeight = FontWeight.Medium
                     )
                     Text(
-                        CurrencyFormatter.formatCurrency(loan.remainingAmount, loan.currency),
+                        CurrencyFormatter.formatCurrency(
+                            if (loan.status == LoanStatus.SETTLED) loan.originalAmount else loan.remainingAmount,
+                            loan.currency
+                        ),
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold,
                         color = if (loan.status == LoanStatus.SETTLED)

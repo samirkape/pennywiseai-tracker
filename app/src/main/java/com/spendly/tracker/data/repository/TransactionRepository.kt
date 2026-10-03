@@ -156,6 +156,9 @@ class TransactionRepository @Inject constructor(
     fun getAllTransactions(): Flow<List<TransactionEntity>> = 
         transactionDao.getAllTransactions()
     
+    suspend fun getRefundsOf(originalId: Long): List<TransactionEntity> =
+        transactionDao.getRefundsOf(originalId)
+
     suspend fun getTransactionById(id: Long): TransactionEntity? = 
         transactionDao.getTransactionById(id)
     
@@ -173,6 +176,32 @@ class TransactionRepository @Inject constructor(
             startDate.atStartOfDay(),
             endDate.atTime(23, 59, 59)
         )
+
+    /**
+     * Same as [getTransactionsBetweenDates] but for spend calculations: linked refund
+     * rows are dropped and refunded amounts are deducted from their original expense.
+     */
+    fun getNetTransactionsBetweenDates(
+        startDate: LocalDateTime,
+        endDate: LocalDateTime
+    ): Flow<List<TransactionEntity>> =
+        kotlinx.coroutines.flow.combine(
+            getTransactionsBetweenDates(startDate, endDate),
+            observeRefundedByOriginal()
+        ) { txs, refunded ->
+            com.spendly.tracker.domain.usecase.RefundAdjustments.net(txs, refunded)
+        }
+
+    fun getNetTransactionsBetweenDates(
+        startDate: LocalDate,
+        endDate: LocalDate
+    ): Flow<List<TransactionEntity>> =
+        kotlinx.coroutines.flow.combine(
+            getTransactionsBetweenDates(startDate, endDate),
+            observeRefundedByOriginal()
+        ) { txs, refunded ->
+            com.spendly.tracker.domain.usecase.RefundAdjustments.net(txs, refunded)
+        }
 
     /**
      * Gets transactions filtered at the database level for better performance.
@@ -298,6 +327,7 @@ class TransactionRepository @Inject constructor(
         // Drop any inbound pointers so the linked counterpart doesn't keep a
         // dangling linked_transaction_id reference.
         transactionDao.clearLinksTo(transaction.id)
+        transactionDao.clearRefundLinksTo(transaction.id)
         // A prepaid plan has no basis for recognition without its source payment —
         // cascade-delete it (and its allocations, via DB CASCADE) whether the payment
         // itself is soft- or hard-deleted.
@@ -311,6 +341,7 @@ class TransactionRepository @Inject constructor(
 
     suspend fun deleteTransactionById(id: Long, hardDelete: Boolean = false) {
         transactionDao.clearLinksTo(id)
+        transactionDao.clearRefundLinksTo(id)
         transactionDao.getTransactionById(id)?.prepaidExpenseId?.let { prepaidExpenseDao.deleteById(it) }
         if (hardDelete) {
             transactionDao.deleteTransactionById(id)
@@ -733,10 +764,12 @@ class TransactionRepository @Inject constructor(
         endDate: LocalDate,
         currency: String
     ): Flow<List<TransactionWithSplits>> =
-        transactionSplitDao.getTransactionsWithSplitsFiltered(
-            startDate.atStartOfDay(),
-            endDate.atTime(23, 59, 59),
-            currency
+        netOfRefunds(
+            transactionSplitDao.getTransactionsWithSplitsFiltered(
+                startDate.atStartOfDay(),
+                endDate.atTime(23, 59, 59),
+                currency
+            )
         )
 
     /**
@@ -747,10 +780,27 @@ class TransactionRepository @Inject constructor(
         startDate: LocalDate,
         endDate: LocalDate
     ): Flow<List<TransactionWithSplits>> =
-        transactionSplitDao.getTransactionsWithSplitsAllCurrencies(
-            startDate.atStartOfDay(),
-            endDate.atTime(23, 59, 59)
+        netOfRefunds(
+            transactionSplitDao.getTransactionsWithSplitsAllCurrencies(
+                startDate.atStartOfDay(),
+                endDate.atTime(23, 59, 59)
+            )
         )
+
+    /** Live refund (INCOME) rows that are linked to an original expense. */
+    fun observeLinkedRefunds(): Flow<List<TransactionEntity>> = transactionDao.observeLinkedRefunds()
+
+    /** Refunded amount per original expense id, for netting spend in view models. */
+    fun observeRefundedByOriginal(): Flow<Map<Long, java.math.BigDecimal>> =
+        transactionDao.observeLinkedRefunds()
+            .map { com.spendly.tracker.domain.usecase.RefundAdjustments.refundedByOriginal(it) }
+
+    private fun netOfRefunds(
+        source: Flow<List<TransactionWithSplits>>
+    ): Flow<List<TransactionWithSplits>> =
+        kotlinx.coroutines.flow.combine(source, observeRefundedByOriginal()) { txs, refunded ->
+            com.spendly.tracker.domain.usecase.RefundAdjustments.netWithSplits(txs, refunded)
+        }
 
     /**
      * Gets transactions with splits, including excluded rows, for analytics aggregates.

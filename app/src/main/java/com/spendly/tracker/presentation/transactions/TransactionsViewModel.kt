@@ -39,6 +39,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import com.spendly.tracker.domain.usecase.RefundAdjustments
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -144,6 +145,11 @@ class TransactionsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(TransactionsUiState())
     val uiState: StateFlow<TransactionsUiState> = _uiState.asStateFlow()
+
+    /** Refunded amount per original expense id, used to net totals and annotate rows. */
+    val refundedByOriginal: StateFlow<Map<Long, BigDecimal>> = transactionRepository
+        .observeRefundedByOriginal()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
     
     private val _currencyGroupedTotals = MutableStateFlow(CurrencyGroupedTotals())
     val currencyGroupedTotals: StateFlow<CurrencyGroupedTotals> = _currencyGroupedTotals.asStateFlow()
@@ -1458,11 +1464,24 @@ class TransactionsViewModel @Inject constructor(
             else -> paymentModeFilteredFlow
         }
 
+        // In a category/bucket drill-down, also show the refunds linked to the rows shown,
+        // so the visible rows explain the netted total. The refund may fall in a later
+        // period than its original, so it is added after the period filter.
+        val withLinkedRefundsFlow = if (category != null || !categories.isNullOrEmpty()) {
+            combine(bankAccountFilteredFlow, transactionRepository.observeLinkedRefunds()) { shown, refunds ->
+                val shownIds = shown.mapTo(HashSet()) { it.id }
+                val extra = refunds.filter { it.refundOfTransactionId in shownIds && it.id !in shownIds }
+                if (extra.isEmpty()) shown else shown + extra
+            }
+        } else {
+            bankAccountFilteredFlow
+        }
+
         // Apply search filter
         return if (searchQuery.isBlank()) {
-            bankAccountFilteredFlow
+            withLinkedRefundsFlow
         } else {
-            bankAccountFilteredFlow.map { transactions ->
+            withLinkedRefundsFlow.map { transactions ->
                 transactions.filter { TransactionSearchMatcher.matches(it, searchQuery) }
             }
         }
@@ -1608,11 +1627,14 @@ class TransactionsViewModel @Inject constructor(
         splits: List<TransactionSplitEntity>?,
         categoryFilter: String?
     ): Double {
-        if (categoryFilter == null) return tx.amount.toDouble()
+        // Net out linked refunds so this matches budget and analytics totals.
+        val refunded = refundedByOriginal.value
+        val fraction = RefundAdjustments.remainingFraction(tx, refunded).toDouble()
+        if (categoryFilter == null) return RefundAdjustments.effectiveAmount(tx, refunded).toDouble()
         if (!splits.isNullOrEmpty()) {
-            return splits.filter { it.category == categoryFilter }.sumOf { it.amount.toDouble() }
+            return splits.filter { it.category == categoryFilter }.sumOf { it.amount.toDouble() } * fraction
         }
-        return tx.amount.toDouble()
+        return RefundAdjustments.effectiveAmount(tx, refunded).toDouble()
     }
 
     private fun calculateCurrencyGroupedTotals(
@@ -1625,7 +1647,7 @@ class TransactionsViewModel @Inject constructor(
 
         val totalsByCurrency = transactionsByCurrency.mapValues { (currency, currencyTransactions) ->
             val income = currencyTransactions
-                .filter { it.transactionType == TransactionType.INCOME }
+                .filter { it.transactionType == TransactionType.INCOME && !RefundAdjustments.isLinkedRefund(it) }
                 .sumOf { it.amount.toDouble() }
                 .toBigDecimal()
 

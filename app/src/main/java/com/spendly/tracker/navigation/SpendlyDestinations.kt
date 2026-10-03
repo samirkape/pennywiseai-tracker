@@ -59,6 +59,7 @@ data class MerchantDetail(val merchant: String)
 @Serializable
 data class AddTransaction(
     val unrecognizedSmsId: Long = -1L,
+    val initialTab: Int = 0,
 )
 
 @Serializable

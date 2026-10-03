@@ -32,8 +32,19 @@ class BudgetGroupRepository @Inject constructor(
     private val budgetDao: BudgetDao,
     private val snapshotDao: BudgetSnapshotDao,
     private val transactionSplitDao: TransactionSplitDao,
+    private val transactionDao: com.spendly.tracker.data.database.dao.TransactionDao,
     private val userPreferencesRepository: UserPreferencesRepository
 ) {
+    private val refundedByOriginal: Flow<Map<Long, java.math.BigDecimal>> =
+        transactionDao.observeLinkedRefunds().map { com.spendly.tracker.domain.usecase.RefundAdjustments.refundedByOriginal(it) }
+
+    private fun netOfRefunds(
+        source: Flow<List<com.spendly.tracker.data.database.entity.TransactionWithSplits>>
+    ): Flow<List<com.spendly.tracker.data.database.entity.TransactionWithSplits>> =
+        combine(source, refundedByOriginal) { txs, refunded ->
+            com.spendly.tracker.domain.usecase.RefundAdjustments.netWithSplits(txs, refunded)
+        }
+
     fun getActiveGroups(): Flow<List<BudgetWithCategories>> =
         budgetDao.getActiveBudgetsWithCategories()
 
@@ -256,7 +267,7 @@ class BudgetGroupRepository @Inject constructor(
         return if (isCurrentMonth) {
             combine(
                 budgetDao.getActiveBudgetsWithCategories(),
-                transactionSplitDao.getTransactionsWithSplitsFiltered(startDate, endDate, currency)
+                netOfRefunds(transactionSplitDao.getTransactionsWithSplitsFiltered(startDate, endDate, currency))
             ) { groups, allTransactions -> groups to allTransactions }
                 .map { (groups, allTransactions) ->
                     buildSummary(groups, allTransactions, daysElapsed, daysRemaining, currency, daysInMonth)
@@ -264,7 +275,7 @@ class BudgetGroupRepository @Inject constructor(
         } else {
             flow {
                 val groups = getGroupsForMonth(year, month)
-                transactionSplitDao.getTransactionsWithSplitsFiltered(startDate, endDate, currency)
+                netOfRefunds(transactionSplitDao.getTransactionsWithSplitsFiltered(startDate, endDate, currency))
                     .collect { allTransactions ->
                         emit(buildSummary(groups, allTransactions, daysElapsed, daysRemaining, currency, daysInMonth))
                     }
@@ -291,8 +302,8 @@ class BudgetGroupRepository @Inject constructor(
         return if (isCurrentMonth) {
             combine(
                 budgetDao.getActiveBudgetsWithCategories(),
-                transactionSplitDao.getTransactionsWithSplitsAllCurrencies(startDate, endDate),
-                transactionSplitDao.getTransactionsWithSplitsAllCurrencies(prevStartDate, prevEndDate)
+                netOfRefunds(transactionSplitDao.getTransactionsWithSplitsAllCurrencies(startDate, endDate)),
+                netOfRefunds(transactionSplitDao.getTransactionsWithSplitsAllCurrencies(prevStartDate, prevEndDate))
             ) { groups, allTransactions, prevTransactions -> Triple(groups, allTransactions, prevTransactions) }
                 .map { (groups, allTransactions, prevTransactions) ->
                     BudgetGroupSpendingRaw(
@@ -307,8 +318,8 @@ class BudgetGroupRepository @Inject constructor(
             flow {
                 val groups = getGroupsForMonth(year, month)
                 combine(
-                    transactionSplitDao.getTransactionsWithSplitsAllCurrencies(startDate, endDate),
-                    transactionSplitDao.getTransactionsWithSplitsAllCurrencies(prevStartDate, prevEndDate)
+                    netOfRefunds(transactionSplitDao.getTransactionsWithSplitsAllCurrencies(startDate, endDate)),
+                    netOfRefunds(transactionSplitDao.getTransactionsWithSplitsAllCurrencies(prevStartDate, prevEndDate))
                 ) { allTransactions, prevTransactions -> allTransactions to prevTransactions }
                     .map { (allTransactions, prevTransactions) ->
                         BudgetGroupSpendingRaw(
@@ -339,7 +350,7 @@ class BudgetGroupRepository @Inject constructor(
         return if (isCurrentPeriod) {
             combine(
                 budgetDao.getActiveBudgetsWithCategories(),
-                transactionSplitDao.getTransactionsWithSplitsFiltered(startDateTime, endDateTime, currency)
+                netOfRefunds(transactionSplitDao.getTransactionsWithSplitsFiltered(startDateTime, endDateTime, currency))
             ) { groups, allTransactions -> groups to allTransactions }
                 .map { (groups, allTransactions) ->
                     buildSummary(groups, allTransactions, daysElapsed, daysRemaining, currency, daysInPeriod)
@@ -347,7 +358,7 @@ class BudgetGroupRepository @Inject constructor(
         } else {
             flow {
                 val groups = getGroupsForMonth(financialStart.year, financialStart.monthValue)
-                transactionSplitDao.getTransactionsWithSplitsFiltered(startDateTime, endDateTime, currency)
+                netOfRefunds(transactionSplitDao.getTransactionsWithSplitsFiltered(startDateTime, endDateTime, currency))
                     .collect { allTransactions ->
                         emit(buildSummary(groups, allTransactions, daysElapsed, daysRemaining, currency, daysInPeriod))
                     }
@@ -375,8 +386,8 @@ class BudgetGroupRepository @Inject constructor(
         return if (isCurrentPeriod) {
             combine(
                 budgetDao.getActiveBudgetsWithCategories(),
-                transactionSplitDao.getTransactionsWithSplitsAllCurrencies(startDateTime, endDateTime),
-                transactionSplitDao.getTransactionsWithSplitsAllCurrencies(prevStartDateTime, prevEndDateTime)
+                netOfRefunds(transactionSplitDao.getTransactionsWithSplitsAllCurrencies(startDateTime, endDateTime)),
+                netOfRefunds(transactionSplitDao.getTransactionsWithSplitsAllCurrencies(prevStartDateTime, prevEndDateTime))
             ) { groups, allTransactions, prevTransactions -> Triple(groups, allTransactions, prevTransactions) }
                 .map { (groups, allTransactions, prevTransactions) ->
                     BudgetGroupSpendingRaw(
@@ -391,8 +402,8 @@ class BudgetGroupRepository @Inject constructor(
             flow {
                 val groups = getGroupsForMonth(financialStart.year, financialStart.monthValue)
                 combine(
-                    transactionSplitDao.getTransactionsWithSplitsAllCurrencies(startDateTime, endDateTime),
-                    transactionSplitDao.getTransactionsWithSplitsAllCurrencies(prevStartDateTime, prevEndDateTime)
+                    netOfRefunds(transactionSplitDao.getTransactionsWithSplitsAllCurrencies(startDateTime, endDateTime)),
+                    netOfRefunds(transactionSplitDao.getTransactionsWithSplitsAllCurrencies(prevStartDateTime, prevEndDateTime))
                 ) { allTransactions, prevTransactions -> allTransactions to prevTransactions }
                     .map { (allTransactions, prevTransactions) ->
                         BudgetGroupSpendingRaw(

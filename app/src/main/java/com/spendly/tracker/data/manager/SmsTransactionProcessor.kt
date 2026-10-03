@@ -45,6 +45,7 @@ class SmsTransactionProcessor @Inject constructor(
     private val ruleRepository: RuleRepository,
     private val ruleEngine: RuleEngine,
     private val creditCardPaymentLinker: CreditCardPaymentLinker,
+    private val refundLinker: com.spendly.tracker.domain.usecase.RefundLinker,
     private val selfTransferDetector: SelfTransferDetector
 ) {
     companion object {
@@ -230,6 +231,13 @@ class SmsTransactionProcessor @Inject constructor(
                     creditCardPaymentLinker.linkIfApplicable(finalEntity.copy(id = rowId))
                 }.onFailure { e ->
                     Log.w(TAG, "CC bill payment linker failed: ${e.message}")
+                }
+
+                // Match refund credits to the expense they reverse (setting-gated).
+                runCatching {
+                    refundLinker.autoLinkIfApplicable(finalEntity.copy(id = rowId))
+                }.onFailure { e ->
+                    Log.w(TAG, "Refund linker failed: ${e.message}")
                 }
 
                 // Trigger widget refresh for recent transactions

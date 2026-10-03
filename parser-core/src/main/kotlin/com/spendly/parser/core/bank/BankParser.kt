@@ -234,6 +234,11 @@ abstract class BankParser {
             return false
         }
 
+        // Ignore card-side confirmation messages that are not actual spend/income entries.
+        if (isCreditCardConfirmationMessage(lowerMessage)) {
+            return false
+        }
+
         // Must contain transaction keywords
         val transactionKeywords = listOf(
             "debited", "credited", "withdrawn", "deposited",
@@ -616,5 +621,21 @@ abstract class BankParser {
                 name.uppercase() !in commonWords &&
                 !name.all { it.isDigit() } &&
                 !name.contains("@") // Not a UPI ID
+    }
+
+    /**
+     * Ignore credit-card confirmation messages that are not actual spend/income entries.
+     * Examples: "HDFC Bank Cardmember, Online Payment of Rs... was credited to your card ending 9908 ..."
+     * These messages intentionally confirm a bill-payment credit on the card side and should not be
+     * added as standalone transactions, while still keeping the dedicated CC_BILL_PAYMENT detection
+     * logic available for the bank-side payment leg.
+     */
+    protected open fun isCreditCardConfirmationMessage(message: String): Boolean {
+        val lowerMessage = message.lowercase()
+
+        return (lowerMessage.contains("credited to your card ending") ||
+            (lowerMessage.contains("card ending") && lowerMessage.contains("credited"))) &&
+            (lowerMessage.contains("online payment of") || lowerMessage.contains("payment of") ||
+                lowerMessage.contains("cardmember"))
     }
 }

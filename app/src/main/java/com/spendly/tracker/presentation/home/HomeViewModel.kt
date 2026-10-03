@@ -76,6 +76,7 @@ class HomeViewModel @Inject constructor(
     private val accountBalanceRepository: AccountBalanceRepository,
     private val goalRepository: GoalRepository,
     private val loanRepository: LoanRepository,
+    private val prepaidExpenseRepository: com.spendly.tracker.data.repository.PrepaidExpenseRepository,
     private val llmRepository: LlmRepository,
     private val currencyConversionService: CurrencyConversionService,
     private val userPreferencesRepository: UserPreferencesRepository,
@@ -450,7 +451,7 @@ class HomeViewModel @Inject constructor(
         launch {
             // Load current month breakdown by currency (filtered by business/personal)
             combine(
-                transactionRepository.getTransactionsBetweenDates(spendingStart, now),
+                transactionRepository.getNetTransactionsBetweenDates(spendingStart, now),
                 userPreferencesRepository.selectedProfileId,
                 _cachedAccountBalances.filterNotNull()
             ) { transactions, profileId, balances ->
@@ -563,7 +564,7 @@ class HomeViewModel @Inject constructor(
         launch {
             // Load previous financial month breakdown for comparison
             combine(
-                transactionRepository.getTransactionsBetweenDates(prevFinancialStart, prevFinancialEnd),
+                transactionRepository.getNetTransactionsBetweenDates(prevFinancialStart, prevFinancialEnd),
                 userPreferencesRepository.selectedProfileId,
                 _cachedAccountBalances.filterNotNull()
             ) { transactions, profileId, balances ->
@@ -576,7 +577,7 @@ class HomeViewModel @Inject constructor(
         launch {
             // Load cumulative spending sparkline for current + previous financial month comparison
             combine(
-                transactionRepository.getTransactionsBetweenDates(
+                transactionRepository.getNetTransactionsBetweenDates(
                     startDate = prevFinancialStart,
                     endDate = now
                 ),
@@ -879,6 +880,24 @@ class HomeViewModel @Inject constructor(
         }
 
         launch {
+            prepaidExpenseRepository.getActivePlans().collect { plans ->
+                _uiState.value = _uiState.value.copy(activePrepaidCount = plans.size)
+            }
+        }
+
+        launch {
+            loanRepository.getActiveLoanCount().collect { count ->
+                _uiState.value = _uiState.value.copy(openLoanCount = count)
+            }
+        }
+
+        launch {
+            transactionGroupRepository.getAllGroups().collect { groups ->
+                _uiState.value = _uiState.value.copy(transactionGroupCount = groups.size)
+            }
+        }
+
+        launch {
             goalRepository.getActiveGoals().collect { goals ->
                 val currency = userPreferencesRepository.baseCurrency.first()
                 val totalTarget = goals.fold(BigDecimal.ZERO) { acc, g -> acc + g.targetAmount }
@@ -907,7 +926,7 @@ class HomeViewModel @Inject constructor(
         launch {
             // Last 14 days for weekly comparison + 7-day bar chart
             combine(
-                transactionRepository.getTransactionsBetweenDates(
+                transactionRepository.getNetTransactionsBetweenDates(
                     startDate = now.minusDays(13),
                     endDate = now
                 ),
@@ -1469,7 +1488,7 @@ class HomeViewModel @Inject constructor(
         endInclusive: LocalDate,
     ): kotlinx.coroutines.flow.Flow<Map<LocalDate, BigDecimal>> =
         combine(
-            transactionRepository.getTransactionsBetweenDates(startInclusive, endInclusive),
+            transactionRepository.getNetTransactionsBetweenDates(startInclusive, endInclusive),
             userPreferencesRepository.selectedProfileId,
             _cachedAccountBalances.filterNotNull()
         ) { transactions, profileId, balances ->
@@ -1829,7 +1848,7 @@ class HomeViewModel @Inject constructor(
             val useFinancial = userPreferencesRepository.useFinancialMonth.first()
             val (financialStart, _) = budgetPeriodRange(now)
             val spendingStart = if (useFinancial) financialStart else now.withDayOfMonth(1)
-            val allTransactions = transactionRepository.getTransactionsBetweenDates(
+            val allTransactions = transactionRepository.getNetTransactionsBetweenDates(
                 startDate = spendingStart,
                 endDate = now,
             ).first()
@@ -2188,6 +2207,9 @@ data class HomeUiState(
     val primaryGoalTarget: BigDecimal = BigDecimal.ZERO,
     val primaryGoalTargetDate: LocalDate? = null,
     val activeGoals: List<GoalEntity> = emptyList(),
+    val activePrepaidCount: Int = 0,
+    val openLoanCount: Int = 0,
+    val transactionGroupCount: Int = 0,
 )
 
 data class LoanSummary(

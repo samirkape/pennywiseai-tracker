@@ -572,6 +572,77 @@ interface TransactionDao {
     )
 
     /**
+     * Expense rows that could be the original of a refund: same currency, dated
+     * within [dateStart, dateEnd], not deleted/excluded, not tied to a loan.
+     * Remaining-refundable and scoring are applied by `RefundMatcher`.
+     */
+    @Query("""
+        SELECT * FROM transactions
+        WHERE is_deleted = 0
+        AND is_excluded_from_tracking = 0
+        AND id != :excludeId
+        AND currency = :currency
+        AND loan_id IS NULL
+        AND transaction_type IN ('EXPENSE', 'CREDIT')
+        AND date_time BETWEEN :dateStart AND :dateEnd
+        ORDER BY date_time DESC
+    """)
+    suspend fun findRefundOriginalCandidates(
+        excludeId: Long,
+        currency: String,
+        dateStart: LocalDateTime,
+        dateEnd: LocalDateTime
+    ): List<TransactionEntity>
+
+    /** Live refund INCOME rows linked to any original; used to net spend. */
+    @Query("""
+        SELECT * FROM transactions
+        WHERE is_deleted = 0
+        AND refund_of_transaction_id IS NOT NULL
+        AND transaction_type = 'INCOME'
+    """)
+    fun observeLinkedRefunds(): Flow<List<TransactionEntity>>
+
+    @Query("""
+        SELECT * FROM transactions
+        WHERE is_deleted = 0
+        AND refund_of_transaction_id = :originalId
+    """)
+    suspend fun getRefundsOf(originalId: Long): List<TransactionEntity>
+
+    @Query("""
+        SELECT * FROM transactions
+        WHERE is_deleted = 0
+        AND refund_of_transaction_id IS NOT NULL
+    """)
+    suspend fun getAllLinkedRefunds(): List<TransactionEntity>
+
+    @Query("""
+        UPDATE transactions
+        SET refund_of_transaction_id = :originalId,
+            refund_link_manually_edited = :manual,
+            updated_at = :now
+        WHERE id = :refundId
+    """)
+    suspend fun setRefundOf(
+        refundId: Long,
+        originalId: Long?,
+        manual: Boolean,
+        now: LocalDateTime = LocalDateTime.now()
+    )
+
+    /** Clears refund links pointing at a deleted original. */
+    @Query("""
+        UPDATE transactions
+        SET refund_of_transaction_id = NULL, updated_at = :now
+        WHERE refund_of_transaction_id = :originalId
+    """)
+    suspend fun clearRefundLinksTo(
+        originalId: Long,
+        now: LocalDateTime = LocalDateTime.now()
+    )
+
+    /**
      * Unlinked CC bill payment legs, oldest first. Used by the one-shot
      * historical linker pass to backfill `linked_transaction_id` on rows that
      * existed before the linking logic shipped.

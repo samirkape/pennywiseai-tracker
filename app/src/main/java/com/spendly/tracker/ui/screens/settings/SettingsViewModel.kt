@@ -104,6 +104,7 @@ class SettingsViewModel @Inject constructor(
     val unifiedCurrencyMode = userPreferencesRepository.unifiedCurrencyMode
     val displayCurrency = userPreferencesRepository.displayCurrency
     val compactAnalyticsCardsEnabled = userPreferencesRepository.compactAnalyticsCardsEnabled
+    val autoLinkRefundsEnabled = userPreferencesRepository.autoLinkRefundsEnabled
 
     val availableCurrencies: StateFlow<List<String>> = transactionRepository.getAllCurrencies()
         .map { transactionCurrencies ->
@@ -522,6 +523,12 @@ class SettingsViewModel @Inject constructor(
     fun setCompactAnalyticsCardsEnabled(enabled: Boolean) {
         viewModelScope.launch {
             userPreferencesRepository.setCompactAnalyticsCardsEnabled(enabled)
+        }
+    }
+
+    fun setAutoLinkRefundsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setAutoLinkRefundsEnabled(enabled)
         }
     }
 

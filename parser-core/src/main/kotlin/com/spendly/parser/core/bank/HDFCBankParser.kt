@@ -622,7 +622,7 @@ class HDFCBankParser : BaseIndianBankParser() {
             Regex("""towards\s+([^.\n]+?)(?:\s+from|\s+A/c|\s+UMRN|\s+ID:|\s+Alert:|\s*\.|$)""", RegexOption.IGNORE_CASE),
             Regex("""for\s+([^.\n]+?)(?:\s+mandate|\s+will\s+be|\s+ID:|\s+Act:|\s*\.|$)""", RegexOption.IGNORE_CASE),
             Regex("""Info:\s*([^.\n]+?)(?:\s*$)""", RegexOption.IGNORE_CASE),
-            Regex("""To\s+([^.\n]+?)(?:\s+UPI|,|$)""", RegexOption.IGNORE_CASE)
+            Regex("""To\s+([^.\n]+?)(?:\s+UPI|,|\r?\n|$)""", RegexOption.IGNORE_CASE)
         )
 
         for (pattern in merchantPatterns) {

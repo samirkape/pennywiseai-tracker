@@ -61,6 +61,8 @@ fun TransactionItem(
     categoryForIconFallback: String? = null,
     /** Custom icon key from database for the category. */
     categoryIconKey: String? = null,
+    /** Refund context shown in the subtitle, e.g. "₹200 refunded · net ₹300". */
+    refundNote: String? = null,
     modifier: Modifier = Modifier,
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -98,7 +100,7 @@ fun TransactionItem(
 
     val isCcBillPayment = transaction.transferKind == TransferKind.CC_BILL_PAYMENT
 
-    val subtitle = remember(transaction, dateTimeText, isEffectivelyBusiness, showSplitPortion, isCcBillPayment) {
+    val subtitle = remember(transaction, dateTimeText, isEffectivelyBusiness, showSplitPortion, isCcBillPayment, refundNote) {
         buildList {
             add(dateTimeText)
             when {
@@ -112,6 +114,7 @@ fun TransactionItem(
             if (transaction.isRecurring && transaction.transactionType != TransactionType.INVESTMENT) add("Recurring")
             if (isEffectivelyBusiness) add("Business")
             if (transaction.isExcludedFromTracking) add("Excluded")
+            if (refundNote != null) add(refundNote)
         }.joinToString(" \u00B7 ")
     }
 

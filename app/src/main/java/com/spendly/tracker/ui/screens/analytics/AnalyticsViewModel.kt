@@ -238,7 +238,7 @@ class AnalyticsViewModel @Inject constructor(
             flowOf(AnalyticsUiState(isLoading = false))
         } else {
             // First load all transactions for the date range to get available currencies
-            transactionRepository.getTransactionsBetweenDates(
+            transactionRepository.getNetTransactionsBetweenDates(
                 startDate = dateRange.first,
                 endDate = dateRange.second
             ).flatMapLatest { allTransactions ->
@@ -538,13 +538,14 @@ class AnalyticsViewModel @Inject constructor(
         val anchor = when (period) {
             TimePeriod.THIS_MONTH, TimePeriod.CALENDAR_MONTH -> YearMonth.now()
             TimePeriod.LAST_MONTH -> YearMonth.now().minusMonths(1)
+            TimePeriod.LAST_3_MONTHS, TimePeriod.LAST_6_MONTHS, TimePeriod.THIS_YEAR -> null
             TimePeriod.ALL, TimePeriod.CURRENT_FY, TimePeriod.CUSTOM -> null
         }
         savedStateHandle["periodAnchorMonth"] = anchor?.toString()
         when (period) {
             TimePeriod.CALENDAR_MONTH -> savedStateHandle[periodNavUsesCalendarKey] = true
             TimePeriod.THIS_MONTH, TimePeriod.LAST_MONTH -> savedStateHandle[periodNavUsesCalendarKey] = false
-            TimePeriod.ALL, TimePeriod.CURRENT_FY -> savedStateHandle.remove<Boolean>(periodNavUsesCalendarKey)
+            TimePeriod.LAST_3_MONTHS, TimePeriod.LAST_6_MONTHS, TimePeriod.THIS_YEAR, TimePeriod.ALL, TimePeriod.CURRENT_FY -> savedStateHandle.remove<Boolean>(periodNavUsesCalendarKey)
             TimePeriod.CUSTOM -> Unit
         }
     }
@@ -690,6 +691,22 @@ class AnalyticsViewModel @Inject constructor(
                         trend.add(BalancePoint(timestamp = currentMonth.atStartOfDay(), balance = totalAmount, currency = currency))
                         currentMonth = currentMonth.plusMonths(1)
                     }
+                }
+            }
+            selectedPeriod in setOf(
+                TimePeriod.LAST_3_MONTHS,
+                TimePeriod.LAST_6_MONTHS,
+                TimePeriod.THIS_YEAR,
+            ) -> {
+                var currentMonth = startDate.withDayOfMonth(1)
+                val lastMonth = endDate.withDayOfMonth(1)
+                while (!currentMonth.isAfter(lastMonth) && !currentMonth.isAfter(LocalDate.now().withDayOfMonth(1))) {
+                    val endOfMonth = currentMonth.withDayOfMonth(currentMonth.lengthOfMonth())
+                    val totalAmount = transactions.filter {
+                        !it.dateTime.toLocalDate().isBefore(currentMonth) && !it.dateTime.toLocalDate().isAfter(endOfMonth)
+                    }.sumOf { it.amount.toDouble() }.toBigDecimal()
+                    trend.add(BalancePoint(timestamp = currentMonth.atStartOfDay(), balance = totalAmount, currency = currency))
+                    currentMonth = currentMonth.plusMonths(1)
                 }
             }
             else -> {
