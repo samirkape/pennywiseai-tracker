@@ -105,6 +105,7 @@ fun AnalyticsScreen(
     val chartType by viewModel.selectedChartType.collectAsStateWithLifecycle()
     val categoryFilter by viewModel.categoryFilter.collectAsStateWithLifecycle()
     val compactAnalyticsCards by viewModel.compactAnalyticsCards.collectAsStateWithLifecycle()
+    val savingsRate by viewModel.savingsRate.collectAsStateWithLifecycle()
     // Use rememberSaveable to preserve UI state across navigation
     var showDateRangePicker by rememberSaveable { mutableStateOf(false) }
     var showChartTypeSelector by remember { mutableStateOf(false) }
@@ -236,6 +237,19 @@ fun AnalyticsScreen(
         flingBehavior = rememberOverscrollFlingBehavior { listState }
     ) {
         item {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                SectionHeaderV2(title = "Savings rate")
+                SavingsRateCard(
+                    summary = savingsRate,
+                    isAppliedToPage = selectedPeriod == TimePeriod.CUSTOM &&
+                        savingsRate.range != null &&
+                        savingsRate.range == uiState.dateRange,
+                    onWindowSelected = viewModel::applySavingsWindow,
+                )
+            }
+        }
+
+        item {
             AnalyticsReferencePeriodChipRow(
                 selectedPeriod = selectedPeriod,
                 onPeriodSelected = { viewModel.selectPeriod(it) },
@@ -263,7 +277,7 @@ fun AnalyticsScreen(
             )
         }
 
-        if (uiState.periodOutflow != null || uiState.investmentInsights != null || uiState.paymentModeBreakdown != null) {
+        if (uiState.periodOutflow != null || uiState.incomeSummary != null || uiState.investmentInsights != null || uiState.paymentModeBreakdown != null) {
             item {
                 HorizontalPager(
                     state = pagerState,
@@ -276,12 +290,14 @@ fun AnalyticsScreen(
                         periodOutflow = uiState.periodOutflow,
                         investmentInsights = uiState.investmentInsights,
                         paymentModeBreakdown = uiState.paymentModeBreakdown,
+                        incomeSummary = uiState.incomeSummary,
                         currency = selectedCurrency,
                         onTotalClick = {
                             when (tab) {
                                 AnalyticsOverviewTab.OUTFLOW -> drillDownToTransactions(transactionType = null)
                                 AnalyticsOverviewTab.SPENDING -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name)
                                 AnalyticsOverviewTab.INVESTED -> drillDownToTransactions(transactionType = TransactionTypeFilter.INVESTMENT.name)
+                                AnalyticsOverviewTab.INCOME -> drillDownToTransactions(transactionType = TransactionTypeFilter.INCOME.name)
                             }
                         },
                         onMetricClick = { metricIndex ->
@@ -304,6 +320,7 @@ fun AnalyticsScreen(
                                     2 -> drillDownToTransactions(transactionType = TransactionTypeFilter.EXPENSE.name, paymentMode = "CASH")
                                 }
                                 AnalyticsOverviewTab.INVESTED -> drillDownToTransactions(transactionType = TransactionTypeFilter.INVESTMENT.name)
+                                AnalyticsOverviewTab.INCOME -> drillDownToTransactions(transactionType = TransactionTypeFilter.INCOME.name)
                             }
                         },
                     )

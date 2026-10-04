@@ -74,6 +74,7 @@ enum class AnalyticsOverviewTab(val label: String) {
     OUTFLOW("Outflow"),
     SPENDING("Spending"),
     INVESTED("Invested"),
+    INCOME("Income"),
 }
 
 private data class AnalyticsHeroMetric(
@@ -254,12 +255,13 @@ fun AnalyticsReferenceHeroCard(
     periodOutflow: PeriodOutflowSummary?,
     investmentInsights: InvestmentInsights?,
     paymentModeBreakdown: PaymentModeBreakdown?,
+    incomeSummary: PeriodIncomeSummary?,
     currency: String,
     onMetricClick: ((metricIndex: Int) -> Unit)? = null,
     onTotalClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val hero = remember(selectedTab, periodOutflow, investmentInsights, paymentModeBreakdown, currency) {
+    val hero = remember(selectedTab, periodOutflow, investmentInsights, paymentModeBreakdown, incomeSummary, currency) {
         when (selectedTab) {
             AnalyticsOverviewTab.OUTFLOW -> {
                 val s = periodOutflow ?: return@remember null
@@ -290,6 +292,24 @@ fun AnalyticsReferenceHeroCard(
                         AnalyticsHeroMetric("Card", CurrencyFormatter.formatCurrency(cb?.creditTotal ?: BigDecimal.ZERO, currency), "${cb?.creditCount ?: 0} txns", Icons.Default.CreditCard),
                         AnalyticsHeroMetric("Bank", CurrencyFormatter.formatCurrency(cb?.bankTotal ?: BigDecimal.ZERO, currency), "${cb?.bankCount ?: 0} txns", Icons.Default.AccountBalance),
                         AnalyticsHeroMetric("Cash", CurrencyFormatter.formatCurrency(cash?.total ?: BigDecimal.ZERO, currency), "${cash?.transactionCount ?: 0} txns", Icons.Default.Wallet),
+                    ),
+                )
+            }
+            AnalyticsOverviewTab.INCOME -> {
+                val s = incomeSummary ?: return@remember null
+                val avg = CurrencyFormatter.formatCurrency(
+                    s.total.divide(BigDecimal(s.transactionCount), 2, RoundingMode.HALF_UP), currency,
+                )
+                AnalyticsHeroState(
+                    label = "TOTAL INCOME",
+                    amount = CurrencyFormatter.formatCurrency(s.total, currency),
+                    delta = s.deltaPercent?.let { formatDelta(it) },
+                    deltaIncreasing = (s.deltaPercent ?: 0f) >= 0f,
+                    transactionCount = "${s.transactionCount} transactions",
+                    metrics = listOf(
+                        AnalyticsHeroMetric("Largest", CurrencyFormatter.formatCurrency(s.largest, currency), "1 transaction", Icons.Default.ShowChart),
+                        AnalyticsHeroMetric("Average", avg, "per txn", Icons.Default.Receipt),
+                        AnalyticsHeroMetric("Net", CurrencyFormatter.formatCurrency(s.net, currency), "income - outflow", Icons.Default.Wallet),
                     ),
                 )
             }
@@ -354,7 +374,7 @@ fun AnalyticsReferenceHeroCard(
                     // For Outflow/Spending tabs: increasing spend = bad (red), decreasing = good (green)
                     // For Invested tab: increasing investment = good (green), decreasing = bad (red)
                     val deltaIsGood = when (selectedTab) {
-                        AnalyticsOverviewTab.INVESTED -> hero.deltaIncreasing
+                        AnalyticsOverviewTab.INVESTED, AnalyticsOverviewTab.INCOME -> hero.deltaIncreasing
                         else -> !hero.deltaIncreasing
                     }
                     val deltaBadgeColor = when {

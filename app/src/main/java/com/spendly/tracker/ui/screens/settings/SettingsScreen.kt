@@ -129,6 +129,8 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
         permissionViewModel.refreshNotificationAccess()
     }
 
+    val autoBackup = remember { settingsViewModel.latestAutoBackup() }
+
     // File picker for import
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
@@ -416,8 +418,23 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                     title = "Import Data",
                     subtitle = "Restore from backup — merge or overwrite",
                     onClick = { importLauncher.launch("*/*") },
-                    position = ItemPosition.BOTTOM
+                    position = if (autoBackup != null) ItemPosition.MIDDLE else ItemPosition.BOTTOM
                 )
+                autoBackup?.let { (uri, label) ->
+                    SettingsNavItem(
+                        icon = Icons.Default.Restore,
+                        iconBgColor = cyan_light,
+                        iconTint = cyan_dark,
+                        title = "Restore Auto-Backup",
+                        subtitle = label,
+                        onClick = {
+                            pendingImportUri = uri
+                            selectedImportStrategy = ImportStrategy.MERGE
+                            showImportStrategyDialog = true
+                        },
+                        position = ItemPosition.BOTTOM
+                    )
+                }
             }
 
             // ── Accounts & Banks ──

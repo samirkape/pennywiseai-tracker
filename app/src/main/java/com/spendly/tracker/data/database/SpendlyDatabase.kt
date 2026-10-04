@@ -210,7 +210,6 @@ abstract class SpendlyDatabase : RoomDatabase() {
                         MIGRATION_63_64,
                         MIGRATION_64_65
                     )
-                    .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
                 INSTANCE = instance
                 instance

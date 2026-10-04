@@ -418,6 +418,14 @@ class AnalyticsViewModel @Inject constructor(
                     previousPeriodTxs = previousPeriodTxs,
                 )
 
+                val incomeSummary = computeIncomeSummary(
+                    allTransactionsWithSplits = allTransactionsWithSplits,
+                    previousPeriodTxs = previousPeriodTxs,
+                    isUnified = isUnified,
+                    displayCurrency = displayCurrency,
+                    outflowTotal = periodOutflow?.total ?: BigDecimal.ZERO,
+                )
+
                 val investmentInsights = computeInvestmentInsights(
                     allTransactionsWithSplits = allTransactionsWithSplits,
                     previousPeriodTxs = previousPeriodTxs,
@@ -511,6 +519,7 @@ class AnalyticsViewModel @Inject constructor(
                     periodStart = dateRange.first,
                     periodEnd = dateRange.second,
                     periodOutflow = periodOutflow,
+                    incomeSummary = incomeSummary,
                     investmentInsights = investmentInsights,
                     paymentModeBreakdown = paymentModeBreakdown,
                     accountBreakdowns = accountBreakdowns,
@@ -524,6 +533,80 @@ class AnalyticsViewModel @Inject constructor(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = AnalyticsUiState(isLoading = true)
+    )
+
+    private val _savingsWindowMonths = MutableStateFlow(SAVINGS_RATE_DEFAULT_WINDOW)
+    val savingsWindowMonths: StateFlow<Int> = _savingsWindowMonths.asStateFlow()
+
+    /** Sets the savings window and points the whole page at the same date range. */
+    fun applySavingsWindow(months: Int) {
+        _savingsWindowMonths.value = months
+        val ranges = savingsMonthRanges(
+            window = months,
+            usesCalendar = !useFinancialMonth.value,
+            nav = SavingsNav(
+                monthStartDay = navMonthStartDay.value,
+                overrides = navOverridesMap.value,
+                fixedPeriodEnd = navUseFixedBudgetPeriodEnd.value,
+                periodEndDay = navBudgetPeriodEndDay.value,
+            ),
+        )
+        setCustomDateRange(ranges.minOf { it.second.first }, ranges.maxOf { it.second.second })
+    }
+
+    private fun savingsMonthRanges(
+        window: Int,
+        usesCalendar: Boolean,
+        nav: SavingsNav,
+    ): List<Pair<YearMonth, Pair<LocalDate, LocalDate>>> =
+        (window - 1 downTo 0).map { back ->
+            val ym = YearMonth.now().minusMonths(back.toLong())
+            ym to getDateRangeForYearMonthNavigation(
+                yearMonth = ym,
+                useCalendarMonth = usesCalendar,
+                monthStartDay = nav.monthStartDay,
+                monthStartOverrides = nav.overrides,
+                useFixedBudgetPeriodEnd = nav.fixedPeriodEnd,
+                budgetPeriodEndDay = nav.periodEndDay,
+            )
+        }
+
+    /** Income vs. spending for the last N months, independent of the selected analytics period. */
+    val savingsRate: StateFlow<SavingsRateSummary> = combine(
+        _savingsWindowMonths,
+        _selectedCurrency,
+        _isUnifiedMode,
+        combine(navMonthStartDay, navOverridesMap, navUseFixedBudgetPeriodEnd, navBudgetPeriodEndDay) { a, b, c, d ->
+            SavingsNav(a, b, c, d)
+        },
+        useFinancialMonth,
+    ) { window, currency, unified, nav, financial ->
+        SavingsInputs(window, currency, unified, nav, financial)
+    }.flatMapLatest { input ->
+        val ranges = savingsMonthRanges(input.window, !input.useFinancialMonth, input.nav)
+        transactionRepository.getNetTransactionsBetweenDates(
+            startDate = ranges.minOf { it.second.first },
+            endDate = ranges.maxOf { it.second.second },
+        ).mapLatest { all ->
+            val txs = if (input.unified) all else all.filter { it.currency == input.currency }
+            val months = computeMonthlySavingsRates(
+                transactions = txs,
+                ranges = ranges,
+                currentMonth = YearMonth.now(),
+                amountOf = { tx ->
+                    if (input.unified) {
+                        currencyConversionService.convertAmount(tx.amount, tx.currency, input.currency)
+                    } else {
+                        tx.amount
+                    }
+                },
+            )
+            SavingsRateSummary(months = months, windowMonths = input.window, currency = input.currency)
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = SavingsRateSummary(),
     )
 
     fun selectPeriod(period: TimePeriod) {
@@ -814,6 +897,38 @@ class AnalyticsViewModel @Inject constructor(
         )
     }
 
+    private suspend fun computeIncomeSummary(
+        allTransactionsWithSplits: List<TransactionWithSplits>,
+        previousPeriodTxs: List<TransactionWithSplits>,
+        isUnified: Boolean,
+        displayCurrency: String,
+        outflowTotal: BigDecimal,
+    ): PeriodIncomeSummary? {
+        suspend fun incomeAmounts(items: List<TransactionWithSplits>) = items
+            .map { it.transaction }
+            .filter { !it.isExcludedFromTracking && it.transactionType == TransactionType.INCOME && it.loanId == null }
+            .map { convertAmount(it.amount, it.currency, displayCurrency, isUnified) }
+
+        val current = incomeAmounts(allTransactionsWithSplits)
+        if (current.isEmpty()) return null
+        val total = current.fold(BigDecimal.ZERO) { acc, a -> acc + a }
+        if (total <= BigDecimal.ZERO) return null
+
+        val previousTotal = incomeAmounts(previousPeriodTxs).fold(BigDecimal.ZERO) { acc, a -> acc + a }
+        val deltaPercent = if (previousTotal > BigDecimal.ZERO) {
+            (total.subtract(previousTotal).divide(previousTotal, 4, java.math.RoundingMode.HALF_UP) * BigDecimal(100)).toFloat()
+        } else null
+
+        return PeriodIncomeSummary(
+            total = total,
+            transactionCount = current.size,
+            largest = current.max(),
+            net = total - outflowTotal,
+            currency = displayCurrency,
+            deltaPercent = deltaPercent,
+        )
+    }
+
     private suspend fun computeInvestmentInsights(
         allTransactionsWithSplits: List<TransactionWithSplits>,
         previousPeriodTxs: List<TransactionWithSplits>,
@@ -1014,6 +1129,21 @@ private fun previousDateRange(start: LocalDate, end: LocalDate): Pair<LocalDate,
  * Internal state for combining all filter parameters.
  * Used in reactive Flow to trigger data reload when any filter changes.
  */
+private data class SavingsNav(
+    val monthStartDay: Int,
+    val overrides: Map<String, Int>,
+    val fixedPeriodEnd: Boolean,
+    val periodEndDay: Int,
+)
+
+private data class SavingsInputs(
+    val window: Int,
+    val currency: String,
+    val unified: Boolean,
+    val nav: SavingsNav,
+    val useFinancialMonth: Boolean,
+)
+
 private data class FilterState(
     val period: TimePeriod,
     val customRange: Pair<LocalDate, LocalDate>?,
@@ -1042,6 +1172,7 @@ data class AnalyticsUiState(
     val periodStart: LocalDate? = null,
     val periodEnd: LocalDate? = null,
     val periodOutflow: PeriodOutflowSummary? = null,
+    val incomeSummary: PeriodIncomeSummary? = null,
     val investmentInsights: InvestmentInsights? = null,
     val paymentModeBreakdown: PaymentModeBreakdown? = null,
     val accountBreakdowns: Map<String, List<AccountSpendData>> = emptyMap(),
@@ -1063,6 +1194,17 @@ data class PeriodOutflowSummary(
     val currency: String,
     val deltaPercent: Float? = null,
     val spendingDeltaPercent: Float? = null,
+)
+
+/** Income received in the active period (loan-linked rows and excluded rows are ignored). */
+data class PeriodIncomeSummary(
+    val total: BigDecimal,
+    val transactionCount: Int,
+    val largest: BigDecimal,
+    /** Income minus period outflow; negative when outflow exceeded income. */
+    val net: BigDecimal,
+    val currency: String,
+    val deltaPercent: Float? = null,
 )
 
 data class InvestmentInsights(

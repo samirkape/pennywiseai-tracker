@@ -695,6 +695,17 @@ class SettingsViewModel @Inject constructor(
         }
     }
     
+    /** Latest automatic backup (uri and date label), or null when none exists. */
+    fun latestAutoBackup(): Pair<android.net.Uri, String>? {
+        if (!autoBackupManager.hasAutoBackup()) return null
+        val uri = autoBackupManager.getAutoBackupUri() ?: return null
+        val label = autoBackupManager.getAutoBackupTimestamp()?.let {
+            java.text.SimpleDateFormat("MMM d, yyyy 'at' h:mm a", java.util.Locale.getDefault())
+                .format(java.util.Date(it))
+        } ?: "Latest backup"
+        return uri to label
+    }
+
     fun importBackup(uri: android.net.Uri, strategy: ImportStrategy = ImportStrategy.MERGE) {
         viewModelScope.launch {
             try {
