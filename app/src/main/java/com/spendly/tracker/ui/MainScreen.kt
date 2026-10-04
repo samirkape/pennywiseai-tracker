@@ -286,6 +286,11 @@ fun MainScreen(
                             com.spendly.tracker.navigation.Goals
                         ) { launchSingleTop = true }
                     },
+                    onNavigateToNetWorth = {
+                        rootNavController?.navigate(
+                            com.spendly.tracker.navigation.NetWorth
+                        ) { launchSingleTop = true }
+                    },
                     onNavigateToManageAccounts = {
                         navController.navigate("manage_accounts") {
                             launchSingleTop = true

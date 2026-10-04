@@ -84,6 +84,7 @@ class BackupExporter @Inject constructor(
         goals.forEach { goal ->
             goalContributions.addAll(database.goalContributionDao().getContributionsForGoalSync(goal.id))
         }
+        val netWorthSources = database.netWorthSourceDao().getAllOnce()
         val profiles = database.profileDao().getAllProfiles()
 
         // Get preferences from repository
@@ -150,6 +151,7 @@ class BackupExporter @Inject constructor(
         val exportedRuleApplications = if (privacy == ExportPrivacy.FULL) ruleApplications else emptyList()
         val exportedSalaryMonthOverrides = if (privacy == ExportPrivacy.FULL) salaryMonthOverrides else emptyList()
         val exportedLoans = if (privacy == ExportPrivacy.FULL) loans else emptyList()
+        val exportedNetWorthSources = if (privacy == ExportPrivacy.FULL) netWorthSources else emptyList()
         val exportedTransactionGroups = if (privacy == ExportPrivacy.FULL) transactionGroups else emptyList()
 
         return SpendlyBackup(
@@ -203,7 +205,8 @@ class BackupExporter @Inject constructor(
                 transactionGroups = exportedTransactionGroups,
                 profiles = profiles,
                 goals = goals,
-                goalContributions = goalContributions
+                goalContributions = goalContributions,
+                netWorthSources = exportedNetWorthSources
             ),
             preferences = PreferencesSnapshot(
                 theme = ThemePreferences(

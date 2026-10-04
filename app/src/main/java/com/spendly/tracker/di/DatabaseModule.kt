@@ -29,6 +29,7 @@ import com.spendly.tracker.data.database.dao.UnrecognizedSmsDao
 import com.spendly.tracker.data.database.dao.GoalContributionDao
 import com.spendly.tracker.data.database.dao.GoalDao
 import com.spendly.tracker.data.database.dao.InsightsCacheDao
+import com.spendly.tracker.data.database.dao.NetWorthSourceDao
 import com.spendly.tracker.data.database.dao.PrepaidAllocationDao
 import com.spendly.tracker.data.database.dao.PrepaidExpenseDao
 import dagger.Module
@@ -91,7 +92,8 @@ object DatabaseModule {
                 SpendlyDatabase.MIGRATION_60_61,
                 SpendlyDatabase.MIGRATION_62_63,
                 SpendlyDatabase.MIGRATION_63_64,
-                SpendlyDatabase.MIGRATION_64_65
+                SpendlyDatabase.MIGRATION_64_65,
+                SpendlyDatabase.MIGRATION_65_66
             )
             .fallbackToDestructiveMigrationOnDowngrade()
 
@@ -317,6 +319,12 @@ object DatabaseModule {
     @Singleton
     fun provideInsightsCacheDao(database: SpendlyDatabase): InsightsCacheDao {
         return database.insightsCacheDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideNetWorthSourceDao(database: SpendlyDatabase): NetWorthSourceDao {
+        return database.netWorthSourceDao()
     }
 
     @Provides

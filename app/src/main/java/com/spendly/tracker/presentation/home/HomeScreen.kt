@@ -122,6 +122,7 @@ fun HomeScreen(
     onNavigateToTransactionGroups: () -> Unit = {},
     onLoanClick: (Long) -> Unit = {},
     onNavigateToGoals: () -> Unit = {},
+    onNavigateToNetWorth: () -> Unit = {},
     onNavigateToAddScreen: () -> Unit = {},
     onNavigateToManageAccounts: () -> Unit = {},
     onTransactionClick: (Long) -> Unit = {},
@@ -469,6 +470,7 @@ fun HomeScreen(
                     onPrepaidExpenses = onNavigateToPrepaidExpenses,
                     onLoans = onNavigateToLoans,
                     onTransactionGroups = onNavigateToTransactionGroups,
+                    onNetWorth = onNavigateToNetWorth,
                     modifier = Modifier.padding(horizontal = Dimensions.Padding.content)
                 )
             }

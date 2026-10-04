@@ -143,6 +143,12 @@ data class TransactionsByCategories(
 )
 
 @Serializable
+object NetWorth
+
+@Serializable
+data class NetWorthSourceEdit(val sourceId: Long = -1L)
+
+@Serializable
 object Goals
 
 @Serializable

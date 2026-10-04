@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.SwapHoriz
@@ -45,10 +46,15 @@ fun HomeShortcutsCard(
     onLoans: () -> Unit,
     onTransactionGroups: () -> Unit,
     modifier: Modifier = Modifier,
+    onNetWorth: (() -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
     Row(
-        modifier = modifier.fillMaxWidth().height(IntrinsicSize.Max),
+        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         ShortcutTile(
@@ -81,6 +87,19 @@ fun HomeShortcutsCard(
             onClick = onTransactionGroups,
             modifier = Modifier.weight(1f).fillMaxHeight(),
         )
+    }
+    if (onNetWorth != null) {
+        ShortcutTile(
+            icon = Icons.Outlined.AccountBalance,
+            tint = scheme.spendGreen,
+            tintBg = scheme.spendGreenBg,
+            label = "NET WORTH",
+            value = "Assets & liabilities",
+            caption = "cash, gold, FDs, investments",
+            onClick = onNetWorth,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
     }
 }
 

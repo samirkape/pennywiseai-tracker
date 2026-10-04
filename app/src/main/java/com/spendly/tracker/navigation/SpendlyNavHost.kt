@@ -722,6 +722,35 @@ fun SpendlyNavHost(
             )
         }
 
+        composable<NetWorth>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+        ) {
+            com.spendly.tracker.presentation.networth.NetWorthScreen(
+                onNavigateBack = { navController.safePopBackStack() },
+                onAddSource = {
+                    navController.navigate(NetWorthSourceEdit()) { launchSingleTop = true }
+                },
+                onEditSource = { sourceId ->
+                    navController.navigate(NetWorthSourceEdit(sourceId)) { launchSingleTop = true }
+                }
+            )
+        }
+
+        composable<NetWorthSourceEdit>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+        ) {
+            com.spendly.tracker.presentation.networth.NetWorthSourceEditScreen(
+                onNavigateBack = { navController.safePopBackStack() },
+                onSaved = { navController.safePopBackStack() }
+            )
+        }
+
         composable<Goals>(
             enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
             exitTransition = { fadeOut(tween(200)) },

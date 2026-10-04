@@ -11,6 +11,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.spendly.tracker.data.database.converter.Converters
 import com.spendly.tracker.data.database.dao.AccountBalanceDao
+import com.spendly.tracker.data.database.dao.NetWorthSourceDao
 import com.spendly.tracker.data.database.dao.ProfileDao
 import com.spendly.tracker.data.database.dao.BankNotificationDao
 import com.spendly.tracker.data.database.dao.BudgetDao
@@ -48,6 +49,7 @@ import com.spendly.tracker.data.database.entity.CategoryEntity
 import com.spendly.tracker.data.database.entity.ChatMessage
 import com.spendly.tracker.data.database.entity.ExchangeRateEntity
 import com.spendly.tracker.data.database.entity.LoanEntity
+import com.spendly.tracker.data.database.entity.NetWorthSourceEntity
 import com.spendly.tracker.data.database.entity.MerchantAliasEntity
 import com.spendly.tracker.data.database.entity.MerchantMappingEntity
 import com.spendly.tracker.data.database.entity.TransactionGroupEntity
@@ -76,8 +78,8 @@ import com.spendly.tracker.data.database.dao.PrepaidExpenseDao
  * @property autoMigrations List of automatic migrations between versions.
  */
 @Database(
-    entities = [TransactionEntity::class, SubscriptionEntity::class, ChatMessage::class, MerchantMappingEntity::class, MerchantAliasEntity::class, CategoryEntity::class, AccountBalanceEntity::class, UnrecognizedSmsEntity::class, CardEntity::class, RuleEntity::class, RuleApplicationEntity::class, ExchangeRateEntity::class, BudgetEntity::class, BudgetCategoryEntity::class, BudgetMonthSnapshotEntity::class, BudgetCategoryMonthSnapshotEntity::class, TransactionSplitEntity::class, BankNotificationEntity::class, LoanEntity::class, TransactionGroupEntity::class, ProfileEntity::class, SalaryMonthOverrideEntity::class, TransactionReceiptEntity::class, InsightsCacheEntity::class, GoalEntity::class, GoalContributionEntity::class, PrepaidExpenseEntity::class, PrepaidAllocationEntity::class],
-    version = 65,
+    entities = [TransactionEntity::class, SubscriptionEntity::class, ChatMessage::class, MerchantMappingEntity::class, MerchantAliasEntity::class, CategoryEntity::class, AccountBalanceEntity::class, UnrecognizedSmsEntity::class, CardEntity::class, RuleEntity::class, RuleApplicationEntity::class, ExchangeRateEntity::class, BudgetEntity::class, BudgetCategoryEntity::class, BudgetMonthSnapshotEntity::class, BudgetCategoryMonthSnapshotEntity::class, TransactionSplitEntity::class, BankNotificationEntity::class, LoanEntity::class, TransactionGroupEntity::class, ProfileEntity::class, SalaryMonthOverrideEntity::class, TransactionReceiptEntity::class, InsightsCacheEntity::class, GoalEntity::class, GoalContributionEntity::class, PrepaidExpenseEntity::class, PrepaidAllocationEntity::class, NetWorthSourceEntity::class],
+    version = 66,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -166,6 +168,7 @@ abstract class SpendlyDatabase : RoomDatabase() {
     abstract fun goalContributionDao(): GoalContributionDao
     abstract fun prepaidExpenseDao(): PrepaidExpenseDao
     abstract fun prepaidAllocationDao(): PrepaidAllocationDao
+    abstract fun netWorthSourceDao(): NetWorthSourceDao
 
     companion object {
         const val DATABASE_NAME = "spendly_database"
@@ -208,7 +211,8 @@ abstract class SpendlyDatabase : RoomDatabase() {
                         MIGRATION_60_61,
                         MIGRATION_62_63,
                         MIGRATION_63_64,
-                        MIGRATION_64_65
+                        MIGRATION_64_65,
+                        MIGRATION_65_66
                     )
                     .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
@@ -832,6 +836,28 @@ abstract class SpendlyDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE `transactions` ADD COLUMN `refund_of_transaction_id` INTEGER DEFAULT NULL")
                 db.execSQL("ALTER TABLE `transactions` ADD COLUMN `refund_link_manually_edited` INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_refund_of_transaction_id` ON `transactions` (`refund_of_transaction_id`)")
+            }
+        }
+
+        val MIGRATION_65_66 = object : Migration(65, 66) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `net_worth_sources` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`type` TEXT NOT NULL, " +
+                        "`origin` TEXT NOT NULL DEFAULT 'MANUAL', " +
+                        "`value` TEXT NOT NULL, " +
+                        "`currency` TEXT NOT NULL DEFAULT 'INR', " +
+                        "`external_key` TEXT, " +
+                        "`notes` TEXT, " +
+                        "`profile_id` INTEGER DEFAULT NULL, " +
+                        "`created_at` TEXT NOT NULL, " +
+                        "`updated_at` TEXT NOT NULL)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_net_worth_sources_origin` ON `net_worth_sources` (`origin`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_net_worth_sources_type` ON `net_worth_sources` (`type`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_net_worth_sources_external_key` ON `net_worth_sources` (`external_key`)")
             }
         }
 

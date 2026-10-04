@@ -191,7 +191,10 @@ data class DatabaseSnapshot(
     val goals: List<GoalEntity> = emptyList(),
 
     @SerializedName("goal_contributions")
-    val goalContributions: List<GoalContributionEntity> = emptyList()
+    val goalContributions: List<GoalContributionEntity> = emptyList(),
+
+    @SerializedName("net_worth_sources")
+    val netWorthSources: List<NetWorthSourceEntity> = emptyList()
 )
 
 /**
@@ -427,6 +430,7 @@ data class RestoreFlags(
     val preferences: Boolean = true,
     val goals: Boolean = true,
     val goalContributions: Boolean = true,
+    val netWorthSources: Boolean = true,
 )
 
 /**
@@ -468,6 +472,7 @@ data class RestoreOptions(
         transactionGroups = transactionsAndCategories,
         cards = accountsAndCards,
         merchantMappings = accountsAndCards,
+        netWorthSources = accountsAndCards,
         subscriptions = subscriptions,
         budgets = budgets,
         rules = rules,

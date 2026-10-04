@@ -112,7 +112,8 @@ class BackupImporter @Inject constructor(
             "merchant_aliases", "rules", "rule_applications", "exchange_rates",
             "budgets", "budget_categories", "transaction_splits", "bank_notifications",
             "salary_month_overrides", "transaction_receipts", "loans",
-            "transaction_groups", "profiles", "goals", "goal_contributions"
+            "transaction_groups", "profiles", "goals", "goal_contributions",
+            "net_worth_sources"
         )) {
             if (!db.has(key) || db.get(key).isJsonNull) {
                 db.add(key, com.google.gson.JsonArray())
@@ -313,6 +314,8 @@ class BackupImporter @Inject constructor(
             backup.database.goalContributions.forEach { contribution ->
                 database.goalContributionDao().insertContribution(contribution)
             }
+
+            database.netWorthSourceDao().insertAll(backup.database.netWorthSources)
         }
 
         // Preferences are written after the DB transaction commits successfully.
@@ -358,6 +361,7 @@ class BackupImporter @Inject constructor(
         database.profileDao().deleteAllProfiles()
         database.goalContributionDao().deleteAllContributions()
         database.goalDao().deleteAllGoals()
+        database.netWorthSourceDao().deleteAll()
     }
 
     /**
@@ -579,6 +583,8 @@ class BackupImporter @Inject constructor(
                 // Goals (merge by name)
                 importGoalsWithMerge(backup.database.goals, backup.database.goalContributions)
 
+                importNetWorthSourcesWithMerge(backup.database.netWorthSources)
+
         }
 
         // Preferences are written after the DB transaction commits successfully.
@@ -754,6 +760,10 @@ class BackupImporter @Inject constructor(
             if (f.goals) {
                 importGoalsWithMerge(backup.database.goals, backup.database.goalContributions)
             }
+
+            if (f.netWorthSources) {
+                importNetWorthSourcesWithMerge(backup.database.netWorthSources)
+            }
         }
 
         // Preferences are written after the DB transaction commits successfully.
@@ -789,6 +799,21 @@ class BackupImporter @Inject constructor(
                         contribution.copy(id = 0, goalId = newGoalId)
                     )
                 }
+            }
+        }
+    }
+
+    /**
+     * Import net worth sources with merge semantics.
+     * A source already present locally (same origin, type, name and external key) is skipped.
+     */
+    private suspend fun importNetWorthSourcesWithMerge(sources: List<NetWorthSourceEntity>) {
+        fun key(s: NetWorthSourceEntity) =
+            "${s.origin}|${s.type}|${s.name.lowercase()}|${s.externalKey.orEmpty()}"
+        val existing = database.netWorthSourceDao().getAllOnce().map(::key).toMutableSet()
+        sources.forEach { source ->
+            if (existing.add(key(source))) {
+                database.netWorthSourceDao().insert(source.copy(id = 0))
             }
         }
     }
