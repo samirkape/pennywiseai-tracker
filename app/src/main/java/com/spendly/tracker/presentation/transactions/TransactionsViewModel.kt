@@ -85,6 +85,19 @@ class TransactionsViewModel @Inject constructor(
 
     private val _bankNameFilter = MutableStateFlow<String?>(null)
     private val _accountLast4Filter = MutableStateFlow<String?>(null)
+    /** Inclusive lower / exclusive upper bound on the raw transaction amount (analytics size buckets). */
+    private val _minAmountFilter = MutableStateFlow<Long?>(null)
+    private val _maxAmountFilter = MutableStateFlow<Long?>(null)
+    /** Active amount range as (min, max); null when no amount filter is set. */
+    val amountRangeFilter: StateFlow<Pair<Long?, Long?>?> =
+        combine(_minAmountFilter, _maxAmountFilter) { min, max ->
+            if (min == null && max == null) null else min to max
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    fun clearAmountRangeFilter() {
+        _minAmountFilter.value = null
+        _maxAmountFilter.value = null
+    }
 
     private val _includeExcluded = MutableStateFlow(false)
     val includeExcluded: StateFlow<Boolean> = _includeExcluded.asStateFlow()
@@ -687,6 +700,8 @@ class TransactionsViewModel @Inject constructor(
             _paymentModeGroupFilter.map { "paymentModeGroup" },
             _bankNameFilter.map { "bankName" },
             _accountLast4Filter.map { "accountLast4" },
+            _minAmountFilter.map { "minAmount" },
+            _maxAmountFilter.map { "maxAmount" },
         )
             .transformLatest { trigger ->
                 // Get current values from all StateFlows
@@ -699,6 +714,8 @@ class TransactionsViewModel @Inject constructor(
                 val paymentModeGroupFilter = _paymentModeGroupFilter.value
                 val bankNameFilter = _bankNameFilter.value
                 val accountLast4Filter = _accountLast4Filter.value
+                val minAmountFilter = _minAmountFilter.value
+                val maxAmountFilter = _maxAmountFilter.value
                 val sort = sortOption.value
                 val isUnified = _isUnifiedMode.value
                 val monthStartDay = userPreferencesRepository.monthStartDay.first()
@@ -727,6 +744,8 @@ class TransactionsViewModel @Inject constructor(
                     paymentModeGroupFilter,
                     bankNameFilter,
                     accountLast4Filter,
+                    minAmountFilter,
+                    maxAmountFilter,
                 )
                     .collect { allTransactions ->
                         // Apply profile filter
@@ -997,6 +1016,7 @@ class TransactionsViewModel @Inject constructor(
         setTransactionTypeFilter(TransactionTypeFilter.ALL)
         _selectedProfileId.value = null  // reset local state only; does not update the shared DataStore preference
         clearSelectedAccount()
+        clearAmountRangeFilter()
         setSortOption(SortOption.DATE_NEWEST)
         _includeExcluded.value = false
         // Don't reset currency as it might be user preference
@@ -1065,6 +1085,8 @@ class TransactionsViewModel @Inject constructor(
         paymentMode: String? = null,
         bankName: String? = null,
         accountLast4: String? = null,
+        minAmount: Long? = null,
+        maxAmount: Long? = null,
     ) {
         // Create current params to compare
         val currentParams = NavigationParams(
@@ -1078,6 +1100,8 @@ class TransactionsViewModel @Inject constructor(
             paymentMode,
             bankName,
             accountLast4,
+            minAmount,
+            maxAmount,
         )
 
         // Only apply navigation filters if:
@@ -1102,6 +1126,8 @@ class TransactionsViewModel @Inject constructor(
             _paymentModeGroupFilter.value = null
             _bankNameFilter.value = null
             _accountLast4Filter.value = null
+            _minAmountFilter.value = minAmount
+            _maxAmountFilter.value = maxAmount
             _selectedAccountKey.value = null
             setSortOption(SortOption.DATE_NEWEST)
 
@@ -1315,6 +1341,8 @@ class TransactionsViewModel @Inject constructor(
         paymentModeGroupFilter: PaymentModeGroup? = null,
         bankNameFilter: String? = null,
         accountLast4Filter: String? = null,
+        minAmountFilter: Long? = null,
+        maxAmountFilter: Long? = null,
     ): Flow<List<TransactionEntity>> {
         // Category filter matches budget accounting: primary category or split lines only (not tags).
         val baseFlow = if (category != null) {
@@ -1464,17 +1492,28 @@ class TransactionsViewModel @Inject constructor(
             else -> paymentModeFilteredFlow
         }
 
+        val amountFilteredFlow = if (minAmountFilter == null && maxAmountFilter == null) {
+            bankAccountFilteredFlow
+        } else {
+            bankAccountFilteredFlow.map { transactions ->
+                transactions.filter { tx ->
+                    (minAmountFilter == null || tx.amount >= BigDecimal(minAmountFilter)) &&
+                        (maxAmountFilter == null || tx.amount < BigDecimal(maxAmountFilter))
+                }
+            }
+        }
+
         // In a category/bucket drill-down, also show the refunds linked to the rows shown,
         // so the visible rows explain the netted total. The refund may fall in a later
         // period than its original, so it is added after the period filter.
         val withLinkedRefundsFlow = if (category != null || !categories.isNullOrEmpty()) {
-            combine(bankAccountFilteredFlow, transactionRepository.observeLinkedRefunds()) { shown, refunds ->
+            combine(amountFilteredFlow, transactionRepository.observeLinkedRefunds()) { shown, refunds ->
                 val shownIds = shown.mapTo(HashSet()) { it.id }
                 val extra = refunds.filter { it.refundOfTransactionId in shownIds && it.id !in shownIds }
                 if (extra.isEmpty()) shown else shown + extra
             }
         } else {
-            bankAccountFilteredFlow
+            amountFilteredFlow
         }
 
         // Apply search filter
@@ -1825,6 +1864,8 @@ private data class NavigationParams(
     val paymentMode: String? = null,
     val bankName: String? = null,
     val accountLast4: String? = null,
+    val minAmount: Long? = null,
+    val maxAmount: Long? = null,
 )
 
 /**

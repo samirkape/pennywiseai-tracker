@@ -298,6 +298,24 @@ class ComputeInsightsUseCase @Inject constructor(
         )
     }
 
+    /**
+     * Insights for a user-selected range. The comparison window is the equally long range that
+     * ends the day before [dateRange] starts, so growth/savings comparisons stay like-for-like.
+     */
+    suspend fun computeForCustomRange(dateRange: Pair<LocalDate, LocalDate>): List<SmartInsight> {
+        return computeForPeriod(
+            anchorMonth = YearMonth.from(dateRange.second),
+            dateRange = dateRange,
+            previousDateRange = previousRangeOf(dateRange),
+        )
+    }
+
+    private fun previousRangeOf(dateRange: Pair<LocalDate, LocalDate>): Pair<LocalDate, LocalDate> {
+        val days = ChronoUnit.DAYS.between(dateRange.first, dateRange.second) + 1
+        val prevEnd = dateRange.first.minusDays(1)
+        return prevEnd.minusDays(days - 1) to prevEnd
+    }
+
     suspend fun computeForPeriod(
         anchorMonth: YearMonth,
         dateRange: Pair<LocalDate, LocalDate>,

@@ -43,6 +43,7 @@ import java.math.BigDecimal
 fun LoansScreen(
     onNavigateBack: () -> Unit = {},
     onNavigateToLoanDetail: (Long) -> Unit = {},
+    onNavigateToAnalytics: () -> Unit = {},
     viewModel: LoansViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -67,6 +68,12 @@ fun LoansScreen(
                 scrollBehaviorLarge = scrollBehaviorLarge,
                 title = "Lent & Borrowed",
                 hasBackButton = true,
+                hasActionButton = true,
+                actionContent = {
+                    IconButton(onClick = onNavigateToAnalytics) {
+                        Icon(Icons.Default.PieChart, contentDescription = "Analytics")
+                    }
+                },
                 navigationContent = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

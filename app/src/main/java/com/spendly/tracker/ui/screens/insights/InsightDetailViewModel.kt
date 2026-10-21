@@ -43,6 +43,12 @@ class InsightDetailViewModel @Inject constructor(
     private val insightId: String = checkNotNull(savedStateHandle["insightId"])
     private val anchorMonth: YearMonth = YearMonth.parse(checkNotNull(savedStateHandle["anchorMonth"]) as String)
 
+    private val customRange: Pair<LocalDate, LocalDate>? = run {
+        val start = savedStateHandle.get<Long>("customStartEpochDay")
+        val end = savedStateHandle.get<Long>("customEndEpochDay")
+        if (start != null && end != null) LocalDate.ofEpochDay(start) to LocalDate.ofEpochDay(end) else null
+    }
+
     private val _uiState = MutableStateFlow(InsightDetailUiState())
     val uiState: StateFlow<InsightDetailUiState> = _uiState.asStateFlow()
 
@@ -55,6 +61,8 @@ class InsightDetailViewModel @Inject constructor(
             val isLifetime = insightId.startsWith("lifetime_")
             val insights = if (isLifetime) {
                 computeInsightsUseCase.computeLifetime()
+            } else if (customRange != null) {
+                computeInsightsUseCase.computeForCustomRange(customRange)
             } else {
                 computeInsightsUseCase.computeForMonth(anchorMonth)
             }

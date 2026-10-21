@@ -46,6 +46,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.spendly.tracker.ui.components.CustomDateRangePickerDialog
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -107,7 +113,12 @@ fun InsightsScreen(
         bankName: String?,
         accountLast4: String?,
     ) -> Unit = { _, _, _, _, _, _, _, _, _, _ -> },
-    onNavigateToInsightDetail: (insightId: String, anchorMonth: String) -> Unit = { _, _ -> },
+    onNavigateToInsightDetail: (
+        insightId: String,
+        anchorMonth: String,
+        customStartEpochDay: Long?,
+        customEndEpochDay: Long?,
+    ) -> Unit = { _, _, _, _ -> },
 ) {
     val insights by viewModel.insights.collectAsStateWithLifecycle()
     val isLoadingInsights by viewModel.isLoadingInsights.collectAsStateWithLifecycle()
@@ -115,7 +126,17 @@ fun InsightsScreen(
     val selectedMonth by viewModel.selectedMonth.collectAsStateWithLifecycle()
     val activePeriodRange by viewModel.activePeriodRange.collectAsStateWithLifecycle()
     val uncategorizedTransactionPercentage by viewModel.uncategorizedTransactionPercentage.collectAsStateWithLifecycle()
+    val customRange by viewModel.customRange.collectAsStateWithLifecycle()
+    var showDateRangePicker by rememberSaveable { mutableStateOf(false) }
     val displayInsights = insights
+    val openPeriodDetail: (SmartInsight) -> Unit = { insight ->
+        onNavigateToInsightDetail(
+            insight.id,
+            selectedMonth.toString(),
+            customRange?.first?.toEpochDay(),
+            customRange?.second?.toEpochDay(),
+        )
+    }
     val selectedMonthLabel = remember(activePeriodRange) {
         DateRangeUtils.formatDateRange(
             activePeriodRange.first,
@@ -188,13 +209,38 @@ fun InsightsScreen(
             when (selectedTab) {
                 InsightsTab.THIS_MONTH -> {
                     item(key = "period_nav") {
-                        PeriodRangeNavigator(
-                            rangeLabel = selectedMonthLabel,
-                            onPrevious = viewModel::navigateToPreviousMonth,
-                            onNext = viewModel::navigateToNextMonth,
-                            canGoNext = canGoNext,
-                            modifier = Modifier.padding(top = Spacing.sm, bottom = Spacing.xs)
-                        )
+                      Column(modifier = Modifier.fillMaxWidth()) {
+                        if (customRange != null) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = Spacing.sm, bottom = Spacing.xs),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(onClick = { showDateRangePicker = true }) {
+                                    Text(selectedMonthLabel)
+                                }
+                                TextButton(onClick = viewModel::clearCustomRange) {
+                                    Text("Clear")
+                                }
+                            }
+                        } else {
+                            PeriodRangeNavigator(
+                                rangeLabel = selectedMonthLabel,
+                                onPrevious = viewModel::navigateToPreviousMonth,
+                                onNext = viewModel::navigateToNextMonth,
+                                canGoNext = canGoNext,
+                                modifier = Modifier.padding(top = Spacing.sm, bottom = Spacing.xs)
+                            )
+                            TextButton(
+                                onClick = { showDateRangePicker = true },
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                            ) {
+                                Text("Custom range")
+                            }
+                        }
+                      }
                     }
 
                     if (isLoadingInsights) {
@@ -217,7 +263,7 @@ fun InsightsScreen(
                         item(key = "monthly_carousel") {
                             InsightCarousel(
                                 insights = topInsights,
-                                onOpenInsightDetail = { onNavigateToInsightDetail(it.id, selectedMonth.toString()) }
+                                onOpenInsightDetail = { openPeriodDetail(it) }
                             )
                         }
                         if (restInsights.isNotEmpty()) {
@@ -232,7 +278,7 @@ fun InsightsScreen(
                             item(key = "monthly_rest") {
                                 CompactInsightList(
                                     insights = restInsights,
-                                    onInsightClick = { onNavigateToInsightDetail(it.id, selectedMonth.toString()) }
+                                    onInsightClick = { openPeriodDetail(it) }
                                 )
                             }
                         }
@@ -250,7 +296,7 @@ fun InsightsScreen(
                             InsightCarousel(
                                 insights = topLifetime,
                                 modifier = Modifier.padding(top = Spacing.sm),
-                                onOpenInsightDetail = { onNavigateToInsightDetail(it.id, selectedMonth.toString()) }
+                                onOpenInsightDetail = { onNavigateToInsightDetail(it.id, selectedMonth.toString(), null, null) }
                             )
                         }
                         if (restLifetime.isNotEmpty()) {
@@ -265,7 +311,7 @@ fun InsightsScreen(
                             item(key = "lifetime_rest") {
                                 CompactInsightList(
                                     insights = restLifetime,
-                                    onInsightClick = { onNavigateToInsightDetail(it.id, selectedMonth.toString()) }
+                                    onInsightClick = { onNavigateToInsightDetail(it.id, selectedMonth.toString(), null, null) }
                                 )
                             }
                         }
@@ -290,6 +336,18 @@ fun InsightsScreen(
                 )
             }
         }
+    }
+
+    if (showDateRangePicker) {
+        CustomDateRangePickerDialog(
+            onDismiss = { showDateRangePicker = false },
+            onConfirm = { startDate, endDate ->
+                viewModel.setCustomRange(startDate, endDate)
+                showDateRangePicker = false
+            },
+            initialStartDate = customRange?.first,
+            initialEndDate = customRange?.second
+        )
     }
 }
 

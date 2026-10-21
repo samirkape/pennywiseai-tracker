@@ -474,6 +474,27 @@ fun SpendlyNavHost(
                     navController.navigate(LoanDetail(loanId)) {
                         launchSingleTop = true
                     }
+                },
+                onNavigateToAnalytics = {
+                    navController.navigate(LoanAccountAnalytics) {
+                        launchSingleTop = true
+                    }
+                }
+            )
+        }
+
+        composable<LoanAccountAnalytics>(
+            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+        ) {
+            com.spendly.tracker.presentation.loans.LoanAccountAnalyticsScreen(
+                onNavigateBack = { navController.safePopBackStack() },
+                onNavigateToTransactionDetail = { txId ->
+                    navController.navigate(TransactionDetail(txId)) {
+                        launchSingleTop = true
+                    }
                 }
             )
         }
@@ -638,8 +659,10 @@ fun SpendlyNavHost(
                         popUpTo(Home()) { inclusive = true }
                     }
                 },
-                onNavigateToInsightDetail = { insightId, anchorMonth ->
-                    navController.navigate(InsightDetail(insightId, anchorMonth)) { launchSingleTop = true }
+                onNavigateToInsightDetail = { insightId, anchorMonth, customStart, customEnd ->
+                    navController.navigate(
+                        InsightDetail(insightId, anchorMonth, customStart, customEnd)
+                    ) { launchSingleTop = true }
                 }
             )
         }

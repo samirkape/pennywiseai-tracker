@@ -40,6 +40,24 @@ Not you? SMS BLOCK 0818 to 919951860002""",
             ),
 
             ParserTestCase(
+                name = "Credit Card Spent - Myntra (merchant after 'IST at')",
+                message = """Spent INR 557
+using Axis Bank Credit Card no. XX1932 on 18-10-26 18:21:57 IST at
+MYNTRA DESI.
+Avl limit: INR 84721. Not you? SMS BLOCK 1932 to +919951860002.""",
+                sender = "AXISBK",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("557"),
+                    currency = "INR",
+                    type = com.spendly.parser.core.TransactionType.CREDIT,
+                    merchant = "MYNTRA DESI",
+                    accountLast4 = "1932",
+                    isFromCard = true,
+                    creditLimit = BigDecimal("84721")
+                )
+            ),
+
+            ParserTestCase(
                 name = "Credit Card Spent - Amazon",
                 message = """Spent INR 1299.00
 Axis Bank Card no. XX5678

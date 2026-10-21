@@ -100,6 +100,13 @@ object CurrencyFormatter {
     }
 
     /**
+     * Formats an amount rounded to whole units, for dense layouts where decimals add noise.
+     */
+    fun formatCurrencyWhole(amount: BigDecimal, currencyCode: String = "INR"): String {
+        return formatCurrency(amount.setScale(0, java.math.RoundingMode.HALF_UP), currencyCode)
+    }
+
+    /**
      * Legacy method for backward compatibility - defaults to INR
      */
     fun formatCurrency(amount: BigDecimal): String {

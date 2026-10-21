@@ -251,6 +251,20 @@ fun TransactionGroupDetailScreen(
                 }
             }
 
+            if (uiState.linkedTransactions.any { it.isGroupExpense() }) {
+                item {
+                    SectionHeaderV2(title = "Analytics")
+                }
+                item {
+                    GroupAnalyticsCard(
+                        transactions = uiState.linkedTransactions,
+                        currency = currency,
+                        barColor = if (isDark) expense_dark else expense_light,
+                        onTransactionClick = onNavigateToTransactionDetail
+                    )
+                }
+            }
+
             if (uiState.linkedTransactions.isNotEmpty()) {
                 item {
                     SectionHeaderV2(
@@ -353,6 +367,10 @@ fun TransactionGroupDetailScreen(
         )
     }
 }
+
+internal fun TransactionEntity.isGroupExpense() =
+    !isExcludedFromTracking &&
+        (transactionType == TransactionType.EXPENSE || transactionType == TransactionType.CREDIT)
 
 private fun shareGroupTransactions(
     context: Context,

@@ -75,8 +75,25 @@ class InsightsViewModel @Inject constructor(
             initialValue = YearMonth.now()
         )
 
+    private val customRangeKey = savedStateHandle.getStateFlow<Pair<Long, Long>?>("customRange", null)
+
+    /** User-selected range overriding the month selector, or null when browsing by month. */
+    val customRange: StateFlow<Pair<LocalDate, LocalDate>?> = customRangeKey
+        .map { it?.let { (s, e) -> LocalDate.ofEpochDay(s) to LocalDate.ofEpochDay(e) } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    fun setCustomRange(start: LocalDate, end: LocalDate) {
+        val (s, e) = if (start.isAfter(end)) end to start else start to end
+        savedStateHandle["customRange"] = s.toEpochDay() to e.toEpochDay()
+    }
+
+    fun clearCustomRange() {
+        savedStateHandle["customRange"] = null
+    }
+
     private data class InsightsParams(
         val month: YearMonth,
+        val customRange: Pair<LocalDate, LocalDate>?,
         val monthStartDay: Int,
         val useFinancialMonth: Boolean,
         val monthStartOverrides: Map<String, Int>,
@@ -86,6 +103,7 @@ class InsightsViewModel @Inject constructor(
 
     private val insightsParams = combine(
         selectedMonth,
+        customRange,
         userPreferencesRepository.monthStartDay,
         userPreferencesRepository.useFinancialMonth,
         salaryMonthOverrideRepository.overridesMap,
@@ -95,11 +113,12 @@ class InsightsViewModel @Inject constructor(
         @Suppress("UNCHECKED_CAST")
         InsightsParams(
             month = values[0] as YearMonth,
-            monthStartDay = values[1] as Int,
-            useFinancialMonth = values[2] as Boolean,
-            monthStartOverrides = values[3] as Map<String, Int>,
-            useFixedBudgetPeriodEnd = values[4] as Boolean,
-            budgetPeriodEndDay = values[5] as Int,
+            customRange = values[1] as Pair<LocalDate, LocalDate>?,
+            monthStartDay = values[2] as Int,
+            useFinancialMonth = values[3] as Boolean,
+            monthStartOverrides = values[4] as Map<String, Int>,
+            useFixedBudgetPeriodEnd = values[5] as Boolean,
+            budgetPeriodEndDay = values[6] as Int,
         )
     }
 
@@ -122,15 +141,18 @@ class InsightsViewModel @Inject constructor(
             flow {
                 _isLoadingInsights.value = true
                 emit(emptyList())
-                val currentRange = p.resolveDateRange()
-                val prevRange = p.resolvePreviousDateRange()
-                emit(
-                    computeInsightsUseCase.computeForPeriod(
-                        anchorMonth = p.month,
-                        dateRange = currentRange,
-                        previousDateRange = prevRange,
+                val custom = p.customRange
+                if (custom != null) {
+                    emit(computeInsightsUseCase.computeForCustomRange(custom))
+                } else {
+                    emit(
+                        computeInsightsUseCase.computeForPeriod(
+                            anchorMonth = p.month,
+                            dateRange = p.resolveDateRange(),
+                            previousDateRange = p.resolvePreviousDateRange(),
+                        )
                     )
-                )
+                }
                 _isLoadingInsights.value = false
             }
         }
@@ -141,7 +163,7 @@ class InsightsViewModel @Inject constructor(
         )
 
     private fun InsightsParams.resolveDateRange(): Pair<LocalDate, LocalDate> =
-        getDateRangeForYearMonth(
+        customRange ?: getDateRangeForYearMonth(
             yearMonth = month,
             monthStartDay = monthStartDay,
             useFinancialMonth = useFinancialMonth,

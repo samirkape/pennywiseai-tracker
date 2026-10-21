@@ -12,6 +12,27 @@ import java.time.YearMonth
 val SAVINGS_RATE_WINDOW_OPTIONS = listOf(3, 6, 12)
 const val SAVINGS_RATE_DEFAULT_WINDOW = 6
 
+/** Upper bound on a date-picked window so the chart stays readable. */
+const val SAVINGS_RATE_MAX_RANGE_MONTHS = 60
+
+/**
+ * A custom window picked by dates. [endMonth] null means "Now", so the window keeps growing
+ * to the current month.
+ */
+data class SavingsCustomRange(
+    val startMonth: YearMonth,
+    val endMonth: YearMonth? = null,
+) {
+    fun resolvedEnd(now: YearMonth = YearMonth.now()): YearMonth = (endMonth ?: now).coerceAtMost(now)
+
+    /** Month count covered, clamped to [2, SAVINGS_RATE_MAX_RANGE_MONTHS]. */
+    fun windowMonths(now: YearMonth = YearMonth.now()): Int {
+        val end = resolvedEnd(now)
+        val months = java.time.temporal.ChronoUnit.MONTHS.between(startMonth, end).toInt() + 1
+        return months.coerceIn(2, SAVINGS_RATE_MAX_RANGE_MONTHS)
+    }
+}
+
 /** One bucket (calendar or pay month) of income vs. spending. */
 data class MonthlySavingsRate(
     val month: YearMonth,
@@ -36,6 +57,7 @@ data class MonthlySavingsRate(
 data class SavingsRateSummary(
     val months: List<MonthlySavingsRate> = emptyList(),
     val windowMonths: Int = SAVINGS_RATE_DEFAULT_WINDOW,
+    val customRange: SavingsCustomRange? = null,
     val currency: String = "INR",
 ) {
     /** Months that have income, so a rate can be computed. */

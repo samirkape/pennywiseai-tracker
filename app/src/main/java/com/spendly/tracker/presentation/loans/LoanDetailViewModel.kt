@@ -9,6 +9,7 @@ import com.spendly.tracker.data.repository.LoanRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
@@ -18,6 +19,7 @@ data class LoanDetailUiState(
     val loan: LoanEntity? = null,
     val linkedTransactions: List<TransactionEntity> = emptyList(),
     val recentUnlinkedTransactions: List<TransactionEntity> = emptyList(),
+    val recentUnlinkedAdditions: List<TransactionEntity> = emptyList(),
     val isLoading: Boolean = true,
     val showSettleDialog: Boolean = false,
     val showDeleteDialog: Boolean = false,
@@ -56,9 +58,13 @@ class LoanDetailViewModel @Inject constructor(
     fun showRecordPayment() {
         val loan = _uiState.value.loan ?: return
         viewModelScope.launch {
-            loanRepository.getRecentUnlinkedRepayments(loan.direction).collect {
+            combine(
+                loanRepository.getRecentUnlinkedRepayments(loan.direction),
+                loanRepository.getRecentUnlinkedAdditions(loan.direction)
+            ) { repayments, additions -> repayments to additions }.collect { (repayments, additions) ->
                 _uiState.value = _uiState.value.copy(
-                    recentUnlinkedTransactions = it,
+                    recentUnlinkedTransactions = repayments,
+                    recentUnlinkedAdditions = additions,
                     showRecordPaymentSheet = true
                 )
             }
@@ -77,10 +83,10 @@ class LoanDetailViewModel @Inject constructor(
         }
     }
 
-    fun recordManualRepayment(amount: BigDecimal) {
+    fun recordManualRepayment(amount: BigDecimal, isRepayment: Boolean = true) {
         val loan = _uiState.value.loan ?: return
         viewModelScope.launch {
-            loanRepository.recordManualRepayment(loanId, amount, loan.personName, loan.currency)
+            loanRepository.recordManualRepayment(loanId, amount, loan.personName, loan.currency, isRepayment)
             _uiState.value = _uiState.value.copy(showRecordPaymentSheet = false)
             refreshLoan()
         }

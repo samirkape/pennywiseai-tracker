@@ -1,10 +1,6 @@
 package com.spendly.tracker.ui.screens.analytics
 
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,11 +15,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.spendly.tracker.ui.components.CategoryIcon
-import com.spendly.tracker.ui.effects.BlurredAnimatedVisibility
 import com.spendly.tracker.ui.icons.CategoryMapping
 import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.utils.CurrencyFormatter
@@ -58,12 +53,23 @@ fun CategoryPieChart(
     }
 
     var chartData by remember(pieData) { mutableStateOf(pieData) }
+    val selectedPie = chartData.find { it.selected }
+
+    // First tap selects a slice (center shows its details); tapping the selected one opens its transactions.
+    fun select(pie: Pie) {
+        if (pie.selected) {
+            pie.label?.let { name -> categories.find { it.name == name }?.let(onCategoryClick) }
+            return
+        }
+        val index = chartData.indexOf(pie)
+        chartData = chartData.mapIndexed { i, p -> p.copy(selected = i == index) }
+    }
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(200.dp)
-            .padding(Spacing.sm),
+            .height(220.dp)
+            .padding(Spacing.md),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -74,38 +80,39 @@ fun CategoryPieChart(
             contentAlignment = Alignment.Center
         ) {
             PieChart(
-                modifier = Modifier.size(160.dp),
+                modifier = Modifier.size(168.dp),
                 data = chartData,
-                onPieClick = { clickedPie ->
-                    val pieIndex = chartData.indexOf(clickedPie)
-                    chartData = chartData.mapIndexed { index, pie ->
-                        pie.copy(selected = index == pieIndex)
-                    }
-                    val categoryName = clickedPie.label ?: return@PieChart
-                    categories.find { it.name == categoryName }?.let(onCategoryClick)
-                },
-                selectedScale = 1.1f,
+                onPieClick = { clickedPie -> select(clickedPie) },
+                selectedScale = 1.08f,
                 scaleAnimEnterSpec = tween(400),
                 colorAnimEnterSpec = tween(500),
-                style = Pie.Style.Stroke(width = 12.dp)
+                style = Pie.Style.Stroke(width = 22.dp)
             )
 
-            val selectedPie = chartData.find { it.selected }
-            BlurredAnimatedVisibility(
-                visible = selectedPie != null,
-                enter = fadeIn() + scaleIn(),
-                exit = fadeOut() + scaleOut(),
-                modifier = Modifier.align(Alignment.Center)
+            // Center: selected category details, or the overall total when nothing is selected.
+            Column(
+                modifier = Modifier.widthIn(max = 88.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                if (selectedPie != null && selectedPie.label != null) {
-                    CategoryIcon(
-                        category = selectedPie.label!!,
-                        size = 32.dp,
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(selectedPie.color.copy(alpha = 0.2f))
-                            .padding(12.dp)
+                Text(
+                    text = selectedPie?.label ?: "Total",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = CurrencyFormatter.formatAbbreviated(selectedPie?.data ?: total, currency),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                )
+                if (selectedPie != null) {
+                    Text(
+                        text = "${(selectedPie.data / total * 100).toInt()}%",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -125,14 +132,7 @@ fun CategoryPieChart(
                     isSelected = pie.selected,
                     currency = currency,
                     totalAmount = total,
-                    onClick = {
-                        val pieIndex = chartData.indexOf(pie)
-                        chartData = chartData.mapIndexed { index, p ->
-                            p.copy(selected = index == pieIndex)
-                        }
-                        val categoryName = pie.label ?: return@PieLegendItem
-                        categories.find { it.name == categoryName }?.let(onCategoryClick)
-                    }
+                    onClick = { select(pie) }
                 )
             }
         }
@@ -175,7 +175,7 @@ private fun PieLegendItem(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -183,13 +183,13 @@ private fun PieLegendItem(
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     text = CurrencyFormatter.formatAbbreviated(value, currency),
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     text = "($percentage%)",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = MaterialTheme.colorScheme.primary
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

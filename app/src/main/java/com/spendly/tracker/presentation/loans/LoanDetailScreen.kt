@@ -311,10 +311,12 @@ fun LoanDetailScreen(
             personName = loan.personName,
             remainingAmount = loan.remainingAmount,
             currency = loan.currency,
-            recentUnlinkedTransactions = uiState.recentUnlinkedTransactions,
+            direction = loan.direction,
+            recentUnlinkedRepayments = uiState.recentUnlinkedTransactions,
+            recentUnlinkedAdditions = uiState.recentUnlinkedAdditions,
             onDismiss = { viewModel.hideRecordPayment() },
             onLinkTransaction = { viewModel.linkTransactionAsRepayment(it) },
-            onManualPayment = { viewModel.recordManualRepayment(it) }
+            onManualPayment = { amount, isRepayment -> viewModel.recordManualRepayment(amount, isRepayment) }
         )
     }
 }
@@ -588,11 +590,15 @@ private fun RecordPaymentBottomSheet(
     personName: String,
     remainingAmount: BigDecimal,
     currency: String,
-    recentUnlinkedTransactions: List<TransactionEntity>,
+    direction: LoanDirection,
+    recentUnlinkedRepayments: List<TransactionEntity>,
+    recentUnlinkedAdditions: List<TransactionEntity>,
     onDismiss: () -> Unit,
     onLinkTransaction: (Long) -> Unit,
-    onManualPayment: (BigDecimal) -> Unit
+    onManualPayment: (BigDecimal, Boolean) -> Unit
 ) {
+    var isRepayment by remember { mutableStateOf(true) }
+    val recentUnlinkedTransactions = if (isRepayment) recentUnlinkedRepayments else recentUnlinkedAdditions
     var manualAmount by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
     var useManualEntry by remember { mutableStateOf(recentUnlinkedTransactions.isEmpty()) }
@@ -615,10 +621,26 @@ private fun RecordPaymentBottomSheet(
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
             Text(
-                "Record payment from $personName",
+                "Add transaction for $personName",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
+            // For a lent loan repayment is incoming; for a borrowed loan it is outgoing
+            val repaymentIsIncoming = direction == LoanDirection.LENT
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = isRepayment == repaymentIsIncoming,
+                    onClick = { isRepayment = repaymentIsIncoming; searchQuery = "" },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                    label = { Text("Incoming", style = MaterialTheme.typography.labelSmall) }
+                )
+                SegmentedButton(
+                    selected = isRepayment != repaymentIsIncoming,
+                    onClick = { isRepayment = !repaymentIsIncoming; searchQuery = "" },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                    label = { Text("Outgoing", style = MaterialTheme.typography.labelSmall) }
+                )
+            }
             Text(
                 "${CurrencyFormatter.formatCurrency(remainingAmount, currency)} remaining",
                 style = MaterialTheme.typography.bodySmall,
@@ -745,7 +767,7 @@ private fun RecordPaymentBottomSheet(
                     )
                     Button(
                         onClick = {
-                            manualAmount.toBigDecimalOrNull()?.let { onManualPayment(it) }
+                            manualAmount.toBigDecimalOrNull()?.let { onManualPayment(it, isRepayment) }
                         },
                         enabled = manualAmount.toBigDecimalOrNull()
                             ?.let { it > BigDecimal.ZERO } == true,

@@ -25,6 +25,7 @@ import com.spendly.tracker.presentation.common.isCcBillPayment
 import com.spendly.tracker.presentation.common.countsOnceTowardCcBillPaymentTotal
 import com.spendly.tracker.presentation.common.resolveDateRangeForSelection
 import com.spendly.tracker.utils.CurrencyUtils
+import com.spendly.tracker.utils.DateRangeUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -96,6 +97,17 @@ class AnalyticsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     init {
+        viewModelScope.launch {
+            userPreferencesRepository.getSavingsRateWindowMonths().first()?.let { _savingsWindowMonths.value = it }
+            userPreferencesRepository.getSavingsRateRange().first()?.let { (start, end) ->
+                runCatching {
+                    val range = SavingsCustomRange(YearMonth.parse(start), end?.let { YearMonth.parse(it) })
+                    _savingsCustomRange.value = range
+                    _savingsWindowMonths.value = range.windowMonths()
+                }
+            }
+        }
+
         viewModelScope.launch {
             val default = defaultTimePeriod(userPreferencesRepository.useFinancialMonth.first())
             _selectedPeriod.value = default
@@ -397,25 +409,47 @@ class AnalyticsViewModel @Inject constructor(
                 val coverage = if (totalCount > 0) categorizedCount.toFloat() / totalCount else 1f
                 _categorizationCoverage.value = coverage
 
-                val previousRange = previousDateRange(dateRange.first, dateRange.second)
+                // Previous period, using its real boundaries. A pay month can be 30 or 31 days
+                // long, so deriving the previous period by counting backwards from the current
+                // start drifts by a day and drops rows dated on the previous period's first day.
+                val previousPeriod = previousPeriodRange(
+                    dateRange = dateRange,
+                    period = filterState.period,
+                    isMonthNavigation = periodAnchorMonth.value != null,
+                    monthStartDay = filterState.monthStartDay,
+                    useFinancialMonth = filterState.useFinancialMonth,
+                    monthStartOverrides = filterState.monthStartOverrides,
+                    useFixedBudgetPeriodEnd = filterState.useFixedBudgetPeriodEnd,
+                    budgetPeriodEndDay = filterState.budgetPeriodEndDay,
+                )
                 val previousPeriodTxs = if (filterState.isUnifiedMode) {
                     transactionRepository.getTransactionsWithSplitsFiltered(
-                        startDate = previousRange.first,
-                        endDate = previousRange.second,
+                        startDate = previousPeriod.first,
+                        endDate = previousPeriod.second,
                     ).first()
                 } else {
                     transactionRepository.getTransactionsWithSplitsFiltered(
-                        startDate = previousRange.first,
-                        endDate = previousRange.second,
+                        startDate = previousPeriod.first,
+                        endDate = previousPeriod.second,
                         currency = filterState.currency,
                     ).first()
+                }
+                // Flow totals (outflow, spending) are compared against the slice of the previous
+                // period covering the days elapsed so far, so a running period is never compared
+                // against a full one. Lumpy totals (income, investments) are credited on a fixed
+                // day, so they are compared against the whole previous period - slicing it would
+                // drop the salary/SIP and report a meaningless jump.
+                val elapsedRange = elapsedAlignedRange(previousPeriod, dateRange)
+                val elapsedPreviousTxs = previousPeriodTxs.filter {
+                    val date = it.transaction.dateTime.toLocalDate()
+                    !date.isBefore(elapsedRange.first) && !date.isAfter(elapsedRange.second)
                 }
 
                 val periodOutflow = computePeriodOutflow(
                     allTransactionsWithSplits = allTransactionsWithSplits,
                     isUnified = isUnified,
                     displayCurrency = displayCurrency,
-                    previousPeriodTxs = previousPeriodTxs,
+                    previousPeriodTxs = elapsedPreviousTxs,
                 )
 
                 val incomeSummary = computeIncomeSummary(
@@ -439,7 +473,7 @@ class AnalyticsViewModel @Inject constructor(
                         totalSpending = totalSpending,
                         isUnified = isUnified,
                         displayCurrency = displayCurrency,
-                        previousPeriodTxs = previousPeriodTxs.map { it.transaction },
+                        previousPeriodTxs = elapsedPreviousTxs.map { it.transaction },
                     )
                 } else {
                     null
@@ -485,6 +519,11 @@ class AnalyticsViewModel @Inject constructor(
                 } else {
                     spendingTotalForBreakdown = spendingTxs.sumOf { it.amount.toDouble() }.toBigDecimal()
                 }
+                val amountBuckets = computeAmountBuckets(
+                    transactions = spendingTxs,
+                    isUnified = isUnified,
+                    displayCurrency = displayCurrency,
+                )
                 accountBreakdowns["spending"] = computeAccountBreakdownForList(
                     transactions = spendingTxs,
                     totalAmount = spendingTotalForBreakdown,
@@ -512,6 +551,7 @@ class AnalyticsViewModel @Inject constructor(
                     netSavings = BigDecimal.ZERO,
                     categoryBreakdown = categoryBreakdown,
                     topMerchants = merchantBreakdown,
+                    amountBuckets = amountBuckets,
                     spendingTrend = calculateSpendingTrend(filteredTransactions, dateRange.first, dateRange.second),
                     isLoading = false,
                     error = null,
@@ -538,11 +578,41 @@ class AnalyticsViewModel @Inject constructor(
     private val _savingsWindowMonths = MutableStateFlow(SAVINGS_RATE_DEFAULT_WINDOW)
     val savingsWindowMonths: StateFlow<Int> = _savingsWindowMonths.asStateFlow()
 
+    /** Last month count chosen with the Custom slider, kept even while a preset is active. */
+    val savingsCustomMonths: StateFlow<Int> = userPreferencesRepository.getSavingsRateCustomMonths()
+        .map { it ?: SAVINGS_RATE_DEFAULT_WINDOW }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, SAVINGS_RATE_DEFAULT_WINDOW)
+
+    fun saveSavingsCustomMonths(months: Int) {
+        viewModelScope.launch { userPreferencesRepository.saveSavingsRateCustomMonths(months) }
+    }
+
+    private val _savingsCustomRange = MutableStateFlow<SavingsCustomRange?>(null)
+    val savingsCustomRange: StateFlow<SavingsCustomRange?> = _savingsCustomRange.asStateFlow()
+
+    /** Sets a date-picked savings window (end null = Now) and points the page at it. */
+    fun applySavingsRange(startMonth: YearMonth, endMonth: YearMonth?) {
+        val range = SavingsCustomRange(startMonth, endMonth)
+        _savingsCustomRange.value = range
+        viewModelScope.launch {
+            userPreferencesRepository.saveSavingsRateRange(startMonth.toString(), endMonth?.toString())
+        }
+        applySavingsWindowInternal(range.windowMonths(), range)
+    }
+
     /** Sets the savings window and points the whole page at the same date range. */
     fun applySavingsWindow(months: Int) {
+        _savingsCustomRange.value = null
+        viewModelScope.launch { userPreferencesRepository.saveSavingsRateRange(null, null) }
+        applySavingsWindowInternal(months, null)
+    }
+
+    private fun applySavingsWindowInternal(months: Int, range: SavingsCustomRange?) {
         _savingsWindowMonths.value = months
+        viewModelScope.launch { userPreferencesRepository.saveSavingsRateWindowMonths(months) }
         val ranges = savingsMonthRanges(
             window = months,
+            endMonth = range?.resolvedEnd() ?: YearMonth.now(),
             usesCalendar = !useFinancialMonth.value,
             nav = SavingsNav(
                 monthStartDay = navMonthStartDay.value,
@@ -558,9 +628,10 @@ class AnalyticsViewModel @Inject constructor(
         window: Int,
         usesCalendar: Boolean,
         nav: SavingsNav,
+        endMonth: YearMonth = YearMonth.now(),
     ): List<Pair<YearMonth, Pair<LocalDate, LocalDate>>> =
         (window - 1 downTo 0).map { back ->
-            val ym = YearMonth.now().minusMonths(back.toLong())
+            val ym = endMonth.minusMonths(back.toLong())
             ym to getDateRangeForYearMonthNavigation(
                 yearMonth = ym,
                 useCalendarMonth = usesCalendar,
@@ -573,17 +644,22 @@ class AnalyticsViewModel @Inject constructor(
 
     /** Income vs. spending for the last N months, independent of the selected analytics period. */
     val savingsRate: StateFlow<SavingsRateSummary> = combine(
-        _savingsWindowMonths,
+        combine(_savingsWindowMonths, _savingsCustomRange) { window, range -> window to range },
         _selectedCurrency,
         _isUnifiedMode,
         combine(navMonthStartDay, navOverridesMap, navUseFixedBudgetPeriodEnd, navBudgetPeriodEndDay) { a, b, c, d ->
             SavingsNav(a, b, c, d)
         },
         useFinancialMonth,
-    ) { window, currency, unified, nav, financial ->
-        SavingsInputs(window, currency, unified, nav, financial)
+    ) { windowAndRange, currency, unified, nav, financial ->
+        SavingsInputs(windowAndRange.first, currency, unified, nav, financial, windowAndRange.second)
     }.flatMapLatest { input ->
-        val ranges = savingsMonthRanges(input.window, !input.useFinancialMonth, input.nav)
+        val ranges = savingsMonthRanges(
+            input.window,
+            !input.useFinancialMonth,
+            input.nav,
+            input.customRange?.resolvedEnd() ?: YearMonth.now(),
+        )
         transactionRepository.getNetTransactionsBetweenDates(
             startDate = ranges.minOf { it.second.first },
             endDate = ranges.maxOf { it.second.second },
@@ -601,7 +677,7 @@ class AnalyticsViewModel @Inject constructor(
                     }
                 },
             )
-            SavingsRateSummary(months = months, windowMonths = input.window, currency = input.currency)
+            SavingsRateSummary(months = months, windowMonths = input.window, customRange = input.customRange, currency = input.currency)
         }
     }.stateIn(
         scope = viewModelScope,
@@ -1031,6 +1107,53 @@ class AnalyticsViewModel @Inject constructor(
         )
     }
 
+    private suspend fun computeAmountBuckets(
+        transactions: List<TransactionEntity>,
+        isUnified: Boolean,
+        displayCurrency: String,
+    ): List<AmountBucketData> {
+        if (transactions.isEmpty()) return emptyList()
+        val amounts = transactions.map { tx ->
+            if (isUnified) {
+                currencyConversionService.convertAmount(tx.amount, tx.currency, displayCurrency)
+            } else {
+                tx.amount
+            }
+        }
+        val total = amounts.fold(BigDecimal.ZERO) { acc, a -> acc + a }
+        return AMOUNT_BUCKETS.map { bucket ->
+            val inBucket = amounts.filter { it >= bucket.min && (bucket.max == null || it < bucket.max) }
+            val bucketTotal = inBucket.fold(BigDecimal.ZERO) { acc, a -> acc + a }
+            AmountBucketData(
+                label = bucket.label,
+                rangeLabel = bucket.rangeLabel,
+                amount = bucketTotal,
+                transactionCount = inBucket.size,
+                minAmount = bucket.min.toLong(),
+                maxAmount = bucket.max?.toLong(),
+                percentage = if (total > BigDecimal.ZERO) {
+                    bucketTotal.divide(total, 4, java.math.RoundingMode.HALF_UP).toFloat() * 100f
+                } else 0f,
+            )
+        }
+    }
+
+    private data class AmountBucketRange(
+        val label: String,
+        val rangeLabel: String,
+        val min: BigDecimal,
+        val max: BigDecimal?,
+    )
+
+    private companion object {
+        val AMOUNT_BUCKETS = listOf(
+            AmountBucketRange("Small", "Under 500", BigDecimal.ZERO, BigDecimal(500)),
+            AmountBucketRange("Medium", "500 – 2,000", BigDecimal(500), BigDecimal(2000)),
+            AmountBucketRange("Large", "2,000 – 10,000", BigDecimal(2000), BigDecimal(10000)),
+            AmountBucketRange("Very large", "10,000+", BigDecimal(10000), null),
+        )
+    }
+
     private suspend fun computePaymentModeBreakdown(
         transactions: List<TransactionEntity>,
         totalSpending: BigDecimal,
@@ -1118,11 +1241,73 @@ class AnalyticsViewModel @Inject constructor(
     }
 }
 
-private fun previousDateRange(start: LocalDate, end: LocalDate): Pair<LocalDate, LocalDate> {
-    val days = ChronoUnit.DAYS.between(start, end) + 1
-    val prevEnd = start.minusDays(1)
-    val prevStart = prevEnd.minusDays(days - 1)
-    return prevStart to prevEnd
+/**
+ * The period immediately before the current one, for period-over-period deltas.
+ *
+ * Month based selections (pay month, calendar month, a month picked in the scrubber) use the real
+ * boundaries of the preceding month. Pay months are 30 or 31 days long, so deriving the previous
+ * period by counting backwards from the current start drifts by a day and drops rows dated on the
+ * first day of the previous period (a salary credited on the 25th, for instance). Rolling ranges
+ * (last 3/6 months, year, all time) keep an equal length window right before the current one.
+ */
+internal fun previousPeriodRange(
+    dateRange: Pair<LocalDate, LocalDate>,
+    period: TimePeriod,
+    isMonthNavigation: Boolean,
+    monthStartDay: Int,
+    useFinancialMonth: Boolean,
+    monthStartOverrides: Map<String, Int>,
+    useFixedBudgetPeriodEnd: Boolean,
+    budgetPeriodEndDay: Int,
+): Pair<LocalDate, LocalDate> {
+    val isMonthBased = period == TimePeriod.THIS_MONTH ||
+        period == TimePeriod.CALENDAR_MONTH ||
+        period == TimePeriod.LAST_MONTH ||
+        (period == TimePeriod.CUSTOM && isMonthNavigation)
+    if (!isMonthBased) return equalLengthWindowBefore(dateRange)
+
+    val previousAnchor = dateRange.first.minusDays(1)
+    return if (useFinancialMonth) {
+        DateRangeUtils.calculateBudgetPeriodRange(
+            today = previousAnchor,
+            startDay = monthStartDay,
+            useFixedEndDay = useFixedBudgetPeriodEnd,
+            fixedEndDayOfMonth = budgetPeriodEndDay,
+            overrides = monthStartOverrides,
+        )
+    } else {
+        val previousStart = previousAnchor.withDayOfMonth(
+            minOf(dateRange.first.dayOfMonth, previousAnchor.lengthOfMonth())
+        )
+        previousStart to previousAnchor
+    }
+}
+
+/**
+ * Slice of [previousPeriod] covering the same number of days that have elapsed in the current
+ * period, so a running period is never compared against a full one. Returns the whole previous
+ * period when the current one has already ended.
+ */
+internal fun elapsedAlignedRange(
+    previousPeriod: Pair<LocalDate, LocalDate>,
+    currentRange: Pair<LocalDate, LocalDate>,
+    today: LocalDate = LocalDate.now(),
+): Pair<LocalDate, LocalDate> {
+    val currentStart = currentRange.first
+    val currentEnd = currentRange.second
+    if (currentEnd <= today) return previousPeriod
+    val fullDays = ChronoUnit.DAYS.between(currentStart, currentEnd) + 1
+    val elapsedDays = (ChronoUnit.DAYS.between(currentStart, today) + 1).coerceIn(1, fullDays)
+    val previousDays = ChronoUnit.DAYS.between(previousPeriod.first, previousPeriod.second) + 1
+    val sliceDays = elapsedDays.coerceAtMost(previousDays)
+    return previousPeriod.first to previousPeriod.first.plusDays(sliceDays - 1)
+}
+
+/** Window of the same length as [dateRange], ending the day before it starts. */
+internal fun equalLengthWindowBefore(dateRange: Pair<LocalDate, LocalDate>): Pair<LocalDate, LocalDate> {
+    val days = ChronoUnit.DAYS.between(dateRange.first, dateRange.second) + 1
+    val previousEnd = dateRange.first.minusDays(1)
+    return previousEnd.minusDays(days - 1) to previousEnd
 }
 
 /**
@@ -1142,6 +1327,7 @@ private data class SavingsInputs(
     val unified: Boolean,
     val nav: SavingsNav,
     val useFinancialMonth: Boolean,
+    val customRange: SavingsCustomRange? = null,
 )
 
 private data class FilterState(
@@ -1165,6 +1351,7 @@ data class AnalyticsUiState(
     val netSavings: BigDecimal = BigDecimal.ZERO,
     val categoryBreakdown: List<CategoryData> = emptyList(),
     val topMerchants: List<MerchantData> = emptyList(),
+    val amountBuckets: List<AmountBucketData> = emptyList(),
     val spendingTrend: List<BalancePoint> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -1243,6 +1430,19 @@ data class PaymentModeBreakdown(
     val currency: String,
     val deltaPercent: Float? = null,
     val totalTransactionCount: Int = 0,
+)
+
+/** Spend grouped by single-transaction size (e.g. small purchases vs large ones). */
+data class AmountBucketData(
+    val label: String,
+    val rangeLabel: String,
+    val amount: BigDecimal,
+    val transactionCount: Int,
+    val percentage: Float,
+    /** Inclusive lower bound of the bucket, whole currency units. */
+    val minAmount: Long,
+    /** Exclusive upper bound, or null for the open-ended top bucket. */
+    val maxAmount: Long?,
 )
 
 data class CategoryData(

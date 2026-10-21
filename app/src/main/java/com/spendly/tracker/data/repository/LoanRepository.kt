@@ -29,12 +29,20 @@ class LoanRepository @Inject constructor(
 
     fun getTotalBorrowedRemaining(): Flow<BigDecimal> = loanDao.getTotalBorrowedRemaining()
 
+    fun getAllLoanTransactions(): Flow<List<TransactionEntity>> = loanDao.getAllLoanTransactions()
+
     fun getTransactionsForLoan(loanId: Long): Flow<List<TransactionEntity>> =
         loanDao.getTransactionsForLoan(loanId)
 
     fun getRecentUnlinkedRepayments(direction: LoanDirection, limit: Int = 500): Flow<List<TransactionEntity>> {
         val repaymentType = if (direction == LoanDirection.LENT) "INCOME" else "EXPENSE"
         return loanDao.getRecentUnlinkedTransactionsByType(repaymentType, limit)
+    }
+
+    /** Unlinked transactions that would increase the loan (money lent out / borrowed in). */
+    fun getRecentUnlinkedAdditions(direction: LoanDirection, limit: Int = 500): Flow<List<TransactionEntity>> {
+        val additionType = if (direction == LoanDirection.LENT) "EXPENSE" else "INCOME"
+        return loanDao.getRecentUnlinkedTransactionsByType(additionType, limit)
     }
 
     fun getUnlinkedLoanCategoryTransactions(): Flow<List<TransactionEntity>> =
@@ -163,18 +171,22 @@ class LoanRepository @Inject constructor(
         loanId: Long,
         amount: BigDecimal,
         personName: String,
-        currency: String
+        currency: String,
+        isRepayment: Boolean = true
     ): Long {
         val loan = loanDao.getLoanById(loanId) ?: return -1
-        val txType = if (loan.direction == LoanDirection.LENT)
+        val repaymentType = if (loan.direction == LoanDirection.LENT)
             TransactionType.INCOME else TransactionType.EXPENSE
+        val txType = if (isRepayment) repaymentType else {
+            if (repaymentType == TransactionType.INCOME) TransactionType.EXPENSE else TransactionType.INCOME
+        }
         val transaction = TransactionEntity(
             amount = amount,
             merchantName = personName,
             category = if (txType == TransactionType.INCOME) "Income" else "Others",
             transactionType = txType,
             dateTime = LocalDateTime.now(),
-            description = "Loan repayment – $personName",
+            description = if (isRepayment) "Loan repayment – $personName" else "Loan added – $personName",
             transactionHash = "loan_repayment_${loanId}_${System.currentTimeMillis()}",
             currency = currency,
             loanId = loanId

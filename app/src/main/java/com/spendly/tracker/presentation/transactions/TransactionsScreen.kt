@@ -88,6 +88,8 @@ fun TransactionsScreen(
     initialPeriodEndEpoch: Long? = null,
     initialBankName: String? = null,
     initialAccountLast4: String? = null,
+    initialMinAmount: Long? = null,
+    initialMaxAmount: Long? = null,
     viewModel: TransactionsViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit = {},
     onTransactionClick: (Long) -> Unit = {},
@@ -123,6 +125,7 @@ fun TransactionsScreen(
     val profiles by viewModel.profiles.collectAsState()
     val profileAccountKeys by viewModel.profileAccountKeys.collectAsState()
     val selectedAccountKey by viewModel.selectedAccountKey.collectAsState()
+    val amountRange by viewModel.amountRangeFilter.collectAsState()
     val availableAccounts by viewModel.availableAccounts.collectAsState()
     val availableAccountKeys by viewModel.availableAccountKeys.collectAsState()
     val includeExcluded by viewModel.includeExcluded.collectAsState()
@@ -151,6 +154,7 @@ fun TransactionsScreen(
         selectedPeriod != defaultPeriod,
         transactionTypeFilter != TransactionTypeFilter.ALL,
         selectedAccountKey != null,
+        amountRange != null,
         categoryFilter != null,
         !categoriesFilter.isNullOrEmpty(),
         includeExcluded
@@ -204,6 +208,8 @@ fun TransactionsScreen(
         initialPeriodEndEpoch,
         initialBankName,
         initialAccountLast4,
+        initialMinAmount,
+        initialMaxAmount,
     ) {
         val hasNavParams = initialCategory != null ||
             initialMerchant != null ||
@@ -213,6 +219,8 @@ fun TransactionsScreen(
             initialPaymentMode != null ||
             initialBankName != null ||
             initialAccountLast4 != null ||
+            initialMinAmount != null ||
+            initialMaxAmount != null ||
             hasExplicitNavRange
         if (!processedNavParams && hasNavParams) {
             viewModel.applyNavigationFilters(
@@ -226,6 +234,8 @@ fun TransactionsScreen(
                 initialPaymentMode,
                 initialBankName,
                 initialAccountLast4,
+                initialMinAmount,
+                initialMaxAmount,
             )
             processedNavParams = true
         }
@@ -523,6 +533,47 @@ fun TransactionsScreen(
                     onIncludeExcludedToggle = viewModel::setIncludeExcluded,
                     onDismiss = { showFilterSheet = false }
                 )
+            }
+        }
+
+        // Active amount range chip (from analytics size buckets)
+        amountRange?.let { (min, max) ->
+            val fmt = { n: Long -> java.text.NumberFormat.getIntegerInstance().format(n) }
+            val label = when {
+                min != null && max != null && min > 0L -> "${fmt(min)} – ${fmt(max)}"
+                max != null -> "Under ${fmt(max)}"
+                else -> "${fmt(min ?: 0L)}+"
+            }
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = Spacing.xs),
+                contentPadding = PaddingValues(horizontal = Dimensions.Padding.content),
+            ) {
+                item {
+                    FilterChip(
+                        selected = true,
+                        onClick = { viewModel.clearAmountRangeFilter() },
+                        label = { Text("Amount: $label") },
+                        trailingIcon = {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Clear amount filter",
+                                modifier = Modifier.size(Dimensions.Icon.small)
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            selectedTrailingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            borderWidth = 0.dp,
+                            selected = true,
+                            enabled = true,
+                        ),
+                    )
+                }
             }
         }
 

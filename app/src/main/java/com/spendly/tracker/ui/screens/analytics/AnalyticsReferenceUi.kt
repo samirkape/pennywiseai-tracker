@@ -176,9 +176,9 @@ fun AnalyticsReferenceDateNavigator(
 
         Text(
             text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Normal,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
             modifier = Modifier.weight(1f),
         )
@@ -267,14 +267,14 @@ fun AnalyticsReferenceHeroCard(
                 val s = periodOutflow ?: return@remember null
                 AnalyticsHeroState(
                     label = "TOTAL OUTFLOW",
-                    amount = CurrencyFormatter.formatCurrency(s.total, currency),
+                    amount = CurrencyFormatter.formatCurrencyWhole(s.total, currency),
                     delta = s.deltaPercent?.let { formatDelta(it) },
                     deltaIncreasing = (s.deltaPercent ?: 0f) >= 0f,
                     transactionCount = "${s.transactionCount} transactions",
                     metrics = listOf(
-                        AnalyticsHeroMetric("Spend", CurrencyFormatter.formatCurrency(s.spending, currency), "${s.spendingTransactionCount} txns", Icons.Default.Receipt),
-                        AnalyticsHeroMetric("Invested", CurrencyFormatter.formatCurrency(s.invested, currency), "${s.investmentTransactionCount} txns", Icons.Default.ShowChart),
-                        AnalyticsHeroMetric("CC Pay", CurrencyFormatter.formatCurrency(s.ccBillPayment, currency), "${s.ccBillPaymentTransactionCount} txns", Icons.Default.CreditCard),
+                        AnalyticsHeroMetric("Spend", CurrencyFormatter.formatCurrencyWhole(s.spending, currency), "${s.spendingTransactionCount} txns", Icons.Default.Receipt),
+                        AnalyticsHeroMetric("Invested", CurrencyFormatter.formatCurrencyWhole(s.invested, currency), "${s.investmentTransactionCount} txns", Icons.Default.ShowChart),
+                        AnalyticsHeroMetric("CC Pay", CurrencyFormatter.formatCurrencyWhole(s.ccBillPayment, currency), "${s.ccBillPaymentTransactionCount} txns", Icons.Default.CreditCard),
                     ),
                 )
             }
@@ -284,49 +284,49 @@ fun AnalyticsReferenceHeroCard(
                 val cash = paymentModeBreakdown?.cash
                 AnalyticsHeroState(
                     label = "TOTAL SPENDING",
-                    amount = CurrencyFormatter.formatCurrency(s.spending, currency),
+                    amount = CurrencyFormatter.formatCurrencyWhole(s.spending, currency),
                     delta = s.spendingDeltaPercent?.let { formatDelta(it) },
                     deltaIncreasing = (s.spendingDeltaPercent ?: 0f) >= 0f,
                     transactionCount = "${s.spendingTransactionCount} transactions",
                     metrics = listOf(
-                        AnalyticsHeroMetric("Card", CurrencyFormatter.formatCurrency(cb?.creditTotal ?: BigDecimal.ZERO, currency), "${cb?.creditCount ?: 0} txns", Icons.Default.CreditCard),
-                        AnalyticsHeroMetric("Bank", CurrencyFormatter.formatCurrency(cb?.bankTotal ?: BigDecimal.ZERO, currency), "${cb?.bankCount ?: 0} txns", Icons.Default.AccountBalance),
-                        AnalyticsHeroMetric("Cash", CurrencyFormatter.formatCurrency(cash?.total ?: BigDecimal.ZERO, currency), "${cash?.transactionCount ?: 0} txns", Icons.Default.Wallet),
+                        AnalyticsHeroMetric("Card", CurrencyFormatter.formatCurrencyWhole(cb?.creditTotal ?: BigDecimal.ZERO, currency), "${cb?.creditCount ?: 0} txns", Icons.Default.CreditCard),
+                        AnalyticsHeroMetric("Bank", CurrencyFormatter.formatCurrencyWhole(cb?.bankTotal ?: BigDecimal.ZERO, currency), "${cb?.bankCount ?: 0} txns", Icons.Default.AccountBalance),
+                        AnalyticsHeroMetric("Cash", CurrencyFormatter.formatCurrencyWhole(cash?.total ?: BigDecimal.ZERO, currency), "${cash?.transactionCount ?: 0} txns", Icons.Default.Wallet),
                     ),
                 )
             }
             AnalyticsOverviewTab.INCOME -> {
                 val s = incomeSummary ?: return@remember null
-                val avg = CurrencyFormatter.formatCurrency(
+                val avg = CurrencyFormatter.formatCurrencyWhole(
                     s.total.divide(BigDecimal(s.transactionCount), 2, RoundingMode.HALF_UP), currency,
                 )
                 AnalyticsHeroState(
                     label = "TOTAL INCOME",
-                    amount = CurrencyFormatter.formatCurrency(s.total, currency),
+                    amount = CurrencyFormatter.formatCurrencyWhole(s.total, currency),
                     delta = s.deltaPercent?.let { formatDelta(it) },
                     deltaIncreasing = (s.deltaPercent ?: 0f) >= 0f,
                     transactionCount = "${s.transactionCount} transactions",
                     metrics = listOf(
-                        AnalyticsHeroMetric("Largest", CurrencyFormatter.formatCurrency(s.largest, currency), "1 transaction", Icons.Default.ShowChart),
+                        AnalyticsHeroMetric("Largest", CurrencyFormatter.formatCurrencyWhole(s.largest, currency), "1 transaction", Icons.Default.ShowChart),
                         AnalyticsHeroMetric("Average", avg, "per txn", Icons.Default.Receipt),
-                        AnalyticsHeroMetric("Net", CurrencyFormatter.formatCurrency(s.net, currency), "income - outflow", Icons.Default.Wallet),
+                        AnalyticsHeroMetric("Net", CurrencyFormatter.formatCurrencyWhole(s.net, currency), "income - outflow", Icons.Default.Wallet),
                     ),
                 )
             }
             AnalyticsOverviewTab.INVESTED -> {
                 val s = investmentInsights ?: return@remember null
                 val avg = if (s.transactionCount > 0)
-                    CurrencyFormatter.formatCurrency(s.totalInvested.divide(BigDecimal(s.transactionCount), 2, RoundingMode.HALF_UP), currency)
+                    CurrencyFormatter.formatCurrencyWhole(s.totalInvested.divide(BigDecimal(s.transactionCount), 2, RoundingMode.HALF_UP), currency)
                 else CurrencyFormatter.formatCurrency(BigDecimal.ZERO, currency)
                 AnalyticsHeroState(
                     label = "TOTAL INVESTED",
-                    amount = CurrencyFormatter.formatCurrency(s.totalInvested, currency),
+                    amount = CurrencyFormatter.formatCurrencyWhole(s.totalInvested, currency),
                     delta = s.deltaPercent?.let { formatDelta(it) },
                     deltaIncreasing = (s.deltaPercent ?: 0f) >= 0f,
                     transactionCount = "${s.transactionCount} transactions",
                     metrics = listOf(
                         AnalyticsHeroMetric("SIPs", s.recurringCount.toString(), if (s.recurringCount == 1) "recurring plan" else "recurring plans", Icons.Default.Payments),
-                        AnalyticsHeroMetric("Largest", CurrencyFormatter.formatCurrency(s.largestInvestment, currency), "1 transaction", Icons.Default.ShowChart),
+                        AnalyticsHeroMetric("Largest", CurrencyFormatter.formatCurrencyWhole(s.largestInvestment, currency), "1 transaction", Icons.Default.ShowChart),
                         AnalyticsHeroMetric("Average", avg, "per txn", Icons.Default.Receipt),
                     ),
                 )
@@ -341,12 +341,12 @@ fun AnalyticsReferenceHeroCard(
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+            modifier = Modifier.padding(16.dp),
         ) {
             // Label
             Text(
                 text = hero.label,
-                fontSize = 10.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 letterSpacing = 0.1.sp,
@@ -364,8 +364,8 @@ fun AnalyticsReferenceHeroCard(
             ) {
                 Text(
                     text = hero.amount,
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.SemiBold,
                     letterSpacing = (-0.5).sp,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
@@ -403,7 +403,7 @@ fun AnalyticsReferenceHeroCard(
                             )
                             Text(
                                 text = deltaText,
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = deltaTextColor,
                             )
@@ -415,18 +415,20 @@ fun AnalyticsReferenceHeroCard(
             Spacer(Modifier.height(4.dp))
 
             Text(
-                text = hero.transactionCount,
+                text = if (hero.delta != null) "${hero.transactionCount} · vs previous period" else hero.transactionCount,
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            Spacer(Modifier.height(8.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(14.dp))
 
-            // Breakdown row
+            // Breakdown panel
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.Top,
             ) {
                 hero.metrics.forEachIndexed { index, metric ->
@@ -435,14 +437,6 @@ fun AnalyticsReferenceHeroCard(
                         modifier = Modifier.weight(1f),
                         onClick = onMetricClick?.let { handler -> { handler(index) } },
                     )
-                    if (index != hero.metrics.lastIndex) {
-                        Box(
-                            modifier = Modifier
-                                .width(0.5.dp)
-                                .height(36.dp)
-                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
-                        )
-                    }
                 }
             }
         }
@@ -706,8 +700,8 @@ private fun HeroMetricColumn(
     Column(
         modifier = modifier
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -721,7 +715,7 @@ private fun HeroMetricColumn(
             )
             Text(
                 text = metric.label,
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -729,18 +723,16 @@ private fun HeroMetricColumn(
         }
         Text(
             text = metric.amount,
-            fontSize = 13.sp,
+            fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
             text = metric.subLabel,
-            fontSize = 10.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            textAlign = TextAlign.Center,
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -758,8 +750,7 @@ private fun ReferenceNavButton(
         onClick = onClick,
         enabled = enabled,
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.size(32.dp),
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -815,7 +806,7 @@ private data class AnalyticsHeroState(
 private fun formatDelta(deltaPercent: Float): String {
     val absolute = abs(deltaPercent).toInt()
     val prefix = if (deltaPercent > 0f) "+" else "-"
-    return "$prefix$absolute% vs last"
+    return "$prefix$absolute%"
 }
 
 private fun buildFooterLabels(points: List<BalancePoint>): List<String> {

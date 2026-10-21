@@ -101,6 +101,19 @@ class AxisBankParser : BaseIndianBankParser() {
             }
         }
 
+        // Credit card "Spent" format with "at <merchant>." after the timestamp
+        // Format: "Spent INR 557\nusing Axis Bank Credit Card no. XX1234 on 18-10-26 18:21:57 IST at\nMYNTRA DESI.\nAvl limit: INR 84721."
+        val spentAtPattern = Regex(
+            """Spent[\s\S]*?\d{2}:\d{2}:\d{2}(?:\s*IST)?\s+at\s+([^\n]+?)\s*\.?\s*(?:\n|Avl\s+Lim|Not you)""",
+            RegexOption.IGNORE_CASE
+        )
+        spentAtPattern.find(message)?.let { match ->
+            val merchant = cleanMerchantName(match.groupValues[1].trim())
+            if (isValidMerchantName(merchant)) {
+                return merchant
+            }
+        }
+
         // Credit card "Spent" transactions with merchant on separate line
         // Format 1: "Spent INR 131\nAxis Bank Card no. XX0818\n05-10-25 09:43:27 IST\nSwiggy Limi\nAvl Limit:"
         // Format 2: "Spent\nCard no. XX7441\nINR 562\n01-09-25 12:04:18\nAVENUE SUPE\nAvl Lmt"

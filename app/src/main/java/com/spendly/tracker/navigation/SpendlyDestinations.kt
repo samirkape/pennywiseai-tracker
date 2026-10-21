@@ -42,7 +42,12 @@ object Analytics
 object Insights
 
 @Serializable
-data class InsightDetail(val insightId: String, val anchorMonth: String)
+data class InsightDetail(
+    val insightId: String,
+    val anchorMonth: String,
+    val customStartEpochDay: Long? = null,
+    val customEndEpochDay: Long? = null,
+)
 
 @Serializable
 object QuickCategorize
@@ -107,6 +112,9 @@ data class BudgetGroupEdit(val groupId: Long = -1L)
 
 @Serializable
 object Loans
+
+@Serializable
+object LoanAccountAnalytics
 
 @Serializable
 data class LoanDetail(val loanId: Long)

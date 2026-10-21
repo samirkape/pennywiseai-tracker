@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
@@ -56,6 +57,7 @@ import com.spendly.tracker.ui.components.PeriodRangeNavigator
 import com.spendly.tracker.ui.components.*
 import com.spendly.tracker.ui.components.cards.ListItemCardV2
 import com.spendly.tracker.ui.components.cards.SectionHeaderV2
+import com.spendly.tracker.ui.components.cards.SectionLinkAction
 import com.spendly.tracker.ui.components.*
 import com.spendly.tracker.ui.icons.CategoryMapping
 import com.spendly.tracker.ui.theme.*
@@ -63,6 +65,7 @@ import com.spendly.tracker.ui.utils.LocalWindowSizeInfo
 import com.spendly.tracker.utils.CurrencyFormatter
 import com.spendly.tracker.utils.DateRangeUtils
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import java.math.BigDecimal
@@ -86,6 +89,14 @@ fun AnalyticsScreen(
         bankName: String?,
         accountLast4: String?,
     ) -> Unit = { _, _, _, _, _, _, _, _, _, _ -> },
+    onNavigateToTransactionsByAmount: (
+        minAmount: Long?,
+        maxAmount: Long?,
+        currency: String?,
+        transactionType: String?,
+        startDateEpochDay: Long?,
+        endDateEpochDay: Long?,
+    ) -> Unit = { _, _, _, _, _, _ -> },
     onNavigateToTransactionsMultiCategory: (categories: String, period: String?, currency: String?, startDateEpochDay: Long?, endDateEpochDay: Long?) -> Unit = { _, _, _, _, _ -> },
     onNavigateToTransaction: (Long) -> Unit = {},
     onNavigateToHome: () -> Unit = {},
@@ -106,9 +117,11 @@ fun AnalyticsScreen(
     val categoryFilter by viewModel.categoryFilter.collectAsStateWithLifecycle()
     val compactAnalyticsCards by viewModel.compactAnalyticsCards.collectAsStateWithLifecycle()
     val savingsRate by viewModel.savingsRate.collectAsStateWithLifecycle()
+    val savingsCustomMonths by viewModel.savingsCustomMonths.collectAsStateWithLifecycle()
     // Use rememberSaveable to preserve UI state across navigation
     var showDateRangePicker by rememberSaveable { mutableStateOf(false) }
     var showChartTypeSelector by remember { mutableStateOf(false) }
+    var showCategoryPie by rememberSaveable { mutableStateOf(false) }
     var selectedOverviewTab by rememberSaveable { mutableStateOf(AnalyticsOverviewTab.OUTFLOW) }
 
     val tabs = AnalyticsOverviewTab.entries
@@ -238,47 +251,29 @@ fun AnalyticsScreen(
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                SectionHeaderV2(title = "Savings rate")
-                SavingsRateCard(
-                    summary = savingsRate,
-                    isAppliedToPage = selectedPeriod == TimePeriod.CUSTOM &&
-                        savingsRate.range != null &&
-                        savingsRate.range == uiState.dateRange,
-                    onWindowSelected = viewModel::applySavingsWindow,
+                AnalyticsReferencePeriodChipRow(
+                    selectedPeriod = selectedPeriod,
+                    onPeriodSelected = { viewModel.selectPeriod(it) },
+                    onCustomSelected = { showDateRangePicker = true },
                 )
-            }
-        }
 
-        item {
-            AnalyticsReferencePeriodChipRow(
-                selectedPeriod = selectedPeriod,
-                onPeriodSelected = { viewModel.selectPeriod(it) },
-                onCustomSelected = { showDateRangePicker = true },
-            )
-        }
-
-        periodAnchorMonth?.let { anchorMonth ->
-            if (showPeriodNavigator && periodRangeLabel != null) {
-                item {
-                    AnalyticsReferenceDateNavigator(
-                        label = periodRangeLabel,
-                        onPrevious = { viewModel.navigateToMonth(anchorMonth.minusMonths(1)) },
-                        onNext = { viewModel.navigateToMonth(anchorMonth.plusMonths(1)) },
-                        canGoNext = canNavigateToNextPeriod,
-                    )
+                periodAnchorMonth?.let { anchorMonth ->
+                    if (showPeriodNavigator && periodRangeLabel != null) {
+                        AnalyticsReferenceDateNavigator(
+                            label = periodRangeLabel,
+                            onPrevious = { viewModel.navigateToMonth(anchorMonth.minusMonths(1)) },
+                            onNext = { viewModel.navigateToMonth(anchorMonth.plusMonths(1)) },
+                            canGoNext = canNavigateToNextPeriod,
+                        )
+                    }
                 }
-            }
-        }
 
-        item {
-            AnalyticsReferenceOverviewTabs(
-                selectedTab = selectedOverviewTab,
-                onTabSelected = { selectedOverviewTab = it },
-            )
-        }
+                AnalyticsReferenceOverviewTabs(
+                    selectedTab = selectedOverviewTab,
+                    onTabSelected = { selectedOverviewTab = it },
+                )
 
-        if (uiState.periodOutflow != null || uiState.incomeSummary != null || uiState.investmentInsights != null || uiState.paymentModeBreakdown != null) {
-            item {
+                if (uiState.periodOutflow != null || uiState.incomeSummary != null || uiState.investmentInsights != null || uiState.paymentModeBreakdown != null) {
                 HorizontalPager(
                     state = pagerState,
                     beyondViewportPageCount = 1,
@@ -324,6 +319,7 @@ fun AnalyticsScreen(
                             }
                         },
                     )
+                }
                 }
             }
         }
@@ -435,29 +431,43 @@ fun AnalyticsScreen(
                     SectionHeaderV2(
                         title = "Spending by category",
                         action = {
-                            TextButton(
-                                onClick = {
-                                    val categories = uiState.categoryBreakdown
-                                        .map { it.name }
-                                        .joinToString("|")
-                                    drillDownMultiCategory(categories)
-                                },
-                            ) {
-                                Text(text = "View all", style = MaterialTheme.typography.labelMedium)
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(Dimensions.Icon.small),
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CategoryViewToggle(
+                                    showPie = showCategoryPie,
+                                    onShowPieChange = { showCategoryPie = it },
+                                )
+                                SectionLinkAction(
+                                    text = "View all",
+                                    onClick = {
+                                        val categories = uiState.categoryBreakdown
+                                            .map { it.name }
+                                            .joinToString("|")
+                                        drillDownMultiCategory(categories)
+                                    },
                                 )
                             }
                         },
                     )
-                    AnalyticsCategoryCard(
-                        categories = uiState.categoryBreakdown,
-                        currency = selectedCurrency,
-                        onCategoryClick = { category -> drillDownToTransactions(category = category.name) },
-                    )
+                    if (showCategoryPie) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                        ) {
+                            CategoryPieChart(
+                                categories = uiState.categoryBreakdown,
+                                currency = selectedCurrency,
+                                onCategoryClick = { category -> drillDownToTransactions(category = category.name) },
+                            )
+                        }
+                    } else {
+                        AnalyticsCategoryCard(
+                            categories = uiState.categoryBreakdown,
+                            currency = selectedCurrency,
+                            onCategoryClick = { category -> drillDownToTransactions(category = category.name) },
+                        )
+                    }
                 }
             }
         }
@@ -468,17 +478,7 @@ fun AnalyticsScreen(
                     SectionHeaderV2(
                         title = "Top merchants",
                         action = {
-                            TextButton(
-                                onClick = { drillDownToTransactions() },
-                                contentPadding = PaddingValues(horizontal = Spacing.xs, vertical = 0.dp),
-                            ) {
-                                Text(text = "View all", style = MaterialTheme.typography.labelMedium)
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(Dimensions.Icon.small),
-                                )
-                            }
+                            SectionLinkAction(text = "View all", onClick = { drillDownToTransactions() })
                         },
                     )
                     AnalyticsReferenceMerchantCard(
@@ -487,6 +487,44 @@ fun AnalyticsScreen(
                         onMerchantClick = { merchant -> drillDownToTransactions(merchant = merchant.name) },
                     )
                 }
+            }
+        }
+
+        if (uiState.amountBuckets.any { it.transactionCount > 0 }) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    SectionHeaderV2(title = "Spending by size")
+                    SpendBySizeCard(
+                        buckets = uiState.amountBuckets,
+                        currency = selectedCurrency,
+                        onBucketClick = { bucket ->
+                            onNavigateToTransactionsByAmount(
+                                bucket.minAmount,
+                                bucket.maxAmount,
+                                selectedCurrency,
+                                transactionTypeFilter.name,
+                                drillDownPeriodEpochs.first,
+                                drillDownPeriodEpochs.second,
+                            )
+                        },
+                    )
+                }
+            }
+        }
+
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                SectionHeaderV2(title = "Savings rate")
+                SavingsRateCard(
+                    summary = savingsRate,
+                    isAppliedToPage = selectedPeriod == TimePeriod.CUSTOM &&
+                        savingsRate.range != null &&
+                        savingsRate.range == uiState.dateRange,
+                    onWindowSelected = viewModel::applySavingsWindow,
+                    customMonths = savingsCustomMonths,
+                    onCustomMonthsChanged = viewModel::saveSavingsCustomMonths,
+                    onRangeSelected = viewModel::applySavingsRange,
+                )
             }
         }
 
@@ -535,6 +573,8 @@ private fun AnalyticsCategoryCard(
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
             visible.forEachIndexed { index, category ->
                 val info = CategoryMapping.categories[category.name] ?: CategoryMapping.categories["Others"]!!
+                // Near-black category colors vanish on dark surfaces; fall back to a visible neutral.
+                val accent = if (info.color.luminance() < 0.08f) MaterialTheme.colorScheme.onSurfaceVariant else info.color
                 val fraction = if (maxAmount > BigDecimal.ZERO)
                     (category.amount.toFloat() / maxAmount.toFloat()).coerceIn(0f, 1f)
                 else 0f
@@ -568,7 +608,7 @@ private fun AnalyticsCategoryCard(
                                 modifier = Modifier
                                     .size(7.dp)
                                     .clip(CircleShape)
-                                    .background(info.color),
+                                    .background(accent),
                             )
                             Text(
                                 text = category.name,
@@ -581,12 +621,12 @@ private fun AnalyticsCategoryCard(
                             Text(
                                 text = "· ${category.transactionCount} txn${if (category.transactionCount != 1) "s" else ""}",
                                 fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
-                        // Right: % (colored) + amount
+                        // Right: % (neutral) + amount
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -595,7 +635,7 @@ private fun AnalyticsCategoryCard(
                                 text = "${category.percentage.toInt()}%",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = info.color,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
                                 text = CurrencyFormatter.formatCurrency(category.amount, currency),
@@ -619,7 +659,7 @@ private fun AnalyticsCategoryCard(
                                 .fillMaxWidth(animatedFraction)
                                 .fillMaxHeight()
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(info.color),
+                                .background(accent),
                         )
                     }
                 }
@@ -834,3 +874,36 @@ private fun CurrencyFilterRow(
     }
 }
 
+
+/** Two-state list/pie switch for the category section. */
+@Composable
+private fun CategoryViewToggle(
+    showPie: Boolean,
+    onShowPieChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .padding(2.dp),
+    ) {
+        listOf(false to Icons.AutoMirrored.Filled.ViewList, true to Icons.Default.PieChart).forEach { (pie, icon) ->
+            val selected = showPie == pie
+            IconButton(
+                onClick = { onShowPieChange(pie) },
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent),
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = if (pie) "Show pie chart" else "Show list",
+                    modifier = Modifier.size(Dimensions.Icon.small),
+                    tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}

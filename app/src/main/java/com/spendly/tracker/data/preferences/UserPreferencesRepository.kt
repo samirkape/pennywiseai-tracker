@@ -106,6 +106,10 @@ class UserPreferencesRepository @Inject constructor(
 
         // Analytics Chart Type
         val ANALYTICS_CHART_TYPE = stringPreferencesKey("analytics_chart_type")
+        val SAVINGS_RATE_CUSTOM_MONTHS = intPreferencesKey("savings_rate_custom_months")
+        val SAVINGS_RATE_WINDOW_MONTHS = intPreferencesKey("savings_rate_window_months")
+        val SAVINGS_RATE_RANGE_START = stringPreferencesKey("savings_rate_range_start")
+        val SAVINGS_RATE_RANGE_END = stringPreferencesKey("savings_rate_range_end")
 
         // Analytics card density
         val COMPACT_ANALYTICS_CARDS = booleanPreferencesKey("compact_analytics_cards")
@@ -695,6 +699,43 @@ class UserPreferencesRepository @Inject constructor(
 
     fun getAnalyticsChartType(): Flow<String?> = context.dataStore.data
         .map { preferences -> preferences[PreferencesKeys.ANALYTICS_CHART_TYPE] }
+
+    suspend fun saveSavingsRateWindowMonths(months: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SAVINGS_RATE_WINDOW_MONTHS] = months
+        }
+    }
+
+    suspend fun saveSavingsRateCustomMonths(months: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SAVINGS_RATE_CUSTOM_MONTHS] = months
+        }
+    }
+
+    fun getSavingsRateCustomMonths(): Flow<Int?> = context.dataStore.data
+        .map { preferences -> preferences[PreferencesKeys.SAVINGS_RATE_CUSTOM_MONTHS] }
+
+    /** Persists a date-picked window; a null [end] means "Now". Pass a null [start] to clear it. */
+    suspend fun saveSavingsRateRange(start: String?, end: String?) {
+        context.dataStore.edit { preferences ->
+            if (start == null) {
+                preferences.remove(PreferencesKeys.SAVINGS_RATE_RANGE_START)
+                preferences.remove(PreferencesKeys.SAVINGS_RATE_RANGE_END)
+            } else {
+                preferences[PreferencesKeys.SAVINGS_RATE_RANGE_START] = start
+                if (end == null) preferences.remove(PreferencesKeys.SAVINGS_RATE_RANGE_END)
+                else preferences[PreferencesKeys.SAVINGS_RATE_RANGE_END] = end
+            }
+        }
+    }
+
+    fun getSavingsRateRange(): Flow<Pair<String, String?>?> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.SAVINGS_RATE_RANGE_START]?.let { it to preferences[PreferencesKeys.SAVINGS_RATE_RANGE_END] }
+        }
+
+    fun getSavingsRateWindowMonths(): Flow<Int?> = context.dataStore.data
+        .map { preferences -> preferences[PreferencesKeys.SAVINGS_RATE_WINDOW_MONTHS] }
 
     val compactAnalyticsCardsEnabled: Flow<Boolean> = context.dataStore.data
         .map { preferences ->

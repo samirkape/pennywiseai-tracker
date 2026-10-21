@@ -273,6 +273,7 @@ class TransactionDetailViewModel @Inject constructor(
         viewModelScope.launch {
             val txId = _transaction.value?.id ?: return@launch
             transactionGroupRepository.addTransactionToGroup(txId, groupId)
+            _transaction.update { it?.copy(groupId = groupId) }
             _showGroupSheet.value = false
         }
     }
@@ -281,13 +282,16 @@ class TransactionDetailViewModel @Inject constructor(
         viewModelScope.launch {
             val txId = _transaction.value?.id ?: return@launch
             transactionGroupRepository.removeTransactionFromGroup(txId)
+            _transaction.update { it?.copy(groupId = null) }
+            _showGroupSheet.value = false
         }
     }
 
     fun createGroupAndAdd(name: String, note: String?) {
         viewModelScope.launch {
             val txId = _transaction.value?.id ?: return@launch
-            transactionGroupRepository.createGroupWithTransaction(name, note, txId)
+            val newGroupId = transactionGroupRepository.createGroupWithTransaction(name, note, txId)
+            _transaction.update { it?.copy(groupId = newGroupId) }
             _showGroupSheet.value = false
         }
     }

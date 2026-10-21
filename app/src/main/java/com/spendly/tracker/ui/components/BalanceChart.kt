@@ -21,6 +21,7 @@ import ir.ehsannarmani.compose_charts.models.DotProperties
 import ir.ehsannarmani.compose_charts.models.DrawStyle
 import ir.ehsannarmani.compose_charts.models.GridProperties
 import ir.ehsannarmani.compose_charts.models.HorizontalIndicatorProperties
+import ir.ehsannarmani.compose_charts.models.IndicatorCount
 import ir.ehsannarmani.compose_charts.models.LabelHelperProperties
 import ir.ehsannarmani.compose_charts.models.LabelProperties
 import ir.ehsannarmani.compose_charts.models.Line
@@ -32,6 +33,8 @@ import java.math.BigDecimal
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
+
+private const val AXIS_INTERVALS = 4
 
 data class BalancePoint(
     val timestamp: LocalDateTime,
@@ -63,6 +66,26 @@ fun BalanceChart(
         smoothedHistory.map { it.balance.toDouble() }
     }
 
+    // Round the top of the axis up to 1/2/5 x 10^n so tick labels land on readable steps (4 even intervals).
+    val niceMax = remember(chartValues) {
+        val peak = chartValues.maxOrNull() ?: 0.0
+        if (chartValues.any { it < 0.0 } || peak <= 0.0) {
+            null
+        } else {
+            val step = peak / AXIS_INTERVALS
+            val magnitude = Math.pow(10.0, Math.floor(Math.log10(step)))
+            val normalized = step / magnitude
+            val niceStep = when {
+                normalized <= 1.0 -> 1.0
+                normalized <= 2.0 -> 2.0
+                normalized <= 2.5 -> 2.5
+                normalized <= 5.0 -> 5.0
+                else -> 10.0
+            } * magnitude
+            niceStep * AXIS_INTERVALS
+        }
+    }
+
     val labels = remember(smoothedHistory) {
         val isYearly = smoothedHistory.size > 1 && smoothedHistory.all { it.timestamp.dayOfYear == 1 }
         val isMonthly = !isYearly && smoothedHistory.all { it.timestamp.dayOfMonth == 1 }
@@ -80,22 +103,28 @@ fun BalanceChart(
             }
         }
 
-        val skipFactor = when {
-            allLabels.size > 20 -> allLabels.size / 6
-            allLabels.size > 10 -> 2
-            else -> 1
-        }.coerceAtLeast(1)
+        // Aim for ~6 horizontal labels; always keep the last point and drop a neighbour that would crowd it.
+        val maxLabels = 6
+        val skipFactor = if (allLabels.size > maxLabels) {
+            (allLabels.size + maxLabels - 1) / maxLabels
+        } else 1
 
         allLabels.mapIndexed { i, label ->
-            if (i % skipFactor == 0 || i == allLabels.lastIndex) label else ""
+            val isLast = i == allLabels.lastIndex
+            val crowdsLast = !isLast && allLabels.lastIndex - i < skipFactor / 2 + 1
+            if (isLast || (i % skipFactor == 0 && !crowdsLast)) label else ""
         }
     }
 
-    val popupProperties = remember(smoothedHistory, primaryCurrency) {
+    val popupProperties = remember(smoothedHistory, primaryCurrency, themeColors) {
         PopupProperties(
             enabled = true,
             duration = 2000L,
-            textStyle = TextStyle.Default.copy(fontSize = 11.sp),
+            textStyle = TextStyle.Default.copy(
+                fontSize = 12.sp,
+                color = themeColors.onSurface,
+            ),
+            containerColor = themeColors.surfaceContainerHighest,
             contentBuilder = { popup ->
                 val point = smoothedHistory.getOrNull(popup.valueIndex)
                 val formatted = CurrencyFormatter.formatAbbreviated(abs(popup.value), primaryCurrency)
@@ -114,6 +143,8 @@ fun BalanceChart(
             .height(height.dp)
             .padding(horizontal = Spacing.sm, vertical = Spacing.md),
         popupProperties = popupProperties,
+        minValue = if (niceMax != null) 0.0 else chartValues.minOrNull() ?: 0.0,
+        maxValue = niceMax ?: chartValues.maxOrNull() ?: 0.0,
         data = listOf(
             Line(
                 label = "Spend Trend",
@@ -147,6 +178,7 @@ fun BalanceChart(
         ),
         indicatorProperties = HorizontalIndicatorProperties(
             enabled = true,
+            count = IndicatorCount.CountBased(AXIS_INTERVALS + 1),
             textStyle = TextStyle.Default.copy(
                 fontSize = 10.sp,
                 color = themeColors.onSurfaceVariant.copy(0.7f),
@@ -157,7 +189,7 @@ fun BalanceChart(
             }
         ),
         labelHelperProperties = LabelHelperProperties(
-            enabled = true,
+            enabled = false,
             textStyle = TextStyle.Default.copy(
                 fontSize = 10.sp,
                 color = themeColors.onSurface,
@@ -169,12 +201,12 @@ fun BalanceChart(
             textStyle = TextStyle.Default.copy(
                 fontSize = 10.sp,
                 color = themeColors.onSurface.copy(0.7f),
-                textAlign = TextAlign.End
+                textAlign = TextAlign.Center
             ),
             labels = labels,
             padding = 16.dp,
             rotation = LabelProperties.Rotation(
-                mode = LabelProperties.Rotation.Mode.Force,
+                mode = LabelProperties.Rotation.Mode.IfNecessary,
                 degree = -45f
             )
         ),

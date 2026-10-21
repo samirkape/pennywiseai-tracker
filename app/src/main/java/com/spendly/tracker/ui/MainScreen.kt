@@ -322,7 +322,7 @@ fun MainScreen(
             }
 
             composable(
-                route = "transactions?category={category}&merchant={merchant}&period={period}&currency={currency}&focusSearch={focusSearch}&type={type}&categories={categories}&startDateEpoch={startDateEpoch}&endDateEpoch={endDateEpoch}&paymentMode={paymentMode}&bankName={bankName}&accountLast4={accountLast4}",
+                route = "transactions?category={category}&merchant={merchant}&period={period}&currency={currency}&focusSearch={focusSearch}&type={type}&categories={categories}&startDateEpoch={startDateEpoch}&endDateEpoch={endDateEpoch}&paymentMode={paymentMode}&bankName={bankName}&accountLast4={accountLast4}&minAmount={minAmount}&maxAmount={maxAmount}",
                 arguments = listOf(
                     navArgument("category") {
                         type = NavType.StringType
@@ -382,6 +382,16 @@ fun MainScreen(
                         type = NavType.StringType
                         nullable = true
                         defaultValue = null
+                    },
+                    navArgument("minAmount") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("maxAmount") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
                     }
                 )
             ) { backStackEntry ->
@@ -397,6 +407,8 @@ fun MainScreen(
                 val paymentMode = backStackEntry.arguments?.getString("paymentMode")
                 val bankName = backStackEntry.arguments?.getString("bankName")
                 val accountLast4 = backStackEntry.arguments?.getString("accountLast4")
+                val minAmount = backStackEntry.arguments?.getString("minAmount")?.toLongOrNull()
+                val maxAmount = backStackEntry.arguments?.getString("maxAmount")?.toLongOrNull()
 
                 TransactionsScreen(
                     modifier = Modifier.imePadding(),
@@ -412,6 +424,8 @@ fun MainScreen(
                     initialPeriodEndEpoch = periodEndEpoch,
                     initialBankName = bankName,
                     initialAccountLast4 = accountLast4,
+                    initialMinAmount = minAmount,
+                    initialMaxAmount = maxAmount,
                     onNavigateBack = {
                         navController.safePopBackStack()
                     },
@@ -530,6 +544,18 @@ fun MainScreen(
                             }
                         }
                         navController.navigate(route) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onNavigateToTransactionsByAmount = { minAmount, maxAmount, currency, transactionType, startDateEpoch, endDateEpoch ->
+                        val params = mutableListOf("period=${com.spendly.tracker.presentation.common.TimePeriod.CUSTOM.name}")
+                        minAmount?.let { params.add("minAmount=$it") }
+                        maxAmount?.let { params.add("maxAmount=$it") }
+                        currency?.let { params.add("currency=$it") }
+                        transactionType?.let { params.add("type=$it") }
+                        startDateEpoch?.let { params.add("startDateEpoch=$it") }
+                        endDateEpoch?.let { params.add("endDateEpoch=$it") }
+                        navController.navigate("transactions?${params.joinToString("&")}") {
                             launchSingleTop = true
                         }
                     },

@@ -1176,8 +1176,16 @@ private fun TransactionReceipt(
                         onClick = { onNavigateToLoanDetail(loan.id) },
                         label = {
                             Text(
-                                text = if (loan.direction == LoanDirection.LENT)
-                                    "Lent to ${loan.personName}" else "Borrowed from ${loan.personName}",
+                                text = when {
+                                    loan.direction == LoanDirection.LENT &&
+                                        transaction.transactionType == TransactionType.INCOME ->
+                                        "Repayment from ${loan.personName}"
+                                    loan.direction == LoanDirection.BORROWED &&
+                                        transaction.transactionType == TransactionType.EXPENSE ->
+                                        "Repaid to ${loan.personName}"
+                                    loan.direction == LoanDirection.LENT -> "Lent to ${loan.personName}"
+                                    else -> "Borrowed from ${loan.personName}"
+                                },
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -3069,7 +3077,14 @@ private fun MarkAsLoanBottomSheet(
             )
 
             if (!isAddingNew && recentPersonNames.isNotEmpty()) {
-                // Pick from existing people
+                // Pick from existing people (scrollable so long lists stay reachable)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.md)
+                ) {
                 recentPersonNames.forEach { name ->
                     Surface(
                         onClick = { personName = name },
@@ -3115,6 +3130,7 @@ private fun MarkAsLoanBottomSheet(
                             }
                         }
                     }
+                }
                 }
 
                 // Add new person option
