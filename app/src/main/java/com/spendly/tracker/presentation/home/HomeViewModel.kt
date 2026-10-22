@@ -969,6 +969,11 @@ class HomeViewModel @Inject constructor(
                     d to (dailySums[d] ?: BigDecimal.ZERO)
                 }
 
+                // Previous 7 days (days 7–13 ago) — comparison baseline for the tile
+                val prev7Total = (13 downTo 7).fold(BigDecimal.ZERO) { acc, ago ->
+                    acc + (dailySums[today.minusDays(ago.toLong())] ?: BigDecimal.ZERO)
+                }
+
                 val weekStart = today.with(java.time.DayOfWeek.MONDAY)
                 val lastWeekStart = weekStart.minusWeeks(1)
                 val lastWeekEnd = weekStart.minusDays(1)
@@ -984,6 +989,7 @@ class HomeViewModel @Inject constructor(
                     thisWeekSpend = thisWeek,
                     lastWeekSpend = lastWeek,
                     last7DaysSpend = last7,
+                    last7DaysPrevTotal = prev7Total,
                 )
             }
         }
@@ -2198,6 +2204,7 @@ data class HomeUiState(
     val thisWeekSpend: BigDecimal = BigDecimal.ZERO,
     val lastWeekSpend: BigDecimal = BigDecimal.ZERO,
     val last7DaysSpend: List<Pair<LocalDate, BigDecimal>> = emptyList(),
+    val last7DaysPrevTotal: BigDecimal = BigDecimal.ZERO,
     // ── Subscription mini-card ───────────────────────────────────────────────
     val totalSubscriptionAmount: BigDecimal = BigDecimal.ZERO,
     val upcomingSubscriptions: List<SubscriptionEntity> = emptyList(),

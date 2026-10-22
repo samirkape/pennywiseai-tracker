@@ -410,6 +410,7 @@ fun HomeScreen(
                 item {
                     HomeLast7DaysCard(
                         last7DaysSpend = uiState.last7DaysSpend,
+                        previous7DaysTotal = uiState.last7DaysPrevTotal,
                         currency = uiState.selectedCurrency,
                         onClick = onNavigateToAnalytics,
                         modifier = Modifier.padding(horizontal = Dimensions.Padding.content)

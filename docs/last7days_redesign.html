@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Last 7 Days — tile redesign explorations</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F7F6F3;--card:#FFFFFF;--cb:#E2DED7;--hdr:#EEEAE3;
+    --muted:#8C8B85;--ink:#1A1A18;--ink2:#4A4A46;--div:#EDE9E2;
+    --grn:#4A7C6F;--grn-bg:#E6F5F0;--grn-soft:#CFE7DE;
+    --amb:#C97E28;--amb-bg:#FDF3E7;
+    --red:#B03030;--red-bg:#FCEBEB;
+    --bar:#C9C5BC;--bar-max:#C97E28;
+    --track-grn:#E6F5F0;--track-red:#FCEBEB;
+    --pill:#EDE9E2;
+  }
+  @media(prefers-color-scheme:dark){
+    :root{
+      --bg:#1C1C19;--card:#252521;--cb:rgba(255,255,255,0.08);--hdr:#222220;
+      --muted:#888884;--ink:#E4E2DB;--ink2:#AEACA6;--div:rgba(255,255,255,0.07);
+      --grn:#5DA890;--grn-bg:#0F3028;--grn-soft:#1A2E2A;
+      --amb:#EFA040;--amb-bg:#2E1E08;
+      --red:#E05555;--red-bg:#2C1010;
+      --bar:#4A4A44;--bar-max:#EFA040;
+      --track-grn:#1A2E2A;--track-red:#2E1010;
+      --pill:#2E2E2A;
+    }
+  }
+  body.light{
+    --bg:#F7F6F3;--card:#FFFFFF;--cb:#E2DED7;--hdr:#EEEAE3;
+    --muted:#8C8B85;--ink:#1A1A18;--ink2:#4A4A46;--div:#EDE9E2;
+    --grn:#4A7C6F;--grn-bg:#E6F5F0;--grn-soft:#CFE7DE;
+    --amb:#C97E28;--amb-bg:#FDF3E7;--red:#B03030;--red-bg:#FCEBEB;
+    --bar:#C9C5BC;--bar-max:#C97E28;
+    --track-grn:#E6F5F0;--track-red:#FCEBEB;--pill:#EDE9E2;
+  }
+  body.dark{
+    --bg:#1C1C19;--card:#252521;--cb:rgba(255,255,255,0.08);--hdr:#222220;
+    --muted:#888884;--ink:#E4E2DB;--ink2:#AEACA6;--div:rgba(255,255,255,0.07);
+    --grn:#5DA890;--grn-bg:#0F3028;--grn-soft:#1A2E2A;
+    --amb:#EFA040;--amb-bg:#2E1E08;--red:#E05555;--red-bg:#2C1010;
+    --bar:#4A4A44;--bar-max:#EFA040;
+    --track-grn:#1A2E2A;--track-red:#2E1010;--pill:#2E2E2A;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:var(--bg);color:var(--ink);
+    font-family:'DM Sans',sans-serif;
+    padding:32px 16px 80px;transition:background .2s,color .2s;
+  }
+  .wrap{max-width:1180px;margin:0 auto;}
+  header.page{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:8px;}
+  h1{font-size:20px;font-weight:500;letter-spacing:-.01em;}
+  .sub{font-size:12.5px;color:var(--muted);margin-top:4px;max-width:640px;line-height:1.5;}
+  .toggle{display:flex;gap:6px;background:var(--card);border:.5px solid var(--cb);border-radius:999px;padding:4px;}
+  .toggle button{font:inherit;font-size:12px;font-weight:500;border:none;background:none;color:var(--muted);padding:5px 12px;border-radius:999px;cursor:pointer;}
+  .toggle button.on{background:var(--pill);color:var(--ink);}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;margin-top:26px;align-items:start;}
+  .spec{display:flex;flex-direction:column;gap:12px;}
+  .spec-head{display:flex;align-items:baseline;gap:8px;}
+  .tag{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:999px;}
+  .tag.now{background:var(--red-bg);color:var(--red);}
+  .tag.rec{background:var(--grn-bg);color:var(--grn);}
+  .tag.alt{background:var(--amb-bg);color:var(--amb);}
+  .spec-title{font-size:14px;font-weight:500;}
+  .spec-note{font-size:12px;color:var(--muted);line-height:1.55;}
+  .spec-note b{color:var(--ink2);font-weight:500;}
+  ul.notes{list-style:none;font-size:12px;color:var(--muted);line-height:1.55;display:flex;flex-direction:column;gap:5px;}
+  ul.notes li{padding-left:14px;position:relative;}
+  ul.notes li:before{content:"";position:absolute;left:0;top:7px;width:5px;height:5px;border-radius:2px;background:var(--grn);}
+  ul.notes.warn li:before{background:var(--red);}
+
+  .phone{
+    width:300px;background:var(--card);border:.5px solid var(--cb);
+    border-radius:18px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.04);
+  }
+  .lbl{font-size:10.5px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;font-weight:500;}
+  .row{display:flex;justify-content:space-between;align-items:center;}
+  canvas{display:block;width:100%;}
+  .legend{display:flex;gap:10px;font-size:10px;color:var(--muted);}
+  .legend span{display:flex;align-items:center;gap:3px;}
+  .dot{width:8px;height:8px;border-radius:2px;display:inline-block;}
+  .chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:500;padding:3px 9px;border-radius:999px;}
+  .chip.good{background:var(--grn-bg);color:var(--grn);}
+  .chip.bad{background:var(--red-bg);color:var(--red);}
+  .footnote{font-size:10.5px;color:var(--muted);text-align:center;margin-top:8px;}
+  .insight{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:11px;border-top:.5px solid var(--div);}
+  .insight .ic{font-size:13px;color:var(--amb);}
+  .insight .tx{font-size:11.5px;color:var(--ink2);line-height:1.4;}
+  .insight .tx b{color:var(--ink);font-weight:500;}
+  .caption{font-size:10.5px;color:var(--muted);margin-top:10px;line-height:1.5;}
+  .caption b{color:var(--ink2);font-weight:500;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <div>
+      <h1>Last 7 Days tile — redesign explorations</h1>
+      <p class="sub">Same data across every version: Mon 16 – Sun 22, total ₹14,133, average of the 6 complete days ₹2,102/day, today (Sun 22) still in progress, ₹1,927 less than the previous 7 days. Tap any chart to select a day.</p>
+    </div>
+    <div class="toggle" id="themeToggle">
+      <button data-mode="auto" class="on">Auto</button>
+      <button data-mode="light">Light</button>
+      <button data-mode="dark">Dark</button>
+    </div>
+  </header>
+
+  <div class="grid">
+
+    <!-- 1. CURRENT -->
+    <section class="spec">
+      <div class="spec-head">
+        <span class="tag now">Current</span>
+        <span class="spec-title">What ships today</span>
+      </div>
+      <div class="phone">
+        <div class="row" style="margin-bottom:14px;">
+          <span class="lbl">Last 7 days</span>
+          <div class="legend">
+            <span><i class="dot" style="background:var(--grn)"></i>Below avg</span>
+            <span><i class="dot" style="background:var(--red)"></i>Above avg</span>
+          </div>
+        </div>
+        <div style="position:relative;"><canvas id="c-now" height="112"></canvas></div>
+        <p class="footnote">7-day average: ₹2,019/day</p>
+      </div>
+      <ul class="notes warn">
+        <li>Full-height color tracks make all 7 bars read as equal columns — bar height (the data) is drowned out.</li>
+        <li>No headline number. The only figure is a 10sp footnote; total spend is never stated.</li>
+        <li>“Above/below avg” is guaranteed by the math, so the legend spends prime space saying nothing.</li>
+        <li>Today is a partial day averaged against full days — it drags the average down and mis-colors the rest.</li>
+        <li>Red/green binary fails for ~8% of males and shames ₹80 of noise.</li>
+        <li>Avg line is drawn behind the bars and occluded; x-axis shows bare dates with no weekday context.</li>
+      </ul>
+    </section>
+
+    <!-- 2. VARIANT A -->
+    <section class="spec">
+      <div class="spec-head">
+        <span class="tag rec">A · Recommended</span>
+        <span class="spec-title">Glance-first</span>
+      </div>
+      <div class="phone">
+        <div class="row" style="align-items:flex-start;">
+          <div>
+            <span class="lbl">Last 7 days</span>
+            <div style="font-family:'Playfair Display',Georgia,serif;font-size:30px;font-weight:600;line-height:1.1;margin-top:4px;">₹14,133</div>
+          </div>
+          <span class="chip good" style="margin-top:16px;">↓ ₹1,927 · 12% less</span>
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin-top:2px;">vs ₹16,060 previous 7 days</p>
+        <div style="position:relative;margin-top:12px;"><canvas id="c-a" height="118"></canvas></div>
+        <p class="caption"><b>Single neutral accent, no tracks.</b> Bar height alone carries magnitude. Max day (Thu 19) picks up the amber accent and a direct value label, so the outlier is found without tapping. Avg line drawn <i>over</i> the bars and tagged inline. Weekday initials replace bare dates; weekends tinted. Today is outlined, not filled.</p>
+      </div>
+      <ul class="notes">
+        <li>Answers “how much / better or worse?” in under a second via total + delta chip — the pattern already proven in HomeThisWeekCard.</li>
+        <li>Kills the legend; the only two colors that remain are semantic (green = spent less, amber = the day to look at).</li>
+        <li>Excludes today from the average so the comparison is honest; today gets its own visual state.</li>
+      </ul>
+    </section>
+
+    <!-- 3. VARIANT B -->
+    <section class="spec">
+      <div class="spec-head">
+        <span class="tag alt">B · Insight strip</span>
+        <span class="spec-title">Adds a “so what?” row</span>
+      </div>
+      <div class="phone">
+        <div class="row" style="align-items:flex-start;">
+          <div>
+            <span class="lbl">Last 7 days</span>
+            <div style="font-family:'Playfair Display',Georgia,serif;font-size:30px;font-weight:600;line-height:1.1;margin-top:4px;">₹14,133</div>
+          </div>
+          <span class="chip good" style="margin-top:16px;">↓ 12%</span>
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin-top:2px;">₹2,102/day avg · 6 complete days</p>
+        <div style="position:relative;margin-top:12px;"><canvas id="c-b" height="104"></canvas></div>
+        <div class="insight">
+          <span class="ic">▲</span>
+          <span class="tx"><b>Thu 19 spiked to ₹3,120</b> — 48% above your daily average, driven by Shopping.</span>
+        </div>
+        <p class="caption"><b>Everything A, plus a one-line narrative</b> reusing your existing Smart-insights row style. This is the version that changes behaviour: it names the day, the size of the spike, and (wired to Rule 14 in HomeViewModel) the category. Chart shrinks by ~14px to pay for the row.</p>
+      </div>
+      <ul class="notes">
+        <li>Surfaces the Rule 14 “unusually high single day” signal you already compute but never show here.</li>
+        <li>Insight row is the natural tap target → opens that day’s transactions.</li>
+        <li>If no outlier exists (quiet week), the row degrades gracefully to a positive nudge.</li>
+      </ul>
+    </section>
+
+    <!-- 4. VARIANT C -->
+    <section class="spec">
+      <div class="spec-head">
+        <span class="tag alt">C · Compact</span>
+        <span class="spec-title">Space-constrained</span>
+      </div>
+      <div class="phone">
+        <div class="row" style="align-items:flex-start;">
+          <div>
+            <span class="lbl">Last 7 days</span>
+            <div style="font-family:'Playfair Display',Georgia,serif;font-size:26px;font-weight:600;line-height:1.1;margin-top:4px;">₹14,133</div>
+            <span class="chip good" style="margin-top:6px;">↓ 12% vs prev</span>
+          </div>
+          <div style="width:128px;position:relative;"><canvas id="c-c" height="62"></canvas></div>
+        </div>
+        <p style="font-size:10.5px;color:var(--muted);margin-top:10px;">Thu 19 was highest · ₹3,120</p>
+        <p class="caption"><b>Horizontal squeeze for dense layouts.</b> Numbers left, micro-bars right. Keeps the total, the delta and the max-day callout while cutting vertical cost roughly in half. Use when the tile must share a row or sit above the fold.</p>
+      </div>
+      <ul class="notes">
+        <li>Retains the three facts that matter: total, direction, worst day.</li>
+        <li>Micro-bars stay tappable; tooltip scales down to a floating pill.</li>
+      </ul>
+    </section>
+
+  </div>
+</div>
+
+<script>
+/* ── Shared data ─────────────────────────────────────────────── */
+const DAYS = [
+  {d:16, wd:'M', amt:1620, weekend:false, today:false},
+  {d:17, wd:'T', amt:2890, weekend:false, today:false},
+  {d:18, wd:'W', amt:1340, weekend:false, today:false},
+  {d:19, wd:'T', amt:3120, weekend:false, today:false},
+  {d:20, wd:'F', amt:1180, weekend:false, today:false},
+  {d:21, wd:'S', amt:2460, weekend:true,  today:false},
+  {d:22, wd:'S', amt:1523, weekend:true,  today:true },
+];
+const AVG_COMPLETE = 2102;            // 6 complete days only
+const AVG_ALL_7    = 2019;            // current tile's (wrong) average
+const TOTAL        = 14133;
+const MAX_I        = 3;               // Thu 19
+const MAX_AMT      = 3120;
+const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
+
+function css(v){ return getComputedStyle(document.body).getPropertyValue(v).trim(); }
+
+/* ── Canvas helper (DPR-aware, redraw on theme change) ───────── */
+const drawings = [];
+function setup(id, h, draw){
+  const cv = document.getElementById(id);
+  const state = {cv, h, draw, sel:null};
+  drawings.push(state);
+  render(state);
+  cv.addEventListener('click', e=>{
+    const r = cv.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width;
+    const slot = 1 / DAYS.length;
+    const i = Math.min(DAYS.length-1, Math.floor(x/slot));
+    state.sel = (state.sel === i) ? null : i;
+    render(state);
+  });
+  return state;
+}
+function render(st){
+  const {cv, h, draw} = st;
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth || cv.parentElement.clientWidth;
+  cv.width = w*dpr; cv.height = h*dpr;
+  cv.style.height = h+'px';
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  draw(ctx, w, h, st.sel);
+}
+function roundRect(ctx,x,y,w,h,r){
+  r = Math.min(r, w/2, h);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+function pill(ctx, text, cx, y, bg, fg, fs){
+  ctx.font = '500 '+fs+'px DM Sans, sans-serif';
+  const tw = ctx.measureText(text).width;
+  const pw = tw + 14, ph = fs + 9, px = cx - pw/2;
+  ctx.fillStyle = bg;
+  roundRect(ctx, px, y, pw, ph, ph/2); ctx.fill();
+  ctx.fillStyle = fg; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(text, cx, y + ph/2 + .5);
+  return ph;
+}
+
+/* ── 1. CURRENT: full-height tracks, red/green by avg, occluded line ── */
+setup('c-now', 112, (ctx,w,h,sel)=>{
+  const ink=css('--ink'), muted=css('--muted');
+  const grn=css('--grn'), red=css('--red');
+  const tGrn=css('--track-grn'), tRed=css('--track-red');
+  const labelH = 16, chartH = h - labelH;
+  const slot = w/DAYS.length, bw = slot*0.55, gap=(slot-bw)/2;
+  const max = 3400;                                  // headroom like the app
+
+  // dashed avg line drawn FIRST → gets covered by bars (the bug)
+  const ay = chartH * (1 - AVG_ALL_7/max);
+  ctx.strokeStyle='rgba(136,136,132,.5)'; ctx.lineWidth=1;
+  ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(0,ay); ctx.lineTo(w,ay); ctx.stroke();
+  ctx.setLineDash([]);
+
+  DAYS.forEach((dy,i)=>{
+    const x = i*slot+gap, above = dy.amt > AVG_ALL_7;
+    ctx.fillStyle = above ? tRed : tGrn;
+    roundRect(ctx, x, 0, bw, chartH, 4); ctx.fill();       // full-height track
+    const bh = chartH * (dy.amt/max);
+    ctx.fillStyle = above ? red : grn;
+    roundRect(ctx, x, chartH-bh, bw, bh, 4); ctx.fill();
+    ctx.fillStyle = muted; ctx.font='400 10px DM Sans, sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText(dy.d, x+bw/2, chartH+4);
+  });
+});
+
+/* ── Shared bar renderer for A & B ────────────────────────────── */
+function paintModern(ctx,w,h,sel,opts){
+  const bar=css('--bar'), barMax=css('--bar-max'), muted=css('--muted'),
+        ink=css('--ink'), card=css('--card');
+  const labelH = opts.labelH, padTop = opts.padTop;
+  const chartH = h - labelH;
+  const slot = w/DAYS.length, bw = slot*0.5, gap=(slot-bw)/2;
+  const max = MAX_AMT * 1.12;
+
+  // weekend bands
+  ctx.fillStyle = 'rgba(136,136,132,.06)';
+  DAYS.forEach((dy,i)=>{ if(dy.weekend) ctx.fillRect(i*slot, 0, slot, chartH); });
+
+  // bars: neutral, no tracks
+  DAYS.forEach((dy,i)=>{
+    const x=i*slot+gap, bh=chartH*(dy.amt/max), yTop=chartH-bh;
+    if(dy.today){
+      // today = in progress → dashed outline, faint fill
+      ctx.fillStyle = 'rgba(136,136,132,.14)';
+      roundRect(ctx,x,yTop,bw,bh,4); ctx.fill();
+      ctx.strokeStyle = muted; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+      roundRect(ctx,x+.5,yTop+.5,bw-1,bh-1,4); ctx.stroke(); ctx.setLineDash([]);
+    } else if(i===MAX_I){
+      ctx.fillStyle = barMax;
+      roundRect(ctx,x,yTop,bw,bh,4); ctx.fill();
+    } else {
+      ctx.fillStyle = sel===i ? ink : bar;
+      roundRect(ctx,x,yTop,bw,bh,4); ctx.fill();
+    }
+    if(sel===i && i!==MAX_I && !dy.today){
+      ctx.strokeStyle=ink; ctx.lineWidth=1.5;
+      roundRect(ctx,x+.75,yTop+.75,bw-1.5,bh-1.5,4); ctx.stroke();
+    }
+  });
+
+  // avg line OVER the bars + inline tag
+  const ay = chartH*(1 - AVG_COMPLETE/max);
+  ctx.strokeStyle='rgba(136,136,132,.65)'; ctx.lineWidth=1;
+  ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(0,ay); ctx.lineTo(w,ay); ctx.stroke();
+  ctx.setLineDash([]);
+  pill(ctx, 'avg '+inr(AVG_COMPLETE), w-30, ay-19, css('--pill'), muted, 9.5);
+
+  // direct value label on max bar
+  const mx = MAX_I*slot+gap+bw/2, my = chartH*(1-MAX_AMT/max);
+  pill(ctx, inr(MAX_AMT), mx, Math.max(0, my-24), barMax, card, 10.5);
+
+  // labels: weekday initials (weekend bolder), date below, "today" dot
+  DAYS.forEach((dy,i)=>{
+    const cx=i*slot+slot/2;
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.font = (dy.weekend?'500 ':'400 ')+'9.5px DM Sans, sans-serif';
+    ctx.fillStyle = dy.weekend ? ink : muted;
+    ctx.fillText(dy.wd, cx, chartH+3);
+    ctx.font='400 9.5px DM Sans, sans-serif';
+    ctx.fillStyle = dy.today ? ink : 'rgba(136,136,132,.7)';
+    ctx.fillText(dy.d, cx, chartH+14);
+    if(dy.today){ ctx.fillStyle=ink; ctx.beginPath(); ctx.arc(cx, chartH+29, 1.6, 0, 7); ctx.fill(); }
+  });
+
+  // selected-day tooltip
+  if(sel!=null){
+    const dy=DAYS[sel], cx=dy===DAYS[0]? 26 : Math.min(w-26, sel*slot+slot/2);
+    const label = dy.d+' · '+(dy.today?'so far':'')+' '+inr(dy.amt);
+    pill(ctx, label, cx, 0, css('--ink'), card, 10);
+  }
+}
+
+setup('c-a', 118, (ctx,w,h,sel)=>paintModern(ctx,w,h,sel,{labelH:28}));
+setup('c-b', 104, (ctx,w,h,sel)=>paintModern(ctx,w,h,sel,{labelH:28}));
+
+/* ── 4. COMPACT: numbers left, micro-bars right ───────────────── */
+setup('c-c', 62, (ctx,w,h,sel)=>{
+  const bar=css('--bar'), barMax=css('--bar-max'), muted=css('--muted'), ink=css('--ink'), card=css('--card');
+  const slot=w/DAYS.length, bw=slot*0.55, gap=(slot-bw)/2;
+  const max=MAX_AMT*1.12;
+  DAYS.forEach((dy,i)=>{
+    const x=i*slot+gap, bh=h*(dy.amt/max), y=h-bh;
+    if(dy.today){
+      ctx.fillStyle='rgba(136,136,132,.14)'; roundRect(ctx,x,y,bw,bh,3); ctx.fill();
+      ctx.strokeStyle=muted; ctx.lineWidth=1; ctx.setLineDash([2,2]);
+      roundRect(ctx,x+.5,y+.5,bw-1,bh-1,3); ctx.stroke(); ctx.setLineDash([]);
+    } else {
+      ctx.fillStyle = i===MAX_I ? barMax : (sel===i?ink:bar);
+      roundRect(ctx,x,y,bw,bh,3); ctx.fill();
+    }
+  });
+  const ay=h*(1-AVG_COMPLETE/max);
+  ctx.strokeStyle='rgba(136,136,132,.6)'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(0,ay); ctx.lineTo(w,ay); ctx.stroke(); ctx.setLineDash([]);
+  if(sel!=null){
+    const cx=Math.min(w-20, sel*slot+slot/2);
+    pill(ctx, inr(DAYS[sel].amt), cx, 0, css('--ink'), card, 9.5);
+  }
+});
+
+/* ── Theme toggle + live redraw ───────────────────────────────── */
+const modeButtons = document.querySelectorAll('#themeToggle button');
+modeButtons.forEach(b=>b.addEventListener('click',()=>{
+  modeButtons.forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  document.body.classList.remove('light','dark');
+  const m=b.dataset.mode;
+  if(m==='light'||m==='dark') document.body.classList.add(m);
+  drawings.forEach(render);
+}));
+// system theme switch → redraw
+new MutationObserver(()=>drawings.forEach(render)).observe(document.body,{attributes:true,attributeFilter:['class']});
+window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>{
+  if(!document.body.classList.contains('light') && !document.body.classList.contains('dark'))
+    drawings.forEach(render);
+});
+window.addEventListener('resize',()=>drawings.forEach(render));
+// redraw once webfont lands so canvas text uses DM Sans
+if(document.fonts && document.fonts.ready) document.fonts.ready.then(()=>drawings.forEach(render));
+</script>
+</body>
+</html>

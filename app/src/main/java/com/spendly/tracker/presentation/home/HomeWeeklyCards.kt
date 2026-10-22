@@ -5,18 +5,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.TrendingDown
 import androidx.compose.material.icons.outlined.TrendingUp
@@ -35,14 +33,20 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.spendly.tracker.ui.components.cards.SpendlyCardV2
 import com.spendly.tracker.ui.theme.Spacing
+import com.spendly.tracker.ui.theme.spendAmber
 import com.spendly.tracker.ui.theme.spendGreen
 import com.spendly.tracker.ui.theme.spendGreenBg
 import com.spendly.tracker.ui.theme.spendRed
@@ -50,6 +54,7 @@ import com.spendly.tracker.ui.theme.spendRedBg
 import com.spendly.tracker.ui.theme.textMuted
 import com.spendly.tracker.utils.CurrencyFormatter
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -141,27 +146,56 @@ fun HomeThisWeekCard(
     }
 }
 
+/**
+ * Last-7-days tile — glance-first variant.
+ *
+ * Leads with the period total and a delta chip against the previous 7 days, then
+ * corroborates with a trackless bar chart: bar height alone carries magnitude, the
+ * highest complete day is picked out in amber with a direct value label, the average
+ * is drawn over the bars as a tagged line, and the in-progress day is outlined rather
+ * than filled so it is never mistaken for a finished one.
+ */
 @Composable
 fun HomeLast7DaysCard(
     last7DaysSpend: List<Pair<LocalDate, BigDecimal>>,
+    previous7DaysTotal: BigDecimal,
     currency: String,
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (last7DaysSpend.isEmpty()) return
 
-    val amounts = last7DaysSpend.map { it.second.toFloat() }
-    val avgAmount = if (amounts.isNotEmpty()) amounts.average().toFloat() else 0f
-    val avgFormatted = CurrencyFormatter.formatCurrency(
-        BigDecimal(avgAmount.toDouble().coerceAtLeast(0.0)), currency
-    )
+    val today = LocalDate.now()
+    val todayIndex = last7DaysSpend.indexOfLast { it.first == today }
 
-    val greenColor = MaterialTheme.colorScheme.spendGreen
-    val redColor = MaterialTheme.colorScheme.spendRed
-    val greenBgColor = MaterialTheme.colorScheme.spendGreenBg
-    val redBgColor = MaterialTheme.colorScheme.spendRedBg
-    val avgLineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+    // Average over complete days only — a partial today must not drag it down.
+    val completeAmounts = last7DaysSpend
+        .filter { it.first != today }
+        .map { it.second.toFloat() }
+    val avgAmount = if (completeAmounts.isNotEmpty())
+        completeAmounts.average().toFloat()
+    else
+        last7DaysSpend.map { it.second.toFloat() }.average().toFloat()
+
+    // Highlight the highest *finished* day; a partial today can never be "the spike".
+    val maxIndex = last7DaysSpend.indices
+        .filter { it != todayIndex }
+        .maxByOrNull { last7DaysSpend[it].second.toFloat() } ?: -1
+
+    val total = last7DaysSpend.fold(BigDecimal.ZERO) { acc, e -> acc + e.second }
+    val delta = total - previous7DaysTotal
+    val isHigher = delta > BigDecimal.ZERO
+    val showDelta = previous7DaysTotal > BigDecimal.ZERO
+    val percent = if (previous7DaysTotal > BigDecimal.ZERO) {
+        delta.abs().multiply(BigDecimal(100))
+            .divide(previous7DaysTotal, 0, RoundingMode.HALF_UP).toInt()
+    } else null
+
+    val neutralBarColor = MaterialTheme.colorScheme.onSurface
+    val accentColor = MaterialTheme.colorScheme.spendAmber
+    val onAccentColor = if (accentColor.luminance() > 0.5f) Color(0xFF1A1A18) else Color.White
     val mutedColor = MaterialTheme.colorScheme.textMuted
+    val avgLineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
     val tooltipBg = MaterialTheme.colorScheme.inverseSurface
     val tooltipFg = MaterialTheme.colorScheme.inverseOnSurface
 
@@ -177,10 +211,32 @@ fun HomeLast7DaysCard(
                 color = MaterialTheme.colorScheme.textMuted,
                 letterSpacing = 0.66.sp
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                LegendDot(color = greenColor, label = "Below avg")
-                LegendDot(color = redColor, label = "Above avg")
+            if (showDelta) {
+                DeltaChip(
+                    delta = delta,
+                    percent = percent,
+                    isHigher = isHigher,
+                    currency = currency
+                )
             }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Text(
+            text = CurrencyFormatter.formatCurrencyWhole(total, currency),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        if (showDelta) {
+            Text(
+                text = "vs ${CurrencyFormatter.formatCurrencyWhole(previous7DaysTotal, currency)} previous 7 days",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.textMuted,
+                modifier = Modifier.padding(top = 2.dp)
+            )
         }
 
         Spacer(modifier = Modifier.height(Spacing.md))
@@ -189,48 +245,66 @@ fun HomeLast7DaysCard(
             data = last7DaysSpend,
             currency = currency,
             avgAmount = avgAmount,
-            greenColor = greenColor,
-            redColor = redColor,
-            greenBgColor = greenBgColor,
-            redBgColor = redBgColor,
-            avgLineColor = avgLineColor,
+            maxIndex = maxIndex,
+            neutralColor = neutralBarColor,
+            accentColor = accentColor,
+            onAccentColor = onAccentColor,
             mutedColor = mutedColor,
+            avgLineColor = avgLineColor,
             tooltipBg = tooltipBg,
             tooltipFg = tooltipFg,
             modifier = Modifier.fillMaxWidth()
         )
+    }
+}
 
+/** Pill showing the change vs the previous 7 days — direction, absolute and percent. */
+@Composable
+private fun DeltaChip(
+    delta: BigDecimal,
+    percent: Int?,
+    isHigher: Boolean,
+    currency: String
+) {
+    val fg = if (isHigher) MaterialTheme.colorScheme.spendRed
+             else MaterialTheme.colorScheme.spendGreen
+    val bg = if (isHigher) MaterialTheme.colorScheme.spendRedBg
+             else MaterialTheme.colorScheme.spendGreenBg
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .background(bg, RoundedCornerShape(50))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Icon(
+            imageVector = if (isHigher) Icons.Outlined.TrendingUp else Icons.Outlined.TrendingDown,
+            contentDescription = null,
+            modifier = Modifier.size(12.dp),
+            tint = fg
+        )
+        Spacer(modifier = Modifier.width(3.dp))
         Text(
-            text = "7-day average: $avgFormatted/day",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.textMuted,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = Spacing.sm)
+            text = buildString {
+                append(CurrencyFormatter.formatCurrencyWhole(delta.abs(), currency))
+                percent?.let { append(" · $it%") }
+                append(if (isHigher) " more" else " less")
+            },
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+            fontWeight = FontWeight.Medium,
+            color = fg
         )
     }
 }
 
-@Composable
-private fun LegendDot(color: Color, label: String) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
-    ) {
-        Canvas(modifier = Modifier.size(8.dp)) {
-            drawRoundRect(
-                color = color,
-                size = Size(size.width, size.height),
-                cornerRadius = CornerRadius(2.dp.toPx())
-            )
-        }
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-            color = color
-        )
-    }
+private fun weekdayInitial(day: DayOfWeek): String = when (day) {
+    DayOfWeek.MONDAY -> "M"
+    DayOfWeek.TUESDAY -> "T"
+    DayOfWeek.WEDNESDAY -> "W"
+    DayOfWeek.THURSDAY -> "T"
+    DayOfWeek.FRIDAY -> "F"
+    DayOfWeek.SATURDAY -> "S"
+    DayOfWeek.SUNDAY -> "S"
 }
 
 @Composable
@@ -238,144 +312,262 @@ private fun SpendingBarChart(
     data: List<Pair<LocalDate, BigDecimal>>,
     currency: String,
     avgAmount: Float,
-    greenColor: Color,
-    redColor: Color,
-    greenBgColor: Color,
-    redBgColor: Color,
-    avgLineColor: Color,
+    maxIndex: Int,
+    neutralColor: Color,
+    accentColor: Color,
+    onAccentColor: Color,
     mutedColor: Color,
+    avgLineColor: Color,
     tooltipBg: Color,
     tooltipFg: Color,
     modifier: Modifier = Modifier
 ) {
     var selectedIndex by remember { mutableStateOf<Int?>(null) }
+    val textMeasurer = rememberTextMeasurer()
+    val today = remember(data) { LocalDate.now() }
+    val todayIndex = remember(data) { data.indexOfLast { it.first == today } }
 
-    val tooltipTexts = remember(data, currency) {
-        data.map { (_, amount) -> CurrencyFormatter.formatCurrency(amount, currency) }
+    val valueTexts = remember(data, currency) {
+        data.map { (_, amount) -> CurrencyFormatter.formatCurrencyWhole(amount, currency) }
+    }
+    val avgText = remember(avgAmount, currency) {
+        "avg " + CurrencyFormatter.formatCurrencyWhole(
+            BigDecimal(avgAmount.toDouble().coerceAtLeast(0.0)), currency
+        )
+    }
+
+    val a11ySummary = remember(data, avgAmount, currency) {
+        buildString {
+            append("Daily spending for the last 7 days: ")
+            data.forEachIndexed { i, (date, amount) ->
+                if (i > 0) append(", ")
+                append(date.dayOfMonth)
+                append(" ")
+                append(CurrencyFormatter.formatCurrencyWhole(amount, currency))
+            }
+            append(". Average ")
+            append(
+                CurrencyFormatter.formatCurrencyWhole(
+                    BigDecimal(avgAmount.toDouble().coerceAtLeast(0.0)), currency
+                )
+            )
+            append(" per day.")
+        }
     }
 
     Column(modifier = modifier) {
-        // Chart area: BoxWithConstraints so we can position the tooltip overlay using Dp
-        BoxWithConstraints(
+        Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(88.dp)
-        ) {
-            val chartWidth = maxWidth
-            val tooltipW = 72.dp
-            val tooltipH = 22.dp
-            val chartTopDp = tooltipH + 4.dp
-
-            // Bars drawn on Canvas
-            Canvas(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(data) {
-                        detectTapGestures { offset ->
-                            val slotW = size.width.toFloat() / data.size
-                            val tapped = (offset.x / slotW).toInt().coerceIn(0, data.size - 1)
-                            selectedIndex = if (selectedIndex == tapped) null else tapped
-                        }
+                .height(92.dp)
+                .pointerInput(data) {
+                    detectTapGestures { offset ->
+                        val slotW = size.width.toFloat() / data.size
+                        val tapped = (offset.x / slotW).toInt().coerceIn(0, data.size - 1)
+                        selectedIndex = if (selectedIndex == tapped) null else tapped
                     }
-            ) {
-                val w = size.width
-                val h = size.height
-                val chartTopPx = chartTopDp.toPx()
-                val chartH = h - chartTopPx
-
-                val barCount = data.size
-                val maxAmt = data.maxOfOrNull { it.second.toFloat() }?.coerceAtLeast(1f) ?: 1f
-                val slotWidth = w / barCount
-                val barWidth = slotWidth * 0.55f
-                val barGap = (slotWidth - barWidth) / 2f
-                val cornerR = CornerRadius(4.dp.toPx())
-
-                // Dashed average line
-                if (avgAmount > 0f) {
-                    val avgY = chartTopPx + chartH * (1f - avgAmount / maxAmt)
-                    drawLine(
-                        color = avgLineColor,
-                        start = Offset(0f, avgY),
-                        end = Offset(w, avgY),
-                        strokeWidth = 1.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(16f, 12f))
-                    )
                 }
+                .semantics { contentDescription = a11ySummary }
+        ) {
+            val w = size.width
+            val h = size.height
+            val labelReserve = 18.dp.toPx()   // headroom for the value + avg pills
+            val chartTop = labelReserve
+            val chartH = h - chartTop
 
-                data.forEachIndexed { i, (_, amount) ->
-                    val amt = amount.toFloat()
-                    val isAbove = amt > avgAmount
-                    val barH = if (maxAmt > 0f) chartH * (amt / maxAmt) else 0f
-                    val x = i * slotWidth + barGap
-                    val barColor = if (isAbove) redColor else greenColor
-                    val bgColor  = if (isAbove) redBgColor else greenBgColor
-                    val isSelected = selectedIndex == i
-                    val finalBg = if (isSelected)
-                        bgColor.copy(alpha = (bgColor.alpha + 0.25f).coerceAtMost(1f))
-                    else bgColor
+            val barCount = data.size
+            val maxAmt = (data.maxOfOrNull { it.second.toFloat() } ?: 0f).coerceAtLeast(1f)
+            val scaleMax = maxAmt * 1.12f
+            val slotWidth = w / barCount
+            val barWidth = slotWidth * 0.5f
+            val barGap = (slotWidth - barWidth) / 2f
+            val cornerR = CornerRadius(4.dp.toPx())
 
-                    drawRoundRect(
-                        color = finalBg,
-                        topLeft = Offset(x, chartTopPx),
-                        size = Size(barWidth, chartH),
-                        cornerRadius = cornerR
+            // Faint weekend bands — spending patterns are weekday/weekend correlated.
+            data.forEachIndexed { i, (date, _) ->
+                if (date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY) {
+                    drawRect(
+                        color = neutralColor.copy(alpha = 0.04f),
+                        topLeft = Offset(i * slotWidth, chartTop),
+                        size = Size(slotWidth, chartH)
                     )
-                    if (barH > 0.5f) {
-                        drawRoundRect(
-                            color = barColor,
-                            topLeft = Offset(x, chartTopPx + chartH - barH),
-                            size = Size(barWidth, barH),
-                            cornerRadius = cornerR
-                        )
-                    }
                 }
             }
 
-            // Tooltip Compose overlay (avoids native canvas text)
-            selectedIndex?.let { idx ->
-                val slotWidthDp = chartWidth / data.size
-                val barCenterX = slotWidthDp * idx + slotWidthDp / 2
-                val tooltipX = (barCenterX - tooltipW / 2)
-                    .coerceIn(0.dp, chartWidth - tooltipW)
+            // Bars — no background tracks; height alone carries magnitude.
+            data.forEachIndexed { i, (_, amount) ->
+                val amt = amount.toFloat()
+                val x = i * slotWidth + barGap
+                val barH = chartH * (amt / scaleMax)
+                val yTop = chartTop + chartH - barH
 
-                Box(
-                    modifier = Modifier
-                        .offset(x = tooltipX, y = 0.dp)
-                        .size(width = tooltipW, height = tooltipH)
-                        .background(color = tooltipBg, shape = CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = tooltipTexts.getOrElse(idx) { "" },
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        fontWeight = FontWeight.Bold,
-                        color = tooltipFg,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 6.dp)
+                if (i == todayIndex) {
+                    // In progress: faint fill + dashed outline, never solid.
+                    drawRoundRect(
+                        color = neutralColor.copy(alpha = 0.10f),
+                        topLeft = Offset(x, yTop),
+                        size = Size(barWidth, barH),
+                        cornerRadius = cornerR
+                    )
+                    if (barH > 1.dp.toPx()) {
+                        drawRoundRect(
+                            color = neutralColor.copy(alpha = 0.55f),
+                            topLeft = Offset(x, yTop),
+                            size = Size(barWidth, barH),
+                            cornerRadius = cornerR,
+                            style = Stroke(
+                                width = 1.dp.toPx(),
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f))
+                            )
+                        )
+                    }
+                } else {
+                    val barColor = when {
+                        i == maxIndex && amt > 0f -> accentColor
+                        selectedIndex == i -> neutralColor.copy(alpha = 0.45f)
+                        else -> neutralColor.copy(alpha = 0.22f)
+                    }
+                    drawRoundRect(
+                        color = barColor,
+                        topLeft = Offset(x, yTop),
+                        size = Size(barWidth, barH),
+                        cornerRadius = cornerR
                     )
                 }
+            }
+
+            // Average line drawn OVER the bars so it is never occluded.
+            if (avgAmount > 0f) {
+                val avgY = chartTop + chartH * (1f - avgAmount / scaleMax)
+                drawLine(
+                    color = avgLineColor,
+                    start = Offset(0f, avgY),
+                    end = Offset(w, avgY),
+                    strokeWidth = 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
+                )
+                // Inline tag replaces the old legend + footnote.
+                val tagLayout = textMeasurer.measure(
+                    text = avgText,
+                    style = TextStyle(
+                        color = tooltipFg,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                )
+                val tagW = tagLayout.size.width + 12.dp.toPx()
+                val tagH = tagLayout.size.height + 6.dp.toPx()
+                val tagX = (w - tagW - 2.dp.toPx()).coerceAtLeast(0f)
+                val tagY = (avgY - tagH - 3.dp.toPx()).coerceAtLeast(0f)
+                drawRoundRect(
+                    color = tooltipBg,
+                    topLeft = Offset(tagX, tagY),
+                    size = Size(tagW, tagH),
+                    cornerRadius = CornerRadius(tagH / 2)
+                )
+                drawText(
+                    textLayoutResult = tagLayout,
+                    topLeft = Offset(tagX + 6.dp.toPx(), tagY + 3.dp.toPx())
+                )
+            }
+
+            // Direct value label on the highest finished day.
+            if (maxIndex in data.indices) {
+                val maxAmtValue = data[maxIndex].second.toFloat()
+                if (maxAmtValue > 0f && selectedIndex != maxIndex) {
+                    val valLayout = textMeasurer.measure(
+                        text = valueTexts[maxIndex],
+                        style = TextStyle(
+                            color = onAccentColor,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                    val pw = valLayout.size.width + 14.dp.toPx()
+                    val ph = valLayout.size.height + 8.dp.toPx()
+                    val cx = maxIndex * slotWidth + slotWidth / 2
+                    val barTop = chartTop + chartH * (1f - maxAmtValue / scaleMax)
+                    val px = (cx - pw / 2).coerceIn(0f, w - pw)
+                    val py = (barTop - ph - 4.dp.toPx()).coerceAtLeast(0f)
+                    drawRoundRect(
+                        color = accentColor,
+                        topLeft = Offset(px, py),
+                        size = Size(pw, ph),
+                        cornerRadius = CornerRadius(ph / 2)
+                    )
+                    drawText(
+                        textLayoutResult = valLayout,
+                        topLeft = Offset(px + 7.dp.toPx(), py + 4.dp.toPx())
+                    )
+                }
+            }
+
+            // Tap-to-inspect tooltip.
+            selectedIndex?.let { idx ->
+                val tipLayout = textMeasurer.measure(
+                    text = valueTexts.getOrElse(idx) { "" },
+                    style = TextStyle(
+                        color = tooltipFg,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+                val tw = tipLayout.size.width + 14.dp.toPx()
+                val th = tipLayout.size.height + 8.dp.toPx()
+                val cx = idx * slotWidth + slotWidth / 2
+                val tx = (cx - tw / 2).coerceIn(0f, w - tw)
+                drawRoundRect(
+                    color = tooltipBg,
+                    topLeft = Offset(tx, 0f),
+                    size = Size(tw, th),
+                    cornerRadius = CornerRadius(th / 2)
+                )
+                drawText(
+                    textLayoutResult = tipLayout,
+                    topLeft = Offset(tx + 7.dp.toPx(), 4.dp.toPx())
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // X-axis day labels — bold + highlighted when selected
+        // Weekday initial + date, weekend-tinted, today marked with a dot.
         Row(modifier = Modifier.fillMaxWidth()) {
             data.forEachIndexed { i, (date, _) ->
-                Text(
-                    text = date.dayOfMonth.toString(),
+                val isToday = i == todayIndex
+                val isWeekend = date.dayOfWeek == DayOfWeek.SATURDAY ||
+                    date.dayOfWeek == DayOfWeek.SUNDAY
+                val isSelected = selectedIndex == i
+
+                Column(
                     modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = if (selectedIndex == i) 11.sp else 10.sp),
-                    fontWeight = if (selectedIndex == i) FontWeight.Bold else FontWeight.Normal,
-                    color = if (selectedIndex == i) MaterialTheme.colorScheme.onSurface else mutedColor
-                )
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = weekdayInitial(date.dayOfWeek),
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        fontWeight = if (isWeekend) FontWeight.Medium else FontWeight.Normal,
+                        color = if (isWeekend) MaterialTheme.colorScheme.onSurface else mutedColor
+                    )
+                    Text(
+                        text = date.dayOfMonth.toString(),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = if (isToday || isSelected) 10.5.sp else 9.5.sp
+                        ),
+                        fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isToday || isSelected)
+                            MaterialTheme.colorScheme.onSurface else mutedColor
+                    )
+                    if (isToday) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(3.dp)
+                                .background(MaterialTheme.colorScheme.onSurface, CircleShape)
+                        )
+                    }
+                }
             }
         }
     }
 }
-
-
-
-

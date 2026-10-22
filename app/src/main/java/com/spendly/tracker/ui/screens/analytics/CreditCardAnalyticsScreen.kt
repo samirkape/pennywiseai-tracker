@@ -1,5 +1,6 @@
 package com.spendly.tracker.ui.screens.analytics
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -22,6 +23,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -36,6 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.spendly.tracker.data.database.entity.TransactionEntity
+import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.screens.analytics.CreditCardAnalyticsViewModel.ViewMode
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing
@@ -60,6 +66,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 private enum class PickerTarget { GLOBAL, CARD }
+private enum class BreakdownMode { CATEGORY, CARD, LENT }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,6 +77,61 @@ fun CreditCardAnalyticsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var pickerTarget by rememberSaveable { mutableStateOf<PickerTarget?>(null) }
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var selectedLent by remember { mutableStateOf<String?>(null) }
+    var breakdownMode by rememberSaveable { mutableStateOf(BreakdownMode.CATEGORY) }
+
+    // Fall back to categories if the lent data disappears while the Lent view is open.
+    LaunchedEffect(uiState.lentBreakdown.isEmpty(), breakdownMode) {
+        if (breakdownMode == BreakdownMode.LENT && uiState.lentBreakdown.isEmpty()) {
+            breakdownMode = BreakdownMode.CATEGORY
+        }
+    }
+
+    val categorySlices = remember(uiState.categoryBreakdown) {
+        uiState.categoryBreakdown.map { c ->
+            BreakdownSlice(
+                label = c.name,
+                amount = c.amount,
+                percentage = c.percentage,
+                transactionCount = c.transactionCount,
+                color = categoryBreakdownColor(c.name),
+            )
+        }
+    }
+    val cardSlices = remember(uiState.cardBreakdown) {
+        uiState.cardBreakdown.mapIndexed { index, c ->
+            BreakdownSlice(
+                label = c.displayName,
+                amount = c.amount,
+                percentage = c.percentage,
+                transactionCount = c.transactionCount,
+                color = spendingBreakdownPalette[index % spendingBreakdownPalette.size],
+            )
+        }
+    }
+    val selectedCardLabel = remember(uiState.cardBreakdown, uiState.selectedCardKey) {
+        uiState.cardBreakdown.firstOrNull { it.key == uiState.selectedCardKey }?.displayName
+    }
+    val lentSlices = remember(uiState.lentBreakdown, uiState.totalLent) {
+        val totalLent = uiState.totalLent.toFloat()
+        uiState.lentBreakdown.mapIndexed { index, lent ->
+            BreakdownSlice(
+                label = lent.personName,
+                amount = lent.amount,
+                percentage = if (totalLent > 0f) lent.amount.toFloat() / totalLent * 100f else 0f,
+                transactionCount = lent.transactionCount,
+                color = spendingBreakdownPalette[index % spendingBreakdownPalette.size],
+            )
+        }
+    }
+
+    // Drop the selection if the refreshed breakdown no longer contains that category.
+    LaunchedEffect(uiState.categoryBreakdown) {
+        if (selectedCategory != null && uiState.categoryBreakdown.none { it.name == selectedCategory }) {
+            selectedCategory = null
+        }
+    }
 
     val activeRange: Pair<LocalDate, LocalDate> = remember(
         uiState.view, uiState.payPeriodStart, uiState.payPeriodEnd,
@@ -179,6 +241,67 @@ fun CreditCardAnalyticsScreen(
                 )
             }
 
+            if (uiState.categoryBreakdown.isNotEmpty() || uiState.cardBreakdown.isNotEmpty() || uiState.lentBreakdown.isNotEmpty()) {
+                item(key = "category-chart") {
+                    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                        SectionHeaderV2(
+                            title = when (breakdownMode) {
+                                BreakdownMode.CATEGORY -> "Spending by category"
+                                BreakdownMode.CARD -> "Spending by card"
+                                BreakdownMode.LENT -> "Lent"
+                            },
+                            action = {
+                                BreakdownToggle(
+                                    selected = breakdownMode,
+                                    showLent = uiState.lentBreakdown.isNotEmpty(),
+                                    onSelect = { breakdownMode = it },
+                                )
+                            },
+                        )
+                        when (breakdownMode) {
+                            BreakdownMode.CATEGORY -> SpendingBreakdownCard(
+                                slices = categorySlices,
+                                currency = uiState.currency,
+                                selectedLabel = selectedCategory,
+                                onSliceClick = { slice ->
+                                    selectedCategory = if (selectedCategory == slice.label) null else slice.label
+                                },
+                                onClearSelection = { selectedCategory = null },
+                            )
+                            BreakdownMode.CARD -> SpendingBreakdownCard(
+                                slices = cardSlices,
+                                currency = uiState.currency,
+                                selectedLabel = selectedCardLabel,
+                                onSliceClick = { slice ->
+                                    val card = uiState.cardBreakdown.find { it.displayName == slice.label }
+                                    viewModel.setSelectedCardKey(
+                                        if (card?.key == uiState.selectedCardKey) null else card?.key,
+                                    )
+                                },
+                                onClearSelection = { viewModel.setSelectedCardKey(null) },
+                            )
+                            BreakdownMode.LENT -> SpendingBreakdownCard(
+                                slices = lentSlices,
+                                currency = uiState.currency,
+                                selectedLabel = selectedLent,
+                                onSliceClick = { slice ->
+                                    selectedLent = if (selectedLent == slice.label) null else slice.label
+                                },
+                                onClearSelection = { selectedLent = null },
+                            )
+                        }
+                        if (breakdownMode == BreakdownMode.LENT) {
+                            Text(
+                                text = "Money lent is tracked under Lent & Borrowed and is excluded from spending.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = Spacing.xs),
+                            )
+                        }
+                    }
+                }
+            }
+
             if (uiState.transactions.isEmpty() && !uiState.isLoading) {
                 item { EmptyCreditCardState() }
             } else {
@@ -200,14 +323,23 @@ fun CreditCardAnalyticsScreen(
             currentDay = uiState.globalBillingCycleDay,
             onConfirm = { day ->
                 viewModel.updateGlobalBillingCycleDay(day)
+                // Show the result immediately instead of leaving the user in Pay Period view.
+                viewModel.setView(ViewMode.BILLING_CYCLE)
                 pickerTarget = null
             },
             onDismiss = { pickerTarget = null },
         )
         PickerTarget.CARD -> {
             val cardKey = uiState.selectedCardKey
-            val card = cardKey?.let { k -> uiState.availableCards.find { it.key == k } }
-            if (card != null) {
+            val card = cardKey?.let { key ->
+                uiState.availableCards.find { it.key == key } ?: key.split("|").let { parts ->
+                    CreditCardAnalyticsViewModel.CardOption(
+                        bankName = parts.getOrElse(0) { "" },
+                        last4 = parts.getOrElse(1) { "" },
+                    )
+                }
+            }
+            if (card != null && cardKey != null) {
                 BillingCycleDayDialog(
                     title = card.displayName,
                     subtitle = "Override the default billing cycle day for this card only.",
@@ -215,10 +347,12 @@ fun CreditCardAnalyticsScreen(
                     showClearOption = uiState.selectedCardHasOverride,
                     onConfirm = { day ->
                         viewModel.updateCardBillingCycleDay(cardKey, day)
+                        viewModel.setView(ViewMode.BILLING_CYCLE)
                         pickerTarget = null
                     },
                     onClear = {
                         viewModel.clearCardBillingCycleOverride(cardKey)
+                        viewModel.setView(ViewMode.BILLING_CYCLE)
                         pickerTarget = null
                     },
                     onDismiss = { pickerTarget = null },
@@ -345,6 +479,56 @@ private fun SpendingSummaryHeader(total: String, count: Int) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+@Composable
+private fun BreakdownToggle(
+    selected: BreakdownMode,
+    showLent: Boolean,
+    onSelect: (BreakdownMode) -> Unit,
+) {
+    val modes = remember(showLent) {
+        buildList {
+            add(BreakdownMode.CATEGORY)
+            add(BreakdownMode.CARD)
+            if (showLent) add(BreakdownMode.LENT)
+        }
+    }
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .padding(2.dp),
+    ) {
+        modes.forEach { mode ->
+            val isActive = mode == selected
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(
+                        if (isActive) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                    )
+                    .clickable { onSelect(mode) }
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = when (mode) {
+                        BreakdownMode.CATEGORY -> "Category"
+                        BreakdownMode.CARD -> "Card"
+                        BreakdownMode.LENT -> "Lent"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (isActive) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+        }
     }
 }
 

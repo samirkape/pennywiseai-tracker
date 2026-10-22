@@ -3,9 +3,11 @@ package com.spendly.tracker.ui.screens.analytics
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.spendly.tracker.data.database.entity.LoanEntity
 import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.database.entity.TransactionType
 import com.spendly.tracker.data.preferences.UserPreferencesRepository
+import com.spendly.tracker.data.repository.LoanRepository
 import com.spendly.tracker.data.repository.TransactionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -26,6 +29,7 @@ class CreditCardAnalyticsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val transactionRepository: TransactionRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
+    private val loanRepository: LoanRepository,
 ) : ViewModel() {
 
     private val startEpochDay: Long = savedStateHandle["startEpoch"] ?: LocalDate.now().toEpochDay()
@@ -42,6 +46,23 @@ class CreditCardAnalyticsViewModel @Inject constructor(
         val displayName: String get() = if (last4.isNotBlank()) "$bankName ••$last4" else bankName
     }
 
+    /** Spending grouped by card for the current period. */
+    data class CardSpend(
+        val key: String,
+        val displayName: String,
+        val amount: BigDecimal,
+        val percentage: Float,
+        val transactionCount: Int,
+    )
+
+    /** Money lent to people, kept out of spending totals. */
+    data class LentSpend(
+        val personName: String,
+        val cardLabel: String?,
+        val amount: BigDecimal,
+        val transactionCount: Int,
+    )
+
     data class UiState(
         val view: ViewMode = ViewMode.PAY_PERIOD,
         val selectedCardKey: String? = null,
@@ -55,6 +76,10 @@ class CreditCardAnalyticsViewModel @Inject constructor(
         val billingCycleEnd: LocalDate? = null,
         val globalBillingCycleDay: Int = 0,
         val perCardBillingCycleDays: Map<String, Int> = emptyMap(),
+        val categoryBreakdown: List<CategoryData> = emptyList(),
+        val cardBreakdown: List<CardSpend> = emptyList(),
+        val lentBreakdown: List<LentSpend> = emptyList(),
+        val totalLent: BigDecimal = BigDecimal.ZERO,
         val isLoading: Boolean = true,
     ) {
         val effectiveBillingCycleDay: Int
@@ -73,6 +98,7 @@ class CreditCardAnalyticsViewModel @Inject constructor(
         val cardKey: String?,
         val globalDay: Int,
         val perCardDays: Map<String, Int>,
+        val loans: List<LoanEntity>,
     )
 
     private data class QueryResult(
@@ -106,8 +132,9 @@ class CreditCardAnalyticsViewModel @Inject constructor(
                 _selectedCardKey,
                 userPreferencesRepository.creditCardBillingCycleDay,
                 userPreferencesRepository.creditCardBillingCyclePerCard,
-            ) { view, cardKey, globalDay, perCardDays ->
-                QueryParams(view, cardKey, globalDay, perCardDays)
+                loanRepository.getAllLoans(),
+            ) { view, cardKey, globalDay, perCardDays, loans ->
+                QueryParams(view, cardKey, globalDay, perCardDays, loans)
             }.flatMapLatest { params ->
                 val effectiveDay = if (params.cardKey != null) {
                     params.perCardDays[params.cardKey] ?: params.globalDay
@@ -138,12 +165,75 @@ class CreditCardAnalyticsViewModel @Inject constructor(
                 val filtered = if (result.params.cardKey == null) {
                     result.transactions
                 } else {
-                    result.transactions.filter { txn ->
-                        "${txn.bankName}|${txn.accountNumber?.takeLast(4) ?: ""}" == result.params.cardKey
-                    }
+                    result.transactions.filter { txn -> txn.cardKey() == result.params.cardKey }
                 }
 
-                val total = filtered.fold(BigDecimal.ZERO) { acc, txn -> acc + txn.amount }
+                // Money lent to people is tracked separately and is not part of card spending.
+                val spendTransactions = filtered.filter { it.loanId == null }
+                val lentTransactions = filtered.filter { it.loanId != null }
+
+                val total = spendTransactions.fold(BigDecimal.ZERO) { acc, txn -> acc + txn.amount }
+
+                val categoryAmounts = mutableMapOf<String, BigDecimal>()
+                val categoryCounts = mutableMapOf<String, Int>()
+                for (txn in spendTransactions) {
+                    if (txn.amount.signum() <= 0) continue
+                    val name = txn.category.ifBlank { "Others" }
+                    categoryAmounts[name] = (categoryAmounts[name] ?: BigDecimal.ZERO) + txn.amount
+                    categoryCounts[name] = (categoryCounts[name] ?: 0) + 1
+                }
+                val breakdownTotal = categoryAmounts.values.fold(BigDecimal.ZERO) { acc, v -> acc + v }
+                val categoryBreakdown = categoryAmounts.entries
+                    .map { (name, amount) ->
+                        CategoryData(
+                            name = name,
+                            amount = amount,
+                            percentage = percentOf(amount, breakdownTotal),
+                            transactionCount = categoryCounts[name] ?: 0,
+                        )
+                    }
+                    .sortedByDescending { it.amount }
+
+                // Per-card view uses every card in the period so it stays useful while a card
+                // filter is active; lent transactions are excluded here too.
+                val cardAmounts = mutableMapOf<String, BigDecimal>()
+                val cardCounts = mutableMapOf<String, Int>()
+                val cardNames = mutableMapOf<String, String>()
+                for (txn in result.transactions) {
+                    if (txn.loanId != null || txn.amount.signum() <= 0) continue
+                    val key = txn.cardKey()
+                    cardNames[key] = txn.cardDisplayName()
+                    cardAmounts[key] = (cardAmounts[key] ?: BigDecimal.ZERO) + txn.amount
+                    cardCounts[key] = (cardCounts[key] ?: 0) + 1
+                }
+                val cardTotal = cardAmounts.values.fold(BigDecimal.ZERO) { acc, v -> acc + v }
+                val cardBreakdown = cardAmounts.entries
+                    .map { (key, amount) ->
+                        CardSpend(
+                            key = key,
+                            displayName = cardNames[key] ?: "Unknown card",
+                            amount = amount,
+                            percentage = percentOf(amount, cardTotal),
+                            transactionCount = cardCounts[key] ?: 0,
+                        )
+                    }
+                    .sortedByDescending { it.amount }
+
+                val loansById = result.params.loans.associateBy { it.id }
+                val lentBreakdown = lentTransactions
+                    .filter { it.amount.signum() > 0 }
+                    .groupBy { it.loanId }
+                    .map { (loanId, txns) ->
+                        LentSpend(
+                            personName = loanId?.let { loansById[it]?.personName }
+                                ?: txns.first().merchantName.ifBlank { "Lent" },
+                            cardLabel = txns.first().cardDisplayName().takeIf { it.isNotBlank() },
+                            amount = txns.fold(BigDecimal.ZERO) { acc, txn -> acc + txn.amount },
+                            transactionCount = txns.size,
+                        )
+                    }
+                    .sortedByDescending { it.amount }
+                val totalLent = lentBreakdown.fold(BigDecimal.ZERO) { acc, lent -> acc + lent.amount }
 
                 val billingCycleRange = run {
                     val effectiveDay = if (result.params.cardKey != null) {
@@ -159,8 +249,12 @@ class CreditCardAnalyticsViewModel @Inject constructor(
                         view = result.params.view,
                         selectedCardKey = result.params.cardKey,
                         availableCards = availableCards,
-                        transactions = filtered,
+                        transactions = spendTransactions,
                         totalAmount = total,
+                        categoryBreakdown = categoryBreakdown,
+                        cardBreakdown = cardBreakdown,
+                        lentBreakdown = lentBreakdown,
+                        totalLent = totalLent,
                         globalBillingCycleDay = result.params.globalDay,
                         perCardBillingCycleDays = result.params.perCardDays,
                         billingCycleStart = billingCycleRange?.first,
@@ -185,6 +279,27 @@ class CreditCardAnalyticsViewModel @Inject constructor(
 
     fun clearCardBillingCycleOverride(cardKey: String) {
         viewModelScope.launch { userPreferencesRepository.clearCreditCardBillingCycleForCard(cardKey) }
+    }
+
+    private fun percentOf(amount: BigDecimal, total: BigDecimal): Float =
+        if (total.signum() > 0) {
+            amount.multiply(BigDecimal(100))
+                .divide(total, 2, RoundingMode.HALF_UP)
+                .toFloat()
+        } else 0f
+
+    private fun TransactionEntity.cardKey(): String =
+        "${bankName ?: "Unknown"}|${accountNumber?.takeLast(4) ?: ""}"
+
+    private fun TransactionEntity.cardDisplayName(): String {
+        val bank = bankName?.trim().orEmpty()
+        val last4 = accountNumber?.takeLast(4).orEmpty()
+        return when {
+            bank.isBlank() && last4.isBlank() -> "Unknown card"
+            bank.isBlank() -> "••$last4"
+            last4.isBlank() -> bank
+            else -> "$bank ••$last4"
+        }
     }
 
     private fun computeBillingCycleRange(start: LocalDate, billingDay: Int): Pair<LocalDate, LocalDate> {

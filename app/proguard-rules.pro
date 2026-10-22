@@ -90,6 +90,8 @@
 }
 
 # Remove logging in release
+# Note: ad diagnostics bypass this via AdLog (Log.println), which R8 does not
+# strip, so ad load failures remain visible in logcat on release installs.
 -assumenosideeffects class android.util.Log {
     public static *** d(...);
     public static *** v(...);
