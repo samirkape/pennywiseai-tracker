@@ -88,6 +88,8 @@ import com.spendly.tracker.ui.theme.spendRed
 import com.spendly.tracker.ui.theme.spendRedBg
 import com.spendly.tracker.ui.theme.success
 import com.spendly.tracker.ui.theme.warning
+import com.spendly.tracker.ui.utils.LocalWindowSizeInfo
+import com.spendly.tracker.ui.utils.WindowWidthSizeClass
 import com.spendly.tracker.utils.DateRangeUtils
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
@@ -375,18 +377,28 @@ private fun InsightCarousel(
     onOpenInsightDetail: (SmartInsight) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (insights.size == 1) {
-        val insight = insights.first()
-        InsightCard(
-            insight = insight,
-            index = 0,
-            modifier = modifier,
-            onOpenInsightDetail = { onOpenInsightDetail(insight) }
-        )
+    val windowSizeInfo = LocalWindowSizeInfo.current
+    val widthSizeClass = windowSizeInfo.widthSizeClass
+    val cardsPerPage = when (widthSizeClass) {
+        WindowWidthSizeClass.Compact -> 1
+        WindowWidthSizeClass.Medium -> 2
+        WindowWidthSizeClass.Expanded -> 3
+    }
+    val totalPages = ((insights.size + cardsPerPage - 1) / cardsPerPage).coerceAtLeast(1)
+
+    if (insights.size == 1 || totalPages == 1) {
+        insights.forEachIndexed { index, insight ->
+            InsightCard(
+                insight = insight,
+                index = index,
+                modifier = modifier,
+                onOpenInsightDetail = { onOpenInsightDetail(insight) }
+            )
+        }
         return
     }
 
-    val pagerState = rememberPagerState(pageCount = { insights.size })
+    val pagerState = rememberPagerState(pageCount = { totalPages })
 
     Column(modifier = modifier.fillMaxWidth()) {
         HorizontalPager(
@@ -395,24 +407,53 @@ private fun InsightCarousel(
             contentPadding = PaddingValues(horizontal = Spacing.lg),
             pageSpacing = Spacing.md
         ) { page ->
-            val pageOffset = (
-                (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
-            ).absoluteValue
-            val insight = insights[page]
+            val startIndex = page * cardsPerPage
+            val endIndex = (startIndex + cardsPerPage).coerceAtMost(insights.size)
+            val pageInsights = insights.subList(startIndex, endIndex)
 
-            InsightCard(
-                insight = insight,
-                index = page,
-                onOpenInsightDetail = { onOpenInsightDetail(insight) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer {
-                        val scale = lerp(0.95f, 1f, 1f - pageOffset.coerceIn(0f, 1f))
-                        scaleX = scale
-                        scaleY = scale
-                        alpha = lerp(0.6f, 1f, 1f - pageOffset.coerceIn(0f, 1f))
+            if (pageInsights.size == 1) {
+                InsightCard(
+                    insight = pageInsights.first(),
+                    index = startIndex,
+                    onOpenInsightDetail = { onOpenInsightDetail(pageInsights.first()) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            val pageOffset = (
+                                (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                            ).absoluteValue
+                            val scale = lerp(0.95f, 1f, 1f - pageOffset.coerceIn(0f, 1f))
+                            scaleX = scale
+                            scaleY = scale
+                            alpha = lerp(0.6f, 1f, 1f - pageOffset.coerceIn(0f, 1f))
+                        }
+                )
+            } else {
+                // Multiple cards per page on Medium/Expanded
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            val pageOffset = (
+                                (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                            ).absoluteValue
+                            val scale = lerp(0.95f, 1f, 1f - pageOffset.coerceIn(0f, 1f))
+                            scaleX = scale
+                            scaleY = scale
+                            alpha = lerp(0.6f, 1f, 1f - pageOffset.coerceIn(0f, 1f))
+                        },
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+                ) {
+                    pageInsights.forEachIndexed { index, insight ->
+                        InsightCard(
+                            insight = insight,
+                            index = startIndex + index,
+                            onOpenInsightDetail = { onOpenInsightDetail(insight) },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
-            )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(Spacing.sm))
@@ -422,7 +463,7 @@ private fun InsightCarousel(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            repeat(insights.size) { index ->
+            repeat(totalPages) { index ->
                 val isActive = pagerState.currentPage == index
                 val indicatorWidth by animateDpAsState(
                     targetValue = if (isActive) 16.dp else 6.dp,
@@ -846,12 +887,9 @@ private fun confidenceRank(confidence: InsightConfidence): Int = when (confidenc
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Compact insight grid — a 2-column grid of icon-badge tiles (same idiom as
-// QuickCategorizeScreen's category tiles) instead of divider-separated text rows.
-// Manually chunked into rows of 2 rather than a LazyVerticalGrid, since this already
-// lives inside a LazyColumn item and shouldn't nest another scrollable. Capped to a
-// small default count with a "Show more" expander so the feed reads as a handful of
-// curated highlights, not a data dump.
+// Compact insight grid — adaptive columns based on window size class:
+// Compact=1, Medium=2, Expanded=3. Uses LazyVerticalGrid when possible, but since
+// this lives inside a LazyColumn item, we manually chunk into rows.
 // ─────────────────────────────────────────────────────────────────────────────
 
 private const val COMPACT_LIST_DEFAULT_COUNT = 4
@@ -861,6 +899,13 @@ private fun CompactInsightList(
     insights: List<SmartInsight>,
     onInsightClick: (SmartInsight) -> Unit,
 ) {
+    val windowSizeInfo = LocalWindowSizeInfo.current
+    val columns = when (windowSizeInfo.widthSizeClass) {
+        WindowWidthSizeClass.Compact -> 1
+        WindowWidthSizeClass.Medium -> 2
+        WindowWidthSizeClass.Expanded -> 3
+    }
+
     var expanded by remember(insights) { mutableStateOf(false) }
     val visibleInsights = if (expanded) insights else insights.take(COMPACT_LIST_DEFAULT_COUNT)
     val hiddenCount = insights.size - visibleInsights.size
@@ -869,7 +914,7 @@ private fun CompactInsightList(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
-        visibleInsights.chunked(2).forEach { row ->
+        visibleInsights.chunked(columns).forEach { row ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -883,8 +928,11 @@ private fun CompactInsightList(
                         modifier = Modifier.weight(1f)
                     )
                 }
-                if (row.size == 1) {
-                    Spacer(modifier = Modifier.weight(1f))
+                // Fill remaining columns if row is incomplete
+                if (row.size < columns) {
+                    repeat(columns - row.size) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
                 }
             }
         }

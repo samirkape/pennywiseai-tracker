@@ -25,6 +25,10 @@ private struct AccountCarouselCard: View {
     let account: SharedAccountItem
     @ObservedObject private var currencyManager = CurrencyManager.shared
     @State private var isAmountHidden = true
+    // Card size grows with Dynamic Type so text doesn't clip at larger
+    // accessibility text sizes.
+    @ScaledMetric(relativeTo: .caption) private var cardWidth: CGFloat = 160
+    @ScaledMetric(relativeTo: .caption) private var cardHeight: CGFloat = 140
 
     private var accountTypeIcon: String {
         if account.isCreditCard { return "creditcard.fill" }
@@ -85,7 +89,7 @@ private struct AccountCarouselCard: View {
             }
         }
         .padding(AppSpacing.md)
-        .frame(width: 160, height: 140)
+        .frame(width: cardWidth, height: cardHeight)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: AppCornerRadius.large))
         .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)

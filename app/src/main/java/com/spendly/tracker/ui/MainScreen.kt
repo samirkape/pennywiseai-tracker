@@ -48,6 +48,7 @@ import com.spendly.tracker.ui.viewmodel.ThemeViewModel
 import com.spendly.tracker.ui.viewmodel.SpotlightViewModel
 import com.spendly.tracker.navigation.safePopBackStack
 import com.spendly.tracker.core.Constants
+import com.spendly.tracker.ui.utils.adaptiveMaxWidth
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 
@@ -180,12 +181,19 @@ fun MainScreen(
             )
         }
 
-        // NavHost — NO padding, fills the full screen
+        // NavHost — no padding. Capped at maxContentWidth and centered so content
+        // doesn't stretch across very wide (Expanded) screens.
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
         NavHost(
             navController = navController,
             startDestination = Constants.Routes.HOME,
             modifier = Modifier
-                .fillMaxSize()
+                .adaptiveMaxWidth()
+                .fillMaxWidth()
+                .fillMaxHeight()
                 .hazeSource(hazeState),
             enterTransition = { EnterTransition.None },
             exitTransition = { ExitTransition.None },
@@ -870,7 +878,8 @@ fun MainScreen(
                     }
                 )
             }
-        }
+        } // end NavHost
+        } // end centered content Box
 
         // Bottom navigation + banner ad overlay
         // Column stacks from top to bottom: BannerAdView (top) → SpendlyBottomNavigation (bottom)

@@ -9,11 +9,16 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -25,6 +30,7 @@ import androidx.navigation.toRoute
 import com.spendly.tracker.ui.LocalNavAnimatedVisibilityScope
 import com.spendly.tracker.ui.LocalSharedTransitionScope
 import com.spendly.tracker.ui.MainScreen
+import com.spendly.tracker.ui.utils.adaptiveMaxWidth
 import com.spendly.tracker.ui.viewmodel.ThemeViewModel
 
 /**
@@ -50,10 +56,19 @@ fun SpendlyNavHost(
 
     SharedTransitionLayout {
     CompositionLocalProvider(LocalSharedTransitionScope provides this@SharedTransitionLayout) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center,
+    ) {
     NavHost(
         navController = navController,
         startDestination = stableStartDestination,
-        modifier = modifier.background(MaterialTheme.colorScheme.background),
+        modifier = modifier
+            .adaptiveMaxWidth()
+            .fillMaxWidth()
+            .fillMaxHeight(),
         enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
         exitTransition = { fadeOut(tween(200)) },
         popEnterTransition = { fadeIn(tween(300)) },
@@ -791,7 +806,8 @@ fun SpendlyNavHost(
             )
         }
 
-    }
-    }
-    }
+    } // end NavHost
+    } // end centered content Box
+    } // end CompositionLocalProvider
+    } // end SharedTransitionLayout
 }

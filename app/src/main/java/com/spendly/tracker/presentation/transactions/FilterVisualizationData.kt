@@ -14,6 +14,17 @@ data class FilterCategoryItem(
 )
 
 /**
+ * A single merchant item used in the drill-down (category active) breakdown view.
+ * Top merchants by amount; the remainder is aggregated into a single "Others" entry.
+ */
+data class FilterMerchantItem(
+    val name: String,
+    val amount: BigDecimal,
+    val percentage: Float,
+    val transactionCount: Int
+)
+
+/**
  * A single data point for the spending trend chart.
  */
 data class FilterTrendPoint(
@@ -29,6 +40,8 @@ data class FilterTrendPoint(
 data class FilterVisualizationData(
     /** Top 6 categories by amount, for the Breakdown tab. */
     val categoryItems: List<FilterCategoryItem>,
+    /** Top 5 merchants + Others within the current filter (category drill-down), for the Breakdown tab. */
+    val merchantItems: List<FilterMerchantItem> = emptyList(),
     /** Time-bucketed totals (day/week/month), for the Trend tab. */
     val trendPoints: List<FilterTrendPoint>,
     val currency: String,

@@ -14,6 +14,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -40,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -103,6 +105,7 @@ import java.time.LocalDate
  * collapsing [CustomTitleTopAppBar], then scrollable content. Secondary actions also live in the quick-actions
  * sheet (menu FAB) to avoid crowding the hero.
  */
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -301,6 +304,12 @@ fun HomeScreen(
         }
     ) { paddingValues ->
     val windowSizeInfo = LocalWindowSizeInfo.current
+    // Space actually occupied at the bottom of the screen: ad banner (when really
+    // shown) + bottom navigation bar (0 when the NavigationRail is used).
+    val adBannerHeight = if (Constants.Ads.ENABLED && !isPremium) 50.dp else 0.dp
+    val bottomBarHeight =
+        if (windowSizeInfo.useNavigationRail) 0.dp else Dimensions.Component.bottomBarHeight
+    val bottomInset = adBannerHeight + bottomBarHeight
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         LazyColumn(
             state = lazyListState,
@@ -312,8 +321,8 @@ fun HomeScreen(
             contentPadding = PaddingValues(
                 // Must match full top inset: pulling this up clips the in-list brand title under status bar / clip.
                 top = paddingValues.calculateTopPadding(),
-                bottom = windowSizeInfo.bottomNavBarPadding + 96.dp +
-                    if (Constants.Ads.ENABLED && !isPremium) 50.dp else 0.dp
+                // bottomInset clears the nav bar (+ banner); +96dp leaves room for the FAB.
+                bottom = bottomInset + 96.dp
             ),
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
@@ -637,8 +646,9 @@ fun HomeScreen(
                 .align(Alignment.BottomEnd)
                 .padding(
                     end = Dimensions.Padding.content,
-                    bottom = if (windowSizeInfo.useNavigationRail) Dimensions.Padding.content
-                             else 96.dp + if (Constants.Ads.ENABLED && !isPremium) 54.dp else 0.dp,
+                    // 16dp gap above whatever occupies the bottom of the screen
+                    // (bottom bar and/or ad banner, or nothing when the rail is shown).
+                    bottom = bottomInset + Dimensions.Padding.content,
                 )
                 .combinedClickable(
                     role = Role.Button,
@@ -1031,6 +1041,10 @@ private fun DayDotTrack(
     modifier: Modifier = Modifier,
 ) {
     val today = LocalDate.now()
+    val windowSizeInfo = LocalWindowSizeInfo.current
+    val isCompact = windowSizeInfo.widthSizeClass == com.spendly.tracker.ui.utils.WindowWidthSizeClass.Compact
+    val minDayWidth = if (isCompact) 48.dp else 0.dp
+
     Box(modifier = modifier.fillMaxWidth()) {
         // Connecting line behind the dots
         Box(
@@ -1044,63 +1058,108 @@ private fun DayDotTrack(
                     RoundedCornerShape(1.dp),
                 ),
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            days.forEach { date ->
-                val isSelected = date == selectedDate
-                val hasActivity = (dailyTotals[date] ?: BigDecimal.ZERO) > BigDecimal.ZERO
-                val isToday = date == today
-                val dotSize by animateDpAsState(
-                    targetValue = if (isSelected) 10.dp else if (hasActivity) 6.dp else 4.dp,
-                    animationSpec = tween(150),
-                    label = "dotSize",
-                )
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() },
-                        ) { onSelectDate(date) },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = date.dayOfWeek.getDisplayName(
-                            java.time.format.TextStyle.NARROW,
-                            java.util.Locale.getDefault(),
-                        ),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 9.sp,
-                        color = if (isSelected) MaterialTheme.colorScheme.onSurface
-                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+
+        if (isCompact) {
+            // Horizontal scroll on compact screens
+            androidx.compose.foundation.layout.Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                days.forEach { date ->
+                    DayDotTrackItem(
+                        date = date,
+                        selectedDate = selectedDate,
+                        today = today,
+                        dailyTotals = dailyTotals,
+                        onSelectDate = onSelectDate,
+                        minDayWidth = minDayWidth,
                     )
-                    Box(
-                        modifier = Modifier
-                            .size(dotSize)
-                            .background(
-                                color = when {
-                                    isSelected -> MaterialTheme.colorScheme.primary
-                                    hasActivity -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
-                                    else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-                                },
-                                shape = CircleShape,
-                            ),
-                    )
-                    Text(
-                        text = date.dayOfMonth.toString(),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = if (isSelected) 11.sp else 10.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isSelected) MaterialTheme.colorScheme.onSurface
-                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                }
+            }
+        } else {
+            // Original layout for medium/expanded screens
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                days.forEach { date ->
+                    DayDotTrackItem(
+                        date = date,
+                        selectedDate = selectedDate,
+                        today = today,
+                        dailyTotals = dailyTotals,
+                        onSelectDate = onSelectDate,
+                        minDayWidth = minDayWidth,
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.DayDotTrackItem(
+    date: LocalDate,
+    selectedDate: LocalDate,
+    today: LocalDate,
+    dailyTotals: Map<LocalDate, BigDecimal>,
+    onSelectDate: (LocalDate) -> Unit,
+    minDayWidth: androidx.compose.ui.unit.Dp,
+) {
+    val isSelected = date == selectedDate
+    val hasActivity = (dailyTotals[date] ?: BigDecimal.ZERO) > BigDecimal.ZERO
+    val isToday = date == today
+    val dotSize by animateDpAsState(
+        targetValue = if (isSelected) 10.dp else if (hasActivity) 6.dp else 4.dp,
+        animationSpec = tween(150),
+        label = "dotSize",
+    )
+    // Compact: fixed 48.dp width inside a horizontally scrollable Row.
+    // Medium/Expanded: equal share of the Row via weight (weight must be > 0).
+    val sizeModifier =
+        if (minDayWidth > 0.dp) Modifier.width(minDayWidth) else Modifier.weight(1f)
+    Column(
+        modifier = sizeModifier
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+            ) { onSelectDate(date) },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = date.dayOfWeek.getDisplayName(
+                java.time.format.TextStyle.NARROW,
+                java.util.Locale.getDefault(),
+            ),
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 9.sp,
+            color = if (isSelected) MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+        )
+        Box(
+            modifier = Modifier
+                .size(dotSize)
+                .background(
+                    color = when {
+                        isSelected -> MaterialTheme.colorScheme.primary
+                        hasActivity -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                        else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                    },
+                    shape = CircleShape,
+                ),
+        )
+        Text(
+            text = date.dayOfMonth.toString(),
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = if (isSelected) 11.sp else 10.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+            color = if (isSelected) MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+        )
     }
 }
 
@@ -1114,72 +1173,120 @@ private fun DayNumberStrip(
     modifier: Modifier = Modifier,
 ) {
     val today = LocalDate.now()
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-    val underlineColor = MaterialTheme.colorScheme.primary
-        days.forEach { date ->
-            val isSelected = date == selectedDate
-            val hasActivity = (dailyTotals[date] ?: BigDecimal.ZERO) > BigDecimal.ZERO
-            val underlineAlpha by animateFloatAsState(
-                targetValue = if (isSelected) 1f else 0f,
-                animationSpec = tween(150),
-                label = "underline",
-            )
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable(
-                        indication = null,
-                        interactionSource = remember { MutableInteractionSource() },
-                    ) { onSelectDate(date) }
-                    .padding(bottom = 3.dp)
-                    .drawBehind {
-                        // Accent underline — color captured outside drawBehind scope
-                        val lineY = size.height
-                        drawLine(
-                            color = underlineColor.copy(alpha = underlineAlpha),
-                            start = androidx.compose.ui.geometry.Offset(size.width * 0.2f, lineY),
-                            end = androidx.compose.ui.geometry.Offset(size.width * 0.8f, lineY),
-                            strokeWidth = 2.dp.toPx(),
-                            cap = androidx.compose.ui.graphics.StrokeCap.Round,
-                        )
-                    },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                Text(
-                    text = date.dayOfWeek.getDisplayName(
-                        java.time.format.TextStyle.NARROW,
-                        java.util.Locale.getDefault(),
-                    ),
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (isSelected) MaterialTheme.colorScheme.onSurfaceVariant
-                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
-                )
-                Text(
-                    text = date.dayOfMonth.toString(),
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = if (isSelected) 13.sp else 11.sp),
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isSelected) MaterialTheme.colorScheme.onSurface
-                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-                )
-                // Spend activity dot — tiny, only on days with transactions
-                Box(
-                    modifier = Modifier
-                        .size(3.dp)
-                        .background(
-                            color = if (hasActivity)
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isSelected) 0.7f else 0.35f)
-                            else
-                                androidx.compose.ui.graphics.Color.Transparent,
-                            shape = CircleShape,
-                        ),
+    val windowSizeInfo = LocalWindowSizeInfo.current
+    val isCompact = windowSizeInfo.widthSizeClass == com.spendly.tracker.ui.utils.WindowWidthSizeClass.Compact
+    val minDayWidth = if (isCompact) 48.dp else 0.dp
+
+    if (isCompact) {
+        // Horizontal scroll on compact screens
+        androidx.compose.foundation.layout.Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            days.forEach { date ->
+                DayNumberStripItem(
+                    date = date,
+                    selectedDate = selectedDate,
+                    today = today,
+                    dailyTotals = dailyTotals,
+                    onSelectDate = onSelectDate,
+                    minDayWidth = minDayWidth,
                 )
             }
         }
+    } else {
+        // Original layout for medium/expanded screens
+        Row(
+            modifier = modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            days.forEach { date ->
+                DayNumberStripItem(
+                    date = date,
+                    selectedDate = selectedDate,
+                    today = today,
+                    dailyTotals = dailyTotals,
+                    onSelectDate = onSelectDate,
+                    minDayWidth = minDayWidth,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.DayNumberStripItem(
+    date: LocalDate,
+    selectedDate: LocalDate,
+    today: LocalDate,
+    dailyTotals: Map<LocalDate, BigDecimal>,
+    onSelectDate: (LocalDate) -> Unit,
+    minDayWidth: androidx.compose.ui.unit.Dp,
+) {
+    val isSelected = date == selectedDate
+    val hasActivity = (dailyTotals[date] ?: BigDecimal.ZERO) > BigDecimal.ZERO
+    val underlineColor = MaterialTheme.colorScheme.primary
+    val underlineAlpha by animateFloatAsState(
+        targetValue = if (isSelected) 1f else 0f,
+        animationSpec = tween(150),
+        label = "underline",
+    )
+    // Compact: fixed 48.dp width inside a horizontally scrollable Row.
+    // Medium/Expanded: equal share of the Row via weight (weight must be > 0).
+    val sizeModifier =
+        if (minDayWidth > 0.dp) Modifier.width(minDayWidth) else Modifier.weight(1f)
+    Column(
+        modifier = sizeModifier
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+            ) { onSelectDate(date) }
+            .padding(bottom = 3.dp)
+            .drawBehind {
+                // Accent underline — color captured outside drawBehind scope
+                val lineY = size.height
+                drawLine(
+                    color = underlineColor.copy(alpha = underlineAlpha),
+                    start = androidx.compose.ui.geometry.Offset(size.width * 0.2f, lineY),
+                    end = androidx.compose.ui.geometry.Offset(size.width * 0.8f, lineY),
+                    strokeWidth = 2.dp.toPx(),
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                )
+            },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            text = date.dayOfWeek.getDisplayName(
+                java.time.format.TextStyle.NARROW,
+                java.util.Locale.getDefault(),
+            ),
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (isSelected) MaterialTheme.colorScheme.onSurfaceVariant
+            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+        )
+        Text(
+            text = date.dayOfMonth.toString(),
+            style = MaterialTheme.typography.labelMedium.copy(fontSize = if (isSelected) 13.sp else 11.sp),
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+            color = if (isSelected) MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+        )
+        // Spend activity dot — tiny, only on days with transactions
+        Box(
+            modifier = Modifier
+                .size(3.dp)
+                .background(
+                    color = if (hasActivity)
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isSelected) 0.7f else 0.35f)
+                    else
+                        androidx.compose.ui.graphics.Color.Transparent,
+                    shape = CircleShape,
+                ),
+        )
     }
 }
 

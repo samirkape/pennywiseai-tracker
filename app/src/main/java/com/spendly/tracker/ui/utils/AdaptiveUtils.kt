@@ -2,7 +2,9 @@ package com.spendly.tracker.ui.utils
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.spendly.tracker.core.Constants
@@ -57,6 +59,21 @@ data class WindowSizeInfo(val widthSizeClass: WindowWidthSizeClass) {
 
 /** CompositionLocal carrying the current [WindowSizeInfo] down the UI tree. */
 val LocalWindowSizeInfo = compositionLocalOf { WindowSizeInfo(WindowWidthSizeClass.Compact) }
+
+/**
+ * Caps content at [WindowSizeInfo.maxContentWidth] so text lines and card grids don't
+ * stretch across very wide (Expanded) screens. No-op on Compact screens where the
+ * max content width is infinite.
+ *
+ * Apply *before* `fillMaxWidth()` so the content fills up to the cap and can then be
+ * centered by the parent:
+ * `Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { ... Modifier.adaptiveMaxWidth().fillMaxWidth() }`
+ */
+@Composable
+fun Modifier.adaptiveMaxWidth(): Modifier {
+    val maxContentWidth = LocalWindowSizeInfo.current.maxContentWidth
+    return if (maxContentWidth == Dp.Infinity) this else this.widthIn(max = maxContentWidth)
+}
 
 /** Reads the current window configuration and returns a [WindowSizeInfo]. */
 @Composable

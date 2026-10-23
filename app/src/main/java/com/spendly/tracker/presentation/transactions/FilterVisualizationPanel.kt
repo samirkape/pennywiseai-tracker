@@ -23,11 +23,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.spendly.tracker.presentation.groups.merchantPalette
 import com.spendly.tracker.ui.components.BalanceChart
 import com.spendly.tracker.ui.components.BalancePoint
 import com.spendly.tracker.ui.icons.CategoryMapping
 import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.utils.CurrencyFormatter
+import ir.ehsannarmani.compose_charts.PieChart
+import ir.ehsannarmani.compose_charts.models.Pie
+import java.math.BigDecimal
 
 /**
  * Inline chart panel displayed in the Transactions screen.
@@ -35,6 +39,9 @@ import com.spendly.tracker.utils.CurrencyFormatter
  * Two tabs:
  *  - **Breakdown**: category breakdown — default, most immediately useful.
  *  - **Trend**: smooth line chart across the filtered date range.
+ *
+ * When [activeCategory] is set (category drill-down), the Breakdown tab shows the
+ * merchant composition inside that category instead of the category list.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -115,7 +122,7 @@ fun FilterVisualizationPanel(
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        if (selectedTab == 1 && breakdownAvailable) {
+                        if (selectedTab == 1 && breakdownAvailable && data.categoryItems.size >= 2) {
                             Text(
                                 text = "Top ${data.categoryItems.size} categories",
                                 style = MaterialTheme.typography.labelSmall,
@@ -148,7 +155,13 @@ fun FilterVisualizationPanel(
             ) { tab ->
                 when (tab) {
                     0 -> TrendTabContent(data = data)
-                    else -> BreakdownTabContent(data = data, onCategoryClick = onCategoryClick)
+                    else -> if (activeCategory != null) {
+                        // Drill-down: categories are already narrowed, so show the
+                        // merchant composition inside the active category instead.
+                        MerchantBreakdownContent(data = data)
+                    } else {
+                        BreakdownTabContent(data = data, onCategoryClick = onCategoryClick)
+                    }
                 }
             }
         }
@@ -209,6 +222,180 @@ private fun BreakdownTabContent(
                 onClick = { onCategoryClick(item.name) }
             )
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Drill-down (category active): merchant composition
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Merchant breakdown shown when a single category is active.
+ *
+ * Compact donut of top merchants + Others, with a tappable legend.
+ * Tapping a slice/row selects it and surfaces its details in the donut center.
+ */
+@Composable
+private fun MerchantBreakdownContent(data: FilterVisualizationData) {
+    val merchants = data.merchantItems
+    if (merchants.isEmpty()) {
+        EmptyVizPlaceholder("No merchant data available")
+        return
+    }
+
+    // A donut with a single slice is just a solid ring — a stat row reads better.
+    if (merchants.size == 1) {
+        val only = merchants.first()
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(9.dp)
+                    .clip(CircleShape)
+                    .background(merchantPalette.first())
+            )
+            Text(
+                text = only.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "${CurrencyFormatter.formatAbbreviated(only.amount.toDouble(), data.currency)} · ${only.transactionCount} txns",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+
+    val total = remember(merchants) {
+        merchants.fold(BigDecimal.ZERO) { acc, m -> acc + m.amount }.toDouble()
+    }
+    val slices = remember(merchants) {
+        merchants.mapIndexed { index, merchant ->
+            val color = merchantPalette[index % merchantPalette.size]
+            Pie(
+                label = merchant.name,
+                data = merchant.amount.toDouble(),
+                color = color,
+                selectedColor = color.copy(alpha = 0.8f),
+                selected = false,
+                scaleAnimEnterSpec = tween(400),
+                colorAnimEnterSpec = tween(500)
+            )
+        }
+    }
+    var chartData by remember(slices) { mutableStateOf(slices) }
+    val selectedPie = chartData.find { it.selected }
+
+    fun select(pie: Pie) {
+        val index = chartData.indexOf(pie)
+        val wasSelected = pie.selected
+        chartData = chartData.mapIndexed { i, p -> p.copy(selected = !wasSelected && i == index) }
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.size(120.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            PieChart(
+                modifier = Modifier.fillMaxSize(),
+                data = chartData,
+                onPieClick = { clickedPie -> select(clickedPie) },
+                selectedScale = 1.08f,
+                scaleAnimEnterSpec = tween(400),
+                colorAnimEnterSpec = tween(500),
+                style = Pie.Style.Stroke(width = 16.dp)
+            )
+            // Center: selected merchant, or the category total when nothing is selected.
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = selectedPie?.label ?: "Total",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 88.dp)
+                )
+                Text(
+                    text = CurrencyFormatter.formatAbbreviated(selectedPie?.data ?: total, data.currency),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            merchants.forEachIndexed { index, merchant ->
+                MerchantLegendRow(
+                    item = merchant,
+                    color = merchantPalette[index % merchantPalette.size],
+                    currency = data.currency,
+                    isSelected = selectedPie?.label == merchant.name,
+                    onClick = { chartData.getOrNull(index)?.let { pie -> select(pie) } }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MerchantLegendRow(
+    item: FilterMerchantItem,
+    color: Color,
+    currency: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(
+                if (isSelected) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                else Color.Transparent
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Text(
+            text = item.name,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = "${CurrencyFormatter.formatAbbreviated(item.amount.toDouble(), currency)} · ${(item.percentage * 100).toInt()}%",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1
+        )
     }
 }
 

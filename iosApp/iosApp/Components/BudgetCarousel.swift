@@ -24,6 +24,10 @@ struct BudgetCarousel: View {
 private struct BudgetCarouselCard: View {
     let budget: SharedBudgetItem
     @ObservedObject private var currencyManager = CurrencyManager.shared
+    // Card size grows with Dynamic Type so text doesn't clip at larger
+    // accessibility text sizes.
+    @ScaledMetric(relativeTo: .caption) private var cardWidth: CGFloat = 160
+    @ScaledMetric(relativeTo: .caption) private var cardHeight: CGFloat = 140
 
     private var spentRatio: Double {
         guard budget.limitMinor > 0 else { return 0 }
@@ -82,7 +86,7 @@ private struct BudgetCarouselCard: View {
             }
         }
         .padding(AppSpacing.md)
-        .frame(width: 160, height: 140)
+        .frame(width: cardWidth, height: cardHeight)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: AppCornerRadius.large))
         .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)

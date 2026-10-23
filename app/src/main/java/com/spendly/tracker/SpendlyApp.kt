@@ -12,6 +12,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,6 +31,8 @@ import com.spendly.tracker.navigation.Home
 import com.spendly.tracker.navigation.OnBoarding
 import com.spendly.tracker.navigation.SpendlyNavHost
 import com.spendly.tracker.ui.theme.SpendlyTheme
+import com.spendly.tracker.ui.utils.LocalWindowSizeInfo
+import com.spendly.tracker.ui.utils.rememberWindowSizeInfo
 import com.spendly.tracker.ui.viewmodel.AppLockViewModel
 import com.spendly.tracker.ui.viewmodel.AutoRestoreViewModel
 import com.spendly.tracker.ui.viewmodel.ThemeViewModel
@@ -185,12 +188,17 @@ fun SpendlyApp(
         appFont = themeUiState.appFont,
         blurEffects = themeUiState.blurEffectsEnabled
     ) {
-        SpendlyNavHost(
-            navController = navController,
-            themeViewModel = themeViewModel,
-            startDestination = startDestination,
-            onEditComplete = onEditComplete
-        )
+        // Provide window size info to the entire tree so root-level screens
+        // (Insights, detail screens, …) also adapt to tablet widths.
+        val windowSizeInfo = rememberWindowSizeInfo()
+        CompositionLocalProvider(LocalWindowSizeInfo provides windowSizeInfo) {
+            SpendlyNavHost(
+                navController = navController,
+                themeViewModel = themeViewModel,
+                startDestination = startDestination,
+                onEditComplete = onEditComplete
+            )
+        }
 
         if (autoRestoreState.shouldShow) {
             AlertDialog(

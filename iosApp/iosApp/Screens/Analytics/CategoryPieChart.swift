@@ -3,6 +3,14 @@ import SwiftUI
 struct CategoryPieChart: View {
     let categories: [CategoryBreakdownItem]
     @Environment(\.isAmoledActive) private var isAmoled
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    // Pie grows with Dynamic Type, and gets extra room on regular-width (iPad)
+    // layouts instead of staying pinned at 160×160.
+    @ScaledMetric(relativeTo: .headline) private var pieSize: CGFloat = 160
+
+    private var isRegularWidth: Bool { horizontalSizeClass == .regular }
+
+    private var renderedPieSize: CGFloat { isRegularWidth ? pieSize * 1.5 : pieSize }
 
     private var topCategories: [CategoryBreakdownItem] {
         let top = Array(categories.prefix(7))
@@ -32,7 +40,7 @@ struct CategoryPieChart: View {
             } else {
                 HStack(alignment: .top, spacing: AppSpacing.md) {
                     pieChart
-                        .frame(width: 160, height: 160)
+                        .frame(width: renderedPieSize, height: renderedPieSize)
 
                     legend
                 }

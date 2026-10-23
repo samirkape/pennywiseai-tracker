@@ -370,24 +370,30 @@ fun TransactionsScreen(
                 .padding(top = Dimensions.Padding.content)
         )
 
-        // Filter + Sort row
-        Row(
+        // Filter + Sort row - use FlowRow for adaptive wrapping on small screens
+        FlowRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = Dimensions.Padding.content)
                 .padding(top = Spacing.xs),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+            maxItemsInEachRow = 3
         ) {
             val filtersSelected = activeFilterCount > 0
             FilterChip(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
                 selected = filtersSelected,
                 onClick = { showFilterSheet = true },
                 label = {
                     Text(
                         text = if (filtersSelected) "Filters · $activeFilterCount" else "Filters",
                         modifier = Modifier.fillMaxWidth(),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 },
                 leadingIcon = {
@@ -413,72 +419,50 @@ fun TransactionsScreen(
             )
 
             val sortSelected = sortOption != SortOption.DATE_NEWEST
-            Box(modifier = Modifier.weight(1f)) {
-                FilterChip(
-                    modifier = Modifier.fillMaxWidth(),
+            FilterChip(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                selected = sortSelected,
+                onClick = { showSortMenu = true },
+                label = {
+                    Text(
+                        text = sortOption.label,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Sort,
+                        contentDescription = null,
+                        modifier = Modifier.size(Dimensions.Icon.small)
+                    )
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    borderWidth = 0.dp,
                     selected = sortSelected,
-                    onClick = { showSortMenu = true },
-                    label = {
-                        Text(
-                            text = sortOption.label,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Sort,
-                            contentDescription = null,
-                            modifier = Modifier.size(Dimensions.Icon.small)
-                        )
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ),
-                    border = FilterChipDefaults.filterChipBorder(
-                        borderWidth = 0.dp,
-                        selected = sortSelected,
-                        enabled = true,
-                    ),
-                )
-                DropdownMenu(
-                    expanded = showSortMenu,
-                    onDismissRequest = { showSortMenu = false }
-                ) {
-                    SortOption.values().forEach { option ->
-                        DropdownMenuItem(
-                            text = {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    RadioButton(
-                                        selected = sortOption == option,
-                                        onClick = null,
-                                        modifier = Modifier.size(Dimensions.Icon.medium)
-                                    )
-                                    Text(option.label)
-                                }
-                            },
-                            onClick = {
-                                viewModel.setSortOption(option)
-                                showSortMenu = false
-                            }
-                        )
-                    }
-                }
-            }
+                    enabled = true,
+                ),
+            )
 
             // Chart toggle button — only show when there is visualization data.
             if (filterVisualizationData != null) {
                 IconButton(
                     onClick = { showVisualization = !showVisualization },
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier
+                        .size(40.dp)
+                        .wrapContentSize()
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ShowChart,
@@ -490,6 +474,33 @@ fun TransactionsScreen(
                         modifier = Modifier.size(Dimensions.Icon.medium)
                     )
                 }
+            }
+        }
+
+        DropdownMenu(
+            expanded = showSortMenu,
+            onDismissRequest = { showSortMenu = false }
+        ) {
+            SortOption.values().forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = sortOption == option,
+                                onClick = null,
+                                modifier = Modifier.size(Dimensions.Icon.medium)
+                            )
+                            Text(option.label)
+                        }
+                    },
+                    onClick = {
+                        viewModel.setSortOption(option)
+                        showSortMenu = false
+                    }
+                )
             }
         }
 
@@ -685,6 +696,8 @@ fun TransactionsScreen(
                     modifier = Modifier
                         .padding(horizontal = Dimensions.Padding.content)
                         .padding(top = Spacing.sm),
+                    activeCategory = categoryFilter,
+                    onClearCategory = { viewModel.clearCategoryFilter() },
                     onCategoryClick = { categoryName ->
                         viewModel.setCategoryFilter(categoryName)
                         // Scroll to top so the filtered list is immediately visible

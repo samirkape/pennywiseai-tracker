@@ -354,6 +354,40 @@ class TransactionsViewModel @Inject constructor(
                 }
         } else emptyList()
 
+        // Merchant breakdown (top 5 + Others). When a category filter is active the
+        // transactions are already narrowed, so this shows "where within the category".
+        val merchantItems: List<FilterMerchantItem> = if (breakdownTransactions.isNotEmpty() && totalAmount > java.math.BigDecimal.ZERO) {
+            val merchantKey: (TransactionEntity) -> String = { it.merchantName.ifBlank { "Others" } }
+            val countByMerchant = breakdownTransactions.groupingBy(merchantKey).eachCount()
+            val byMerchant = breakdownTransactions
+                .groupBy(merchantKey)
+                .mapValues { (_, txns) -> txns.fold(java.math.BigDecimal.ZERO) { acc, tx -> acc + tx.amount } }
+                .entries
+                .sortedByDescending { it.value }
+
+            val top = byMerchant.take(5)
+            val remainder = byMerchant.drop(5)
+
+            top.map { (merchant, amount) ->
+                FilterMerchantItem(
+                    name = merchant,
+                    amount = amount,
+                    percentage = amount.divide(totalAmount, 4, java.math.RoundingMode.HALF_UP).toFloat(),
+                    transactionCount = countByMerchant[merchant] ?: 0
+                )
+            } + if (remainder.isNotEmpty()) {
+                val restAmount = remainder.fold(java.math.BigDecimal.ZERO) { acc, e -> acc + e.value }
+                listOf(
+                    FilterMerchantItem(
+                        name = "Others",
+                        amount = restAmount,
+                        percentage = restAmount.divide(totalAmount, 4, java.math.RoundingMode.HALF_UP).toFloat(),
+                        transactionCount = remainder.sumOf { countByMerchant[it.key] ?: 0 }
+                    )
+                )
+            } else emptyList()
+        } else emptyList()
+
         // Build time-series trend from all visible transactions (amount summed per bucket).
         val sortedTx = transactions.sortedBy { it.dateTime }
         val minDate = sortedTx.first().dateTime.toLocalDate()
@@ -378,6 +412,7 @@ class TransactionsViewModel @Inject constructor(
 
         return FilterVisualizationData(
             categoryItems = categoryItems,
+            merchantItems = merchantItems,
             trendPoints = trendPoints,
             currency = currency,
             dominantTypeLabel = dominantTypeLabel
