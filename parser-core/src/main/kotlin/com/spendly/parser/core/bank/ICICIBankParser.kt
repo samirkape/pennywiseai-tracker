@@ -32,9 +32,16 @@ class ICICIBankParser : BaseIndianBankParser() {
             return null
         }
 
-        val type = extractTransactionType(smsBody)
-        if (type == null) {
-            return null
+        // Detect ICICI's dual-account transfer pattern (e.g. IMPS where the SMS
+        // mentions both `Acct XX debited` and `Acct YY credited` in the same body).
+        // This routes such SMS to TRANSFER so a later pipeline pass can dedupe
+        // against the credit-side SMS using the IMPS/NEFT reference.
+        val transferAccounts = extractTransferAccounts(smsBody)
+
+        val type = if (transferAccounts != null) {
+            TransactionType.TRANSFER
+        } else {
+            extractTransactionType(smsBody) ?: return null
         }
 
         // Extract currency dynamically for multi-currency support
@@ -48,12 +55,18 @@ class ICICIBankParser : BaseIndianBankParser() {
             null
         }
 
+        val merchant = if (transferAccounts != null) {
+            labelTransferRail(smsBody)
+        } else {
+            extractMerchant(smsBody, sender)
+        }
+
         val parsed = ParsedTransaction(
             amount = amount,
             type = type,
-            merchant = extractMerchant(smsBody, sender),
+            merchant = merchant,
             reference = extractReference(smsBody),
-            accountLast4 = extractAccountLast4(smsBody),
+            accountLast4 = transferAccounts?.first ?: extractAccountLast4(smsBody),
             balance = extractBalance(smsBody),
             creditLimit = availableLimit,
             smsBody = smsBody,
@@ -61,7 +74,11 @@ class ICICIBankParser : BaseIndianBankParser() {
             timestamp = timestamp,
             bankName = getBankName(),
             isFromCard = detectIsCard(smsBody),
-            currency = currency
+            currency = currency,
+            // ICICI cards and accounts are kept in INR; a foreign spend doesn't change that.
+            accountCurrency = if (currency != "INR") "INR" else null,
+            fromAccount = transferAccounts?.first,
+            toAccount = transferAccounts?.second
         )
 
         // Route through the shared CC bill-payment hook so the ICICI card-side
@@ -70,14 +87,50 @@ class ICICIBankParser : BaseIndianBankParser() {
         return applyCreditCardBillPayment(parsed)
     }
 
+    private fun labelTransferRail(message: String): String = when {
+        message.contains("IMPS", ignoreCase = true) -> "IMPS Transfer"
+        message.contains("NEFT", ignoreCase = true) -> "NEFT Transfer"
+        else -> "Account Transfer"
+    }
+
+    /**
+     * Detects ICICI's `Acct XX debited ... & Acct YY credited` IMPS/NEFT pattern
+     * and returns (fromAccount, toAccount) when both account references appear
+     * in the same SMS and differ. Returns null otherwise so the regular type
+     * extraction stays in charge.
+     */
+    private fun extractTransferAccounts(message: String): Pair<String, String>? {
+        val debitedAcctPattern = Regex(
+            """Acct\s+([X*\d]+)\s+(?:is\s+)?debited""",
+            RegexOption.IGNORE_CASE
+        )
+        val creditedAcctPattern = Regex(
+            """Acct\s+([X*\d]+)\s+(?:is\s+)?credited""",
+            RegexOption.IGNORE_CASE
+        )
+
+        val debitedMatch = debitedAcctPattern.find(message) ?: return null
+        val creditedMatch = creditedAcctPattern.find(message) ?: return null
+
+        val fromAcct = extractLast4Digits(debitedMatch.groupValues[1])
+        val toAcct = extractLast4Digits(creditedMatch.groupValues[1])
+
+        if (fromAcct.isNullOrBlank() || toAcct.isNullOrBlank() || fromAcct == toAcct) {
+            return null
+        }
+        return Pair(fromAcct, toAcct)
+    }
+
     /**
      * Extract currency from ICICI transaction messages
      * Handles formats like "USD 11.80 spent" or "EUR 50.00 spent"
      */
     private fun extractCurrencyFromMessage(message: String): String? {
         // Pattern for "USD 11.80 spent" format
+        // Same optional integer part as extractAmount — "USD .28 spent" has to
+        // match here too, or the amount is tagged INR.
         val currencySpentPattern = Regex(
-            """([A-Z]{3})\s+[0-9,]+(?:\.\d{2})?\s+spent""",
+            """([A-Z]{3})\s+(?:[0-9,]+(?:\.\d{1,2})?|\.\d{1,2})\s+(?:spent|is\s+debited)""",
             RegexOption.IGNORE_CASE
         )
         currencySpentPattern.find(message)?.let { match ->
@@ -115,8 +168,12 @@ class ICICIBankParser : BaseIndianBankParser() {
 
     override fun extractAmount(message: String): BigDecimal? {
         // Pattern 1: Multi-currency support - "USD 11.80 spent" or "EUR 50.00 spent"
+        // The integer part is optional: ICICI prints sub-unit amounts as
+        // "USD .28 spent". Without this the pattern missed the real amount and
+        // a later pattern picked up "Avl Limit: INR 3,85,664.53" instead.
+        // Also "GBP 1,202.00 is debited on ICICI Bank Credit Card …" (#888).
         val multiCurrencySpentPattern = Regex(
-            """[A-Z]{3}\s+([0-9,]+(?:\.\d{2})?)\s+spent""",
+            """[A-Z]{3}\s+((?:[0-9,]+(?:\.\d{1,2})?|\.\d{1,2}))\s+(?:spent|is\s+debited)""",
             RegexOption.IGNORE_CASE
         )
         multiCurrencySpentPattern.find(message)?.let { match ->
@@ -130,7 +187,7 @@ class ICICIBankParser : BaseIndianBankParser() {
 
         // Pattern 2: "Rs xxx.xx spent" or "INR xxx.xx spent" (for INR card transactions)
         val inrSpentPattern = Regex(
-            """(?:Rs\.?|INR)\s+([0-9,]+(?:\.\d{2})?)\s+spent""",
+            """(?:Rs\.?|INR)\s+((?:[0-9,]+(?:\.\d{1,2})?|\.\d{1,2}))\s+spent""",
             RegexOption.IGNORE_CASE
         )
         inrSpentPattern.find(message)?.let { match ->
@@ -203,12 +260,37 @@ class ICICIBankParser : BaseIndianBankParser() {
     }
 
     override fun extractMerchant(message: String, sender: String): String? {
+        // Credit card: "… is debited on ICICI Bank Credit Card XX0000 on 17-Jan-22.
+        // Info: Amazon. Available Limit: …" (#887). Ends at the trailer clause, not
+        // the first period, so "WWW.AMAZON.IN" stays whole.
+        Regex(
+            """\bInfo:\s+(.+?)\.\s+(?:Available|Avl|Call|Not\s+you)\b""",
+            RegexOption.IGNORE_CASE
+        ).find(message)?.let { match ->
+            val merchant = cleanMerchantName(match.groupValues[1].trim())
+            if (isValidMerchantName(merchant)) return merchant
+        }
+
         // Pattern 0: NEFT/RTGS transfer to beneficiary - use "NEFT Transfer" as merchant
         // These are outgoing transfers where we don't know the beneficiary name
         if (message.contains("credited to the beneficiary", ignoreCase = true) ||
             message.contains("credited to beneficiary", ignoreCase = true)
         ) {
             return "NEFT Transfer"
+        }
+
+        // Pattern 0b: Incoming NEFT credit - "Info NEFT-<refcode>-<PAYER NAME>"
+        // The payer name follows the NEFT reference code (after the last hyphen),
+        // e.g. "Info NEFT-FDRLM4175907234-JOHN JOSE." -> "JOHN JOSE".
+        val neftCreditPattern = Regex(
+            """Info\s+NEFT-[A-Za-z0-9]+-(.+?)(?:\.|$)""",
+            RegexOption.IGNORE_CASE
+        )
+        neftCreditPattern.find(message)?.let { match ->
+            val merchant = cleanMerchantName(match.groupValues[1].trim())
+            if (isValidMerchantName(merchant)) {
+                return merchant
+            }
         }
 
         // Pattern 1: Salary transactions - "Info INF*...*...* SAL ..."
@@ -230,6 +312,33 @@ class ICICIBankParser : BaseIndianBankParser() {
             message.contains("NFSCASH", ignoreCase = true)
         ) {
             return "Cash Withdrawal"
+        }
+
+        // Pattern 2a: ATM cash withdrawal marker - "CAM*<code>*"
+        // ICICI uses a "CAM*<terminal/ref code>*" token to mark cash withdrawals.
+        // Emit a clean label instead of the raw marker code.
+        // Closing "*" is optional — some variants omit it.
+        val camWithdrawalPattern = Regex(
+            """\bCAM\*[A-Za-z0-9]+\*?""",
+            RegexOption.IGNORE_CASE
+        )
+        if (camWithdrawalPattern.find(message) != null) {
+            return "ATM Withdrawal"
+        }
+
+        // Pattern 2b: Bill-pay biller - "InfoBIL*<biller name>"
+        // ICICI's generic bill-pay format. The biller name runs until the
+        // sentence boundary: a ".", the "Avl/Avb Bal" balance clause, or end of
+        // segment — so the capture doesn't absorb the tail when the "." is absent.
+        val infoBilPattern = Regex(
+            """InfoBIL\*(.+?)(?=\.|\s*Av[bl]\s*Bal|$)""",
+            RegexOption.IGNORE_CASE
+        )
+        infoBilPattern.find(message)?.let { match ->
+            val merchant = cleanMerchantName(match.groupValues[1].trim())
+            if (isValidMerchantName(merchant)) {
+                return merchant
+            }
         }
 
         // Pattern 3: Card transactions - "on DD-Mon-YY at MERCHANT NAME. Avl" or "on DD-Mon-YY on MERCHANT NAME"
@@ -443,6 +552,15 @@ class ICICIBankParser : BaseIndianBankParser() {
     }
 
     override fun extractReference(message: String): String? {
+        // Pattern 0: "IMPS:xxxxx" — keep ahead of UPI so dual-rail SMS pick the IMPS ref
+        val impsPattern = Regex(
+            """IMPS:([A-Za-z0-9]+)""",
+            RegexOption.IGNORE_CASE
+        )
+        impsPattern.find(message)?.let { match ->
+            return match.groupValues[1]
+        }
+
         // Pattern 1: "RRN 1xxxxx3xxxxx"
         val rrnPattern = Regex(
             """RRN\s+([A-Za-z0-9]+)""",

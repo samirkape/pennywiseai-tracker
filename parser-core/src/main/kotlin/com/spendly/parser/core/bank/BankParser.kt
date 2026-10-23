@@ -1,9 +1,9 @@
 package com.spendly.parser.core.bank
 
 import com.spendly.parser.core.CompiledPatterns
-import com.spendly.parser.core.PayrollCreditDetector
 import com.spendly.parser.core.Constants
 import com.spendly.parser.core.ParsedTransaction
+import com.spendly.parser.core.PayrollCreditDetector
 import com.spendly.parser.core.TransactionType
 import java.math.BigDecimal
 import java.time.LocalDateTime
@@ -14,6 +14,51 @@ import java.time.ZoneId
  * Each bank should extend this class and implement its specific parsing logic.
  */
 abstract class BankParser {
+
+    private companion object {
+        /**
+         * A credit-limit clause and its figure: "Avl Limit: INR 57888.3",
+         * "Available Limit: INR 3,30,022.99", "Avl Lmt INR 35182.45". The limit is
+         * never the transaction amount, so it's masked out before the amount
+         * patterns run (#888).
+         */
+        val CREDIT_LIMIT_CLAUSE = Regex(
+            """\b(?:Avl|Avail|Available)\.?\s+(?:Credit\s+)?(?:Limit|Lmt)\b\s*(?:is)?\s*:?\s*(?:INR|Rs\.?|₹)?\s*[0-9,]*\.?\d+""",
+            RegexOption.IGNORE_CASE
+        )
+
+        /** A verb saying money actually moved — used to tell a payment from a reminder. */
+        val COMPLETED_MONEY_VERB = Regex(
+            """\b(debited|deducted|credited|deposited|withdrawn|spent|received|transferred|""" +
+                """sent|charged|used|refunded|reversed|paid|purchased)\b"""
+        )
+
+        // Order matters: yyyy-first patterns are tried before dd-first ones to avoid
+        // misreading "2026-07-18" as day=2026. Patterns that fail range/validity
+        // checks (e.g. month > 12) are skipped, so ambiguous dd/MM vs MM/dd inputs
+        // safely fall through to the SMS receipt timestamp instead of a wrong date.
+        val DATE_TIME_PATTERNS = listOf(
+            // 2026-07-18-14:29:23 / 2026-07-18 14:29:23 / 2026/07/18 14:29:23
+            // (negative lookahead avoids swallowing a trailing AM/PM marker as if 24-hour)
+            DateTimePattern(
+                Regex("""\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ -](\d{1,2}):(\d{2})(?::(\d{2}))?(?!\s*[AaPp][Mm])\b"""),
+                yearFirst = true
+            ),
+            // 18-07-26 15:07:53 / 18/07/2026 15:07:53 / 18-07-2026 15:07
+            DateTimePattern(
+                Regex("""\b(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})[ -](\d{1,2}):(\d{2})(?::(\d{2}))?(?!\s*[AaPp][Mm])\b"""),
+                yearFirst = false
+            ),
+            // 01/8/25 03:15 PM / 10/01/25 8:00 AM / 3/18/26, 6:39 PM
+            DateTimePattern(
+                Regex(
+                    """\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4}),?\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])\b"""
+                ),
+                yearFirst = false,
+                hasAmPm = true
+            )
+        )
+    }
 
     /**
      * Returns the name of the bank this parser handles.
@@ -78,7 +123,9 @@ abstract class BankParser {
             timestamp = extractMessageDateTime(smsBody) ?: timestamp,
             bankName = getBankName(),
             isFromCard = detectIsCard(smsBody),
-            currency = getCurrency()
+            currency = transactionCurrency(smsBody),
+            isMobileWallet = isMobileWallet(),
+            accountCurrency = accountCurrency(smsBody)
         )
     }
 
@@ -154,47 +201,68 @@ abstract class BankParser {
         }
     }
 
-    companion object {
-        // Order matters: yyyy-first patterns are tried before dd-first ones to avoid
-        // misreading "2026-07-18" as day=2026. Patterns that fail range/validity
-        // checks (e.g. month > 12) are skipped, so ambiguous dd/MM vs MM/dd inputs
-        // safely fall through to the SMS receipt timestamp instead of a wrong date.
-        private val DATE_TIME_PATTERNS = listOf(
-            // 2026-07-18-14:29:23 / 2026-07-18 14:29:23 / 2026/07/18 14:29:23
-            // (negative lookahead avoids swallowing a trailing AM/PM marker as if 24-hour)
-            DateTimePattern(
-                Regex("""\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ -](\d{1,2}):(\d{2})(?::(\d{2}))?(?!\s*[AaPp][Mm])\b"""),
-                yearFirst = true
-            ),
-            // 18-07-26 15:07:53 / 18/07/2026 15:07:53 / 18-07-2026 15:07
-            DateTimePattern(
-                Regex("""\b(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})[ -](\d{1,2}):(\d{2})(?::(\d{2}))?(?!\s*[AaPp][Mm])\b"""),
-                yearFirst = false
-            ),
-            // 01/8/25 03:15 PM / 10/01/25 8:00 AM / 3/18/26, 6:39 PM
-            DateTimePattern(
-                Regex(
-                    """\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4}),?\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])\b"""
-                ),
-                yearFirst = false,
-                hasAmPm = true
-            )
-        )
-    }
+    /**
+     * Currency of this message's amount. Defaults to the bank's home currency;
+     * parsers whose cards post foreign-currency spends override it so the amount
+     * isn't tagged with the wrong currency.
+     */
+    protected open fun transactionCurrency(message: String): String = getCurrency()
 
+    /**
+     * Currency the account's balance/limit is kept in, when it differs from
+     * [transactionCurrency] — see [ParsedTransaction.accountCurrency]. Null by
+     * default ("same as the transaction").
+     */
+    protected open fun accountCurrency(message: String): String? = null
+
+    /**
+     * Whether this parser represents a mobile-money wallet whose SMS carries a
+     * running balance but no per-account number (e.g. eMola, M-Pesa Mozambique).
+     * When true, the app derives a single service-level account row from the
+     * balance instead of requiring an accountLast4. Defaults to false.
+     */
+    open fun isMobileWallet(): Boolean = false
 
     /**
      * Checks if the message is a transaction message (not OTP, promotional, etc.)
      */
     protected open fun isTransactionMessage(message: String): Boolean {
+        if (isNonTransactionMessage(message)) return false
+
+        // Ignore card-side confirmation messages that are not actual spend/income entries.
+        // A card-side bill-payment leg ("payment of X … credited to your … Credit Card")
+        // also matches that shape but must survive: BaseIndianBankParser re-classifies it
+        // as a TRANSFER + CC_BILL_PAYMENT so it links against the bank-side debit leg.
+        if (isCreditCardConfirmationMessage(message) && !isCardBillPaymentConfirmation(message)) return false
+
+        // Must contain transaction keywords
+        val transactionKeywords = listOf(
+            "debited", "credited", "withdrawn", "deposited",
+            "spent", "received", "transferred", "paid"
+        )
+
+        return message.lowercase().let { lower -> transactionKeywords.any { lower.contains(it) } }
+    }
+
+    /**
+     * Messages that carry an amount but are never a transaction: OTPs, promos,
+     * payment requests and due/reminder notices.
+     *
+     * Subclasses that need their own keyword list should call this instead of
+     * re-listing these checks — copies drifted out of sync and let reminders
+     * through as real spends.
+     */
+    protected fun isNonTransactionMessage(message: String): Boolean {
         val lowerMessage = message.lowercase()
 
         // Skip OTP messages
         if (lowerMessage.contains("otp") ||
-            lowerMessage.contains("one time password") ||
+            // Hyphenated "One-Time Password" (Amex SafeKey) used to slip through
+            // and got booked as a card spend.
+            lowerMessage.contains(Regex("""one[-\s]?time password""")) ||
             lowerMessage.contains("verification code")
         ) {
-            return false
+            return true
         }
 
         // Skip promotional messages
@@ -203,7 +271,7 @@ abstract class BankParser {
             lowerMessage.contains("cashback offer") ||
             lowerMessage.contains("win ")
         ) {
-            return false
+            return true
         }
 
         // Skip payment request messages (common across banks)
@@ -214,12 +282,64 @@ abstract class BankParser {
             lowerMessage.contains("requests rs") ||
             lowerMessage.contains("ignore if already paid")
         ) {
-            return false
+            return true
         }
 
         // Skip merchant payment acknowledgments
         if (lowerMessage.contains("have received payment")) {
-            return false
+            return true
+        }
+
+        // Skip IPO/ASBA fund blocking — the money is earmarked, not debited.
+        // ("Your ASBA application ... value of Rs X is blocked in your ... account")
+        if (lowerMessage.contains("asba") ||
+            lowerMessage.contains("is blocked in your")
+        ) {
+            return true
+        }
+
+        // Skip reward/gift voucher DELIVERY notices — no money moves in the
+        // account. Deliberately narrow: buying a voucher is a real expense, so
+        // anything carrying a debit verb still parses.
+        if ((lowerMessage.contains("e-voucher") || lowerMessage.contains("evoucher")) &&
+            (lowerMessage.contains("received") ||
+                lowerMessage.contains("reward") ||
+                lowerMessage.contains("redemption")) &&
+            !lowerMessage.contains("spent") &&
+            !lowerMessage.contains("debited") &&
+            !lowerMessage.contains("charged")
+        ) {
+            return true
+        }
+
+        // Skip convert-your-bill-to-EMI offers: "You can convert your Credit Card
+        // … outstanding bill of Rs.X into SmartEMI … SMS SMARTEMI YES" (#885).
+        // Only the invitation — a completed EMI payment ("Rs.3282 debited …
+        // towards SmartEMI") still parses. Debit verbs only: the offer itself says
+        // "Ignore if any amount is already paid".
+        if (lowerMessage.contains("convert") &&
+            (lowerMessage.contains("smartemi") || lowerMessage.contains("into emi")) &&
+            !Regex("""\b(debited|deducted|spent|charged|withdrawn)\b""").containsMatchIn(lowerMessage)
+        ) {
+            return true
+        }
+
+        // Skip auto-debit intimations ("INR X for <merchant> will be auto-debited
+        // ... by <date>"). These announce a future debit; the real debit arrives
+        // as its own SMS, so booking them doubled the spend.
+        if (lowerMessage.contains("will be auto-debited") ||
+            lowerMessage.contains("will be auto debited")
+        ) {
+            return true
+        }
+
+        // Bill-due reminders: "… bill of INR X due on 28-09-26. Pay on <link>".
+        // A real payment can mention a due date too ("Sent Rs.X … for EMI due on
+        // …"), so only skip when no completed-money verb is present. The list
+        // covers every completed verb the parsers recognise; word boundaries so
+        // the "paid" inside "Postpaid" doesn't count.
+        if (lowerMessage.contains("due on") && !COMPLETED_MONEY_VERB.containsMatchIn(lowerMessage)) {
+            return true
         }
 
         // Skip payment reminder/due messages
@@ -231,21 +351,10 @@ abstract class BankParser {
             lowerMessage.contains("ignore if paid") ||
             (lowerMessage.contains("pls pay") && lowerMessage.contains("min of"))
         ) {
-            return false
+            return true
         }
 
-        // Ignore card-side confirmation messages that are not actual spend/income entries.
-        if (isCreditCardConfirmationMessage(lowerMessage)) {
-            return false
-        }
-
-        // Must contain transaction keywords
-        val transactionKeywords = listOf(
-            "debited", "credited", "withdrawn", "deposited",
-            "spent", "received", "transferred", "paid"
-        )
-
-        return transactionKeywords.any { lowerMessage.contains(it) }
+        return false
     }
 
     /**
@@ -265,8 +374,9 @@ abstract class BankParser {
      * Extracts the transaction amount from the message.
      */
     protected open fun extractAmount(message: String): BigDecimal? {
+        val withoutLimit = CREDIT_LIMIT_CLAUSE.replace(message, " ")
         for (pattern in CompiledPatterns.Amount.ALL_PATTERNS) {
-            pattern.find(message)?.let { match ->
+            pattern.find(withoutLimit)?.let { match ->
                 val amountStr = match.groupValues[1].replace(",", "")
                 return try {
                     BigDecimal(amountStr)
@@ -325,6 +435,11 @@ abstract class BankParser {
             "nsccl",
             "nse clearing",
             "clearing corporation",
+
+            // Auto-pay indicators (excluding mandate/UMRN to avoid subscription false positives)
+            "nach",                         // National Automated Clearing House
+            "ach",                          // Automated Clearing House
+            "ecs",                          // Electronic Clearing Service
 
             // Investment platforms
             "groww",
@@ -501,26 +616,23 @@ abstract class BankParser {
      */
     protected open fun extractAvailableLimit(message: String): BigDecimal? {
 
-        // Common patterns for credit limit across banks
+        // Currency token: most banks print "Rs"/"₹", but some (e.g. IndusInd) use
+        // "Avl Lmt: INR ..." — accept all three. Only ever evaluated for CREDIT
+        // messages (extractAvailableLimit is gated on type == CREDIT in parse()).
+        val cur = """(?:Rs\.?|INR|₹)"""
         val creditLimitPatterns = listOf(
-            // "Available limit Rs.111,111.89" - Federal Bank format (no space after Rs.)
-            Regex("""Available\s+limit\s+Rs\.([0-9,]+(?:\.\d{2})?)""", RegexOption.IGNORE_CASE),
-            // "Available limit Rs. 111,111.89" or "Available limit: Rs 111,111.89"
-            Regex(
-                """Available\s+limit:?\s*Rs\.?\s*([0-9,]+(?:\.\d{2})?)""",
-                RegexOption.IGNORE_CASE
-            ),
-            // "Avl Lmt Rs.111,111.89" or "Avl Lmt: Rs 111,111.89" (ICICI and others)
-            Regex("""Avl\s+Lmt:?\s*Rs\.?\s*([0-9,]+(?:\.\d{2})?)""", RegexOption.IGNORE_CASE),
+            // "Available limit Rs.111,111.89" / "Available limit INR 111,111.89"
+            Regex("""Available\s+limit\s+$cur\s*([0-9,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
+            // "Available limit: Rs 111,111.89"
+            Regex("""Available\s+limit:?\s*$cur\s*([0-9,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
+            // "Avl Lmt: Rs 111,111.89" / "Avl Lmt: INR 111,111.89" (ICICI, IndusInd, others)
+            Regex("""Avl\s+Lmt:?\s*$cur\s*([0-9,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
             // "Avail Limit Rs.111,111.89"
-            Regex("""Avail\s+Limit:?\s*Rs\.?\s*([0-9,]+(?:\.\d{2})?)""", RegexOption.IGNORE_CASE),
+            Regex("""Avail\s+Limit:?\s*$cur\s*([0-9,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
             // "Available Credit Limit: Rs.111,111.89"
-            Regex(
-                """Available\s+Credit\s+Limit:?\s*Rs\.?\s*([0-9,]+(?:\.\d{2})?)""",
-                RegexOption.IGNORE_CASE
-            ),
+            Regex("""Available\s+Credit\s+Limit:?\s*$cur\s*([0-9,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
             // "Limit: Rs.111,111.89" (generic, but only for credit card messages)
-            Regex("""(?:^|\s)Limit:?\s*Rs\.?\s*([0-9,]+(?:\.\d{2})?)""", RegexOption.IGNORE_CASE)
+            Regex("""(?:^|\s)Limit:?\s*$cur\s*([0-9,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE)
         )
 
         for ((index, pattern) in creditLimitPatterns.withIndex()) {
@@ -622,6 +734,13 @@ abstract class BankParser {
                 !name.all { it.isDigit() } &&
                 !name.contains("@") // Not a UPI ID
     }
+
+    /**
+     * True when the message is a credit-card bill-payment leg that must survive the
+     * [isCreditCardConfirmationMessage] skip, because it gets re-classified as a
+     * TRANSFER + CC_BILL_PAYMENT (see BaseIndianBankParser.applyCreditCardBillPayment).
+     */
+    protected open fun isCardBillPaymentConfirmation(message: String): Boolean = false
 
     /**
      * Ignore credit-card confirmation messages that are not actual spend/income entries.

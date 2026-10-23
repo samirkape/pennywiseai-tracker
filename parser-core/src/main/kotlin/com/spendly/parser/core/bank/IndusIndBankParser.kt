@@ -38,6 +38,12 @@ class IndusIndBankParser : BaseIndianBankParser() {
         // IndusInd typically uses standard verbs; fall back to base for most, but
         // explicitly treat "spent" and "purchase" as expenses to avoid ambiguity.
         return when {
+            // A credit-card purchase ("spent on IndusInd Card ... Avl Lmt: INR ...") must
+            // type as CREDIT — not EXPENSE — so it counts as card spend and the base
+            // parser's available-limit extraction (gated on CREDIT) runs. Refund SMS say
+            // "credited to your ... Card" but carry no "Avl Lmt", so they fall through to
+            // INCOME via super. (#486)
+            lower.contains("card") && lower.contains("avl lmt") -> TransactionType.CREDIT
             lower.contains("spent") -> TransactionType.EXPENSE
             lower.contains("debited") -> TransactionType.EXPENSE
             lower.contains("purchase") -> TransactionType.EXPENSE
@@ -56,6 +62,14 @@ class IndusIndBankParser : BaseIndianBankParser() {
         val isAchOrNach =
             lower.contains("ach db") || lower.contains("ach cr") || lower.contains("nach")
         if (isAchOrNach) return false
+        // Credit-card refund SMS say "credited to your IndusInd Bank Credit Card XX1234 ...
+        // adjusted against the outstanding on your card account". The trailing "card account"
+        // phrase makes the base detectIsCard bail out as an account (non-card) txn, so
+        // recognise the credit card explicitly here. Mask is 2+ X's so XX1234 and
+        // XXXX1234 both match. (#486)
+        if (lower.contains("credit card") && CARD_MASK_PATTERN.containsMatchIn(message)) {
+            return true
+        }
         return super.detectIsCard(message)
     }
 
@@ -163,6 +177,15 @@ class IndusIndBankParser : BaseIndianBankParser() {
     }
 
     override fun extractMerchant(message: String, sender: String): String? {
+        // Credit-card refund: "refund of INR <amt> from <Merchant> has been credited ..."
+        // IndusInd appends the legal entity + branch/location (e.g. "Swiggy Limited Banga");
+        // keep just the brand so the refund nets against the original spend merchant. (#486)
+        REFUND_MERCHANT_PATTERN.find(message)?.let { match ->
+            var m = match.groupValues[1].trim()
+            m = m.replace(LEGAL_ENTITY_SUFFIX_PATTERN, "")
+            if (m.isNotEmpty()) return cleanMerchantName(m)
+        }
+
         // UPI-style: towards <vpa or merchant>
         // Capture the next token (can include dots) and strip trailing punctuation
         val towardsPattern = Regex("""towards\s+(\S+)""", RegexOption.IGNORE_CASE)
@@ -193,8 +216,9 @@ class IndusIndBankParser : BaseIndianBankParser() {
             }
         }
 
-        // Card/POS: at <merchant>
-        val atPattern = Regex("""at\s+([^\n]+?)(?:\s+Ref|\s+on|$)""", RegexOption.IGNORE_CASE)
+        // Card/POS: at <merchant>. Stop at " Ref", " on", a sentence-boundary period
+        // (e.g. "at INSTAMART. Avl Lmt: ..." on credit-card spends), or end of line.
+        val atPattern = Regex("""at\s+([^\n]+?)(?:\s+Ref|\s+on|\.\s|$)""", RegexOption.IGNORE_CASE)
         atPattern.find(message)?.let { match ->
             val merchant = match.groupValues[1].trim()
             if (merchant.isNotEmpty()) return cleanMerchantName(merchant)
@@ -301,4 +325,21 @@ class IndusIndBankParser : BaseIndianBankParser() {
         return super.extractReference(message)
     }
 
+    private companion object {
+        // Masked card number on a credit-card SMS: "Card XX1234" or "Card XXXX1234".
+        // 2+ X's so both mask widths match. (#486)
+        private val CARD_MASK_PATTERN = Regex("""card\s+x{2,}\d""", RegexOption.IGNORE_CASE)
+
+        // Credit-card refund shape: "refund of INR <amt> from <Merchant> has been credited".
+        private val REFUND_MERCHANT_PATTERN = Regex(
+            """refund\s+of\s+(?:INR|Rs\.?|₹)\s*[0-9,]+(?:\.\d{2})?\s+from\s+(.+?)\s+has\s+been\s+credited""",
+            RegexOption.IGNORE_CASE
+        )
+
+        // Trailing legal-entity/branch noise appended to the brand ("Swiggy Limited Banga").
+        private val LEGAL_ENTITY_SUFFIX_PATTERN = Regex(
+            """\s+(?:Limited|Ltd\.?|Pvt\.?|Private).*$""",
+            RegexOption.IGNORE_CASE
+        )
+    }
 }

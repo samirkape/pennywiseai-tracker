@@ -24,7 +24,21 @@ data class ParsedTransaction(
      * excluded from spending (e.g. credit card bill payments). Mirrors the
      * `transfer_kind` column on TransactionEntity. See [TransferKinds] for values.
      */
-    val transferKind: String? = null
+    val transferKind: String? = null,
+    /**
+     * Mobile-money wallet (e.g. eMola, M-Pesa Mozambique): the SMS carries a
+     * running balance but no per-account number, because the whole wallet IS the
+     * account. When true, the app derives a single service-level account row from
+     * the balance instead of requiring an accountLast4.
+     */
+    val isMobileWallet: Boolean = false,
+    /**
+     * Currency the ACCOUNT (balance / limit) is kept in, when it differs from the
+     * transaction's: a USD spend on an INR credit card. Null means "same as
+     * [currency]" — the common case, and the right answer for a foreign-currency
+     * account whose SMS reports its balance in that currency.
+     */
+    val accountCurrency: String? = null
 ) {
     /**
      * Convenience flag: true when this parsed transaction represents a credit card

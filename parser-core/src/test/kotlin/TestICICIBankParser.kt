@@ -188,6 +188,116 @@ class ICICIBankParserTest {
                     type = TransactionType.EXPENSE,
                     merchant = "NEFT Transfer"
                 )
+            ),
+            ParserTestCase(
+                name = "IMPS dual-account debit is TRANSFER",
+                message = "ICICI Bank Acct XX123 debited with Rs 10 on 20-Dec-25 & Acct XX456 credited.IMPS:ABCDEF123456. Call 18002662 for dispute or SMS BLOCK 700 to 9215676766",
+                sender = "JD-ICICIT-S",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("10"),
+                    currency = "INR",
+                    type = TransactionType.TRANSFER,
+                    merchant = "IMPS Transfer",
+                    accountLast4 = "123",
+                    fromAccount = "123",
+                    toAccount = "456",
+                    reference = "ABCDEF123456"
+                )
+            ),
+            ParserTestCase(
+                name = "NEFT dual-account debit gets NEFT Transfer label",
+                message = "ICICI Bank Acct XX111 debited with Rs 5000 on 15-Jan-26 & Acct XX222 credited. NEFT RRN ZX9876543210. -ICICI Bank",
+                sender = "JD-ICICIT-S",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("5000"),
+                    currency = "INR",
+                    type = TransactionType.TRANSFER,
+                    merchant = "NEFT Transfer",
+                    accountLast4 = "111",
+                    fromAccount = "111",
+                    toAccount = "222",
+                    reference = "ZX9876543210"
+                )
+            ),
+            ParserTestCase(
+                name = "IMPS dual-account with 'is debited' / 'is credited' variant",
+                message = "ICICI Bank Acct XX333 is debited with Rs 200 and Acct XX444 is credited. IMPS:LMNOPQ987654. -ICICI Bank",
+                sender = "JD-ICICIT-S",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("200"),
+                    currency = "INR",
+                    type = TransactionType.TRANSFER,
+                    merchant = "IMPS Transfer",
+                    accountLast4 = "333",
+                    fromAccount = "333",
+                    toAccount = "444",
+                    reference = "LMNOPQ987654"
+                )
+            ),
+            ParserTestCase(
+                name = "ACH credit via ICICI",
+                message = "ICICI Bank Account XX227 credited:Rs. 104.00 on 19-May-26. Info ACH*VARUNBEVERAGES LIMI*778. Available Balance is Rs 1,11,231.93",
+                sender = "AD-ICICIT-S",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("104.00"),
+                    currency = "INR",
+                    type = TransactionType.INCOME,
+                    merchant = "VARUNBEVERAGES LIMI Dividend",
+                    accountLast4 = "227",
+                    balance = BigDecimal("111231.93")
+                )
+            ),
+            ParserTestCase(
+                name = "ACH debit via ICICI is INVESTMENT",
+                message = "ICICI Bank Account XX123 debited Rs. 5,000.00 on 19-May-26 InfoACH*BD-ACHKFL.Avl Bal Rs. 3,25,000.04.To dispute call 1800 blah blah",
+                sender = "AX-ICICIT",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("5000.00"),
+                    currency = "INR",
+                    type = TransactionType.INVESTMENT,
+                    //merchant = "", - can't detect merchant
+                    accountLast4 = "123",
+                    balance = BigDecimal("325000.04")
+                )
+            ),
+            ParserTestCase(
+                name = "ATM cash withdrawal (CAM* marker)",
+                message = "ICICI Bank Acc XX611 debited Rs. 6,500.00 on 19-Jun-26 CAM*62712SRY*. Avb Bal Rs. 10,079.44. To dispute Call 18002662 or SMS BLOCK 611 to 9215676766",
+                sender = "VM-ICICIT-S",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("6500.00"),
+                    currency = "INR",
+                    type = TransactionType.EXPENSE,
+                    merchant = "ATM Withdrawal",
+                    accountLast4 = "611",
+                    balance = BigDecimal("10079.44")
+                )
+            ),
+            ParserTestCase(
+                name = "NEFT credit extracts payer name as merchant",
+                message = "ICICI Bank Account XX378 credited:Rs. 6,000.00 on 24-Jun-26. Info NEFT-FDRLM4175907234-JOHN JOSE. Available Balance is Rs. 16,079.44.",
+                sender = "VK-ICICIT-S",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("6000.00"),
+                    currency = "INR",
+                    type = TransactionType.INCOME,
+                    merchant = "JOHN JOSE",
+                    accountLast4 = "378",
+                    balance = BigDecimal("16079.44")
+                )
+            ),
+            ParserTestCase(
+                name = "Bill-pay biller (InfoBIL* marker)",
+                message = "ICICI Bank Acc XX342 debited Rs. 8,927.00 on 07-Jun-26 InfoBIL*Auto Loan.Avl Bal Rs. 1,248.78.To dispute call 18002662 or SMS BLOCK 342 to 9215676766",
+                sender = "JD-ICICIT-S",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("8927.00"),
+                    currency = "INR",
+                    type = TransactionType.EXPENSE,
+                    merchant = "Auto Loan",
+                    accountLast4 = "342",
+                    balance = BigDecimal("1248.78")
+                )
             )
         )
 

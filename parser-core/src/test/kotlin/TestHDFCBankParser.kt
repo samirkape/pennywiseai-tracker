@@ -210,6 +210,50 @@ Avl bal INR 1,276.99""",
                     merchant = "ACME TECHNOLOGIES",
                     balance = BigDecimal("8.00")
                 )
+            ),
+
+            // Credit-card refund — incoming credit to the card. Reported via
+            // TODO.md: parser was dropping these silently because the message
+            // lacks the standard "debited/credited/spent/..." keywords.
+            ParserTestCase(
+                name = "Credit Card Refund Initiated - Income",
+                message = "Refund initiated: Amt: Rs.34274.66 on HDFC Bank Credit Card 1111. To receive your Refund,please update your Bank details: TnC.",
+                sender = "VM-HDFCBK-S",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("34274.66"),
+                    currency = "INR",
+                    type = com.spendly.parser.core.TransactionType.INCOME,
+                    accountLast4 = "1111"
+                )
+            ),
+
+            // Credit-card transaction reversal — money returns to the card, so it
+            // reduces outstanding (INCOME). Like the refund above, the message has
+            // none of the standard debit/credit keywords. (#698)
+            ParserTestCase(
+                name = "Credit Card Transaction Reversed - Income",
+                message = "Transaction Reversed!On HDFC Bank CREDIT Card xx5555 Amt: Rs.862.16 By AMAZON                000 On 2026-08-21:05:20:26",
+                sender = "VM-HDFCBK-S",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("862.16"),
+                    currency = "INR",
+                    type = com.spendly.parser.core.TransactionType.INCOME,
+                    merchant = "AMAZON",
+                    accountLast4 = "5555"
+                )
+            ),
+
+            ParserTestCase(
+                name = "NetBanking Payment Successful - Expense",
+                message = "Payment Successful! Rs. 12345.67 from A/c ****4321 to ACMEPAYMENTS via HDFC Bank NetBanking. Not you?Call 18002586161",
+                sender = "VM-HDFCBK-S",
+                expected = ExpectedTransaction(
+                    amount = BigDecimal("12345.67"),
+                    currency = "INR",
+                    type = com.spendly.parser.core.TransactionType.EXPENSE,
+                    accountLast4 = "4321",
+                    merchant = "ACMEPAYMENTS"
+                )
             )
         )
 

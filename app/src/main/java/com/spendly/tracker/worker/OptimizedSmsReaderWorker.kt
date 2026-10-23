@@ -134,14 +134,14 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
     /** Set once at the start of doWork to avoid calling LocalDateTime.now() per SMS. */
     private lateinit var thirtyDaysAgo: LocalDateTime
 
-    /** O(1) sender-to-parser lookup. Factory is only called once per unique sender string. */
-    private class ParserHolder(val parser: BankParser?)
+    /** O(1) sender-to-parsers lookup. Factory is only called once per unique sender string. */
+    private class ParserHolder(val parsers: List<BankParser>)
     private val parserCache = java.util.concurrent.ConcurrentHashMap<String, ParserHolder>(256)
-    private fun cachedParser(sender: String, body: String): BankParser? {
-        parserCache[sender]?.parser?.let { return it }
-        val parser = BankParserFactory.getParser(sender, body)
-        parserCache[sender] = ParserHolder(parser)
-        return parser
+    private fun cachedParsers(sender: String): List<BankParser> {
+        parserCache[sender]?.let { return it.parsers }
+        val parsers = BankParserFactory.getParsers(sender)
+        parserCache[sender] = ParserHolder(parsers)
+        return parsers
     }
 
     /**
@@ -461,21 +461,31 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
         if (upper.endsWith("-P") || upper.endsWith("-G"))
             return ParseResult.Discard(sms)
 
-        val parser = cachedParser(sms.sender, sms.body)
-            ?: return if (upper.endsWith("-T") || upper.endsWith("-S"))
+        val parsers = cachedParsers(sms.sender)
+        if (parsers.isEmpty())
+            return if (upper.endsWith("-T") || upper.endsWith("-S"))
                 ParseResult.StoreUnrecognized(sms)
             else
                 ParseResult.Discard(sms)
 
         val isRecent = sms.timestamp.toLocalDateTime().isAfter(thirtyDaysAgo)
 
-        checkSubscriptionOrBalance(parser, sms, isRecent)?.let { return it }
+        checkSubscriptionOrBalance(parsers, sms, isRecent)?.let { return it }
 
-        val parsed = parser.parse(sms.body, sms.sender, sms.timestamp)
+        // Content-aware dispatch: several senders are claimed by more than one
+        // parser, and each parser gates its own parse() by message content.
+        val parsed = parsers.firstNotNullOfOrNull { it.parse(sms.body, sms.sender, sms.timestamp) }
             ?: return ParseResult.Discard(sms)
 
         return ParseResult.Transaction(sms, parsed)
     }
+
+    /** Tries each sender-matching parser's special-notification handling in order. */
+    private fun checkSubscriptionOrBalance(
+        parsers: List<BankParser>,
+        sms: SmsMessage,
+        isRecent: Boolean
+    ): ParseResult? = parsers.firstNotNullOfOrNull { checkSubscriptionOrBalance(it, sms, isRecent) }
 
     // ─── Subscription / balance detection (pure parse, zero DB access) ────────
 
