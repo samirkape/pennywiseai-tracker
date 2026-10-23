@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -67,15 +68,44 @@ class BudgetBreachCheckWorker @AssistedInject constructor(
         private const val CHANNEL_NAME = "Budget Alerts"
         private const val PREFS_NAME = "budget_breach_alerts"
         private const val MAX_LISTED_BREACHES = 3
+        private const val MAX_MERCHANT_LENGTH = 24
         private const val NOTIFICATION_ID = 76123
 
-        fun enqueueOneShot(context: Context) {
+        private const val KEY_MERCHANT = "trigger_merchant"
+        private const val KEY_AMOUNT = "trigger_amount"
+        private const val KEY_CURRENCY = "trigger_currency"
+
+        /**
+         * Enqueues a debounced breach evaluation. [merchant], [amount] and [currency]
+         * describe the transaction that triggered the check so the notification can name
+         * the exact budget that this transaction pushed over its limit.
+         */
+        fun enqueueOneShot(
+            context: Context,
+            merchant: String? = null,
+            amount: BigDecimal? = null,
+            currency: String? = null
+        ) {
             if (!Constants.Features.BUDGET_BREACH_ALERTS_ENABLED) return
-            val request = OneTimeWorkRequestBuilder<BudgetBreachCheckWorker>().build()
+            val input = Data.Builder()
+                .putString(KEY_MERCHANT, merchant)
+                .putString(KEY_AMOUNT, amount?.toPlainString())
+                .putString(KEY_CURRENCY, currency)
+                .build()
+            val request = OneTimeWorkRequestBuilder<BudgetBreachCheckWorker>()
+                .setInputData(input)
+                .build()
             WorkManager.getInstance(context)
                 .enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, request)
         }
     }
+
+    /** Description of the transaction that triggered this evaluation, if known. */
+    private data class TriggerInfo(
+        val merchant: String?,
+        val amount: BigDecimal?,
+        val currency: String?
+    )
 
     override suspend fun doWork(): Result {
         return try {
@@ -106,6 +136,12 @@ class BudgetBreachCheckWorker @AssistedInject constructor(
                 yearMonth.atDay(1) to yearMonth.atEndOfMonth()
             }
 
+            val trigger = TriggerInfo(
+                merchant = inputData.getString(KEY_MERCHANT)?.take(MAX_MERCHANT_LENGTH),
+                amount = inputData.getString(KEY_AMOUNT)?.toBigDecimalOrNull(),
+                currency = inputData.getString(KEY_CURRENCY)?.takeIf { it.isNotBlank() }
+            )
+
             val buckets = if (isUnifiedMode) {
                 loadUnifiedBucketUsage(periodStart, periodEnd, baseCurrency, currency)
             } else {
@@ -123,7 +159,7 @@ class BudgetBreachCheckWorker @AssistedInject constructor(
                     }
             }
 
-            evaluateBreaches(buckets, periodStart, currency)
+            evaluateBreaches(buckets, periodStart, currency, trigger)
             Result.success()
         } catch (e: Exception) {
             Result.retry()
@@ -185,7 +221,8 @@ class BudgetBreachCheckWorker @AssistedInject constructor(
     private fun evaluateBreaches(
         buckets: List<BucketUsage>,
         periodStart: LocalDate,
-        currency: String
+        currency: String,
+        trigger: TriggerInfo
     ) {
         val breached = buckets.filter { it.isBreached }
 
@@ -203,11 +240,15 @@ class BudgetBreachCheckWorker @AssistedInject constructor(
         }
 
         if (newBreaches.isNotEmpty()) {
-            showNotification(newBreaches, currency)
+            showNotification(newBreaches, currency, trigger)
         }
     }
 
-    private fun showNotification(breaches: List<BucketUsage>, currency: String) {
+    private fun showNotification(
+        breaches: List<BucketUsage>,
+        currency: String,
+        trigger: TriggerInfo
+    ) {
         val context = applicationContext
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -228,22 +269,52 @@ class BudgetBreachCheckWorker @AssistedInject constructor(
         }
         notificationManager.createNotificationChannel(channel)
 
+        // Describe what pushed the budget over: the triggering transaction when known,
+        // falling back to plain usage text otherwise.
+        val triggerAmount = trigger.amount
+        val triggerText = if (triggerAmount != null && triggerAmount > BigDecimal.ZERO) {
+            val formatted = CurrencyFormatter.formatCurrency(
+                triggerAmount,
+                trigger.currency ?: currency
+            )
+            val merchant = trigger.merchant
+            if (!merchant.isNullOrBlank()) "$formatted at $merchant" else "$formatted payment"
+        } else {
+            null
+        }
+
         val title = if (breaches.size == 1) {
             "${breaches.first().name} budget breached"
         } else {
             "${breaches.size} budgets breached"
         }
-        val text = if (breaches.size == 1) {
-            val breach = breaches.first()
-            "You've spent ${CurrencyFormatter.formatCurrency(breach.actual, currency)} of your ${CurrencyFormatter.formatCurrency(breach.budget, currency)} budget."
-        } else {
-            val names = breaches.take(MAX_LISTED_BREACHES).joinToString(", ") { it.name }
-            val more = if (breaches.size > MAX_LISTED_BREACHES) {
-                " and ${breaches.size - MAX_LISTED_BREACHES} more"
-            } else {
-                ""
+        val text = when {
+            breaches.size == 1 && triggerText != null -> {
+                val breach = breaches.first()
+                "Your $triggerText pushed it over the ${CurrencyFormatter.formatCurrency(breach.budget, currency)} budget \u2014 now ${CurrencyFormatter.formatCurrency(breach.actual - breach.budget, currency)} over."
             }
-            "$names$more are over budget."
+            breaches.size == 1 -> {
+                val breach = breaches.first()
+                "You've spent ${CurrencyFormatter.formatCurrency(breach.actual, currency)} of your ${CurrencyFormatter.formatCurrency(breach.budget, currency)} budget."
+            }
+            triggerText != null -> {
+                val names = breaches.take(MAX_LISTED_BREACHES).joinToString(", ") { it.name }
+                val more = if (breaches.size > MAX_LISTED_BREACHES) {
+                    " and ${breaches.size - MAX_LISTED_BREACHES} more"
+                } else {
+                    ""
+                }
+                "Your $triggerText pushed ${breaches.size} budgets over: $names$more."
+            }
+            else -> {
+                val names = breaches.take(MAX_LISTED_BREACHES).joinToString(", ") { it.name }
+                val more = if (breaches.size > MAX_LISTED_BREACHES) {
+                    " and ${breaches.size - MAX_LISTED_BREACHES} more"
+                } else {
+                    ""
+                }
+                "$names$more are over budget."
+            }
         }
 
         val intent = Intent(context, MainActivity::class.java).apply {

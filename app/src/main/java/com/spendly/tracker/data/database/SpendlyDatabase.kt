@@ -77,7 +77,7 @@ import com.spendly.tracker.data.database.dao.PrepaidExpenseDao
  */
 @Database(
     entities = [TransactionEntity::class, SubscriptionEntity::class, ChatMessage::class, MerchantMappingEntity::class, MerchantAliasEntity::class, CategoryEntity::class, AccountBalanceEntity::class, UnrecognizedSmsEntity::class, CardEntity::class, RuleEntity::class, RuleApplicationEntity::class, ExchangeRateEntity::class, BudgetEntity::class, BudgetCategoryEntity::class, BudgetMonthSnapshotEntity::class, BudgetCategoryMonthSnapshotEntity::class, TransactionSplitEntity::class, BankNotificationEntity::class, LoanEntity::class, TransactionGroupEntity::class, ProfileEntity::class, SalaryMonthOverrideEntity::class, TransactionReceiptEntity::class, InsightsCacheEntity::class, GoalEntity::class, GoalContributionEntity::class, PrepaidExpenseEntity::class, PrepaidAllocationEntity::class],
-    version = 65,
+    version = 66,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -136,6 +136,7 @@ import com.spendly.tracker.data.database.dao.PrepaidExpenseDao
         // 60→61 is a manual migration registered in DatabaseModule (add prepaid_expenses + prepaid_allocations tables, prepaid_expense_id column on transactions)
         AutoMigration(from = 61, to = 62),
         // 62→63 is a manual migration registered in DatabaseModule (add merchant_manually_edited + category_manually_edited columns)
+        // 65→66 is a manual migration registered in DatabaseModule (add amount_manually_edited column)
     ]
 )
 @TypeConverters(Converters::class)
@@ -208,7 +209,8 @@ abstract class SpendlyDatabase : RoomDatabase() {
                         MIGRATION_60_61,
                         MIGRATION_62_63,
                         MIGRATION_63_64,
-                        MIGRATION_64_65
+                        MIGRATION_64_65,
+                        MIGRATION_65_66
                     )
                     .build()
                 INSTANCE = instance
@@ -831,6 +833,12 @@ abstract class SpendlyDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE `transactions` ADD COLUMN `refund_of_transaction_id` INTEGER DEFAULT NULL")
                 db.execSQL("ALTER TABLE `transactions` ADD COLUMN `refund_link_manually_edited` INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_refund_of_transaction_id` ON `transactions` (`refund_of_transaction_id`)")
+            }
+        }
+
+        val MIGRATION_65_66 = object : Migration(65, 66) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `transactions` ADD COLUMN `amount_manually_edited` INTEGER NOT NULL DEFAULT 0")
             }
         }
 

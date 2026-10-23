@@ -247,7 +247,12 @@ class SmsTransactionProcessor @Inject constructor(
                 com.spendly.tracker.widget.RecentTransactionsWidgetUpdateWorker.enqueueOneShot(appContext)
 
                 // Re-evaluate budget buckets and alert if this transaction breached one
-                com.spendly.tracker.worker.BudgetBreachCheckWorker.enqueueOneShot(appContext)
+                com.spendly.tracker.worker.BudgetBreachCheckWorker.enqueueOneShot(
+                    context = appContext,
+                    merchant = finalEntity.merchantName,
+                    amount = finalEntity.amount,
+                    currency = finalEntity.currency
+                )
 
                 return ProcessingResult(true, transactionId = rowId)
             } else {

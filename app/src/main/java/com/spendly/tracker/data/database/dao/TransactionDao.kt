@@ -734,6 +734,11 @@ interface TransactionDao {
      * receipt_path, is_excluded_from_tracking, etc.) and skips is_deleted rows so a
      * deleted transaction is never resurrected.
      *
+     * [amount] must be the freshly-parsed amount only when the row's
+     * amount_manually_edited flag is 0; callers pass the stored amount back otherwise
+     * (see OptimizedSmsReaderWorker.updateExistingTransaction) so a user's corrected
+     * amount survives background rescans.
+     *
      * merchant_name / category / transaction_type are deliberately excluded, even
      * though *_manually_edited flags exist for them: those flags only cover edits made
      * after the flag columns were introduced (they default to 0 on migration), so they

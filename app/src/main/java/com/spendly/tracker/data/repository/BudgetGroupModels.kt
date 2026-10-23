@@ -33,6 +33,9 @@ data class BudgetOverallSummary(
     val totalIncome: BigDecimal,
     val totalLimitBudget: BigDecimal,
     val totalLimitSpent: BigDecimal,
+    // Portion of totalLimitSpent contributed by investment transactions, so UIs can
+    // show spending and investments separately while both still sum to totalLimitSpent.
+    val totalInvested: BigDecimal = BigDecimal.ZERO,
     val totalTargetGoal: BigDecimal,
     val totalTargetActual: BigDecimal,
     val totalExpectedBudget: BigDecimal,

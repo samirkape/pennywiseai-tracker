@@ -161,7 +161,12 @@ class AddTransactionUseCase @Inject constructor(
 
         // Re-evaluate budget buckets and alert if this transaction breached one
         if (transactionId != -1L) {
-            com.spendly.tracker.worker.BudgetBreachCheckWorker.enqueueOneShot(appContext)
+            com.spendly.tracker.worker.BudgetBreachCheckWorker.enqueueOneShot(
+                context = appContext,
+                merchant = merchant,
+                amount = amount,
+                currency = currency
+            )
         }
 
         return transactionId

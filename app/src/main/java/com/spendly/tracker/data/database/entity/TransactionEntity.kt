@@ -150,6 +150,14 @@ data class TransactionEntity(
     val transactionTypeManuallyEdited: Boolean = false,
 
     /**
+     * True when the user manually changed this transaction's amount, overriding the
+     * amount originally extracted from the SMS. Reparse passes (background rescan /
+     * Full Resync) must not overwrite the amount while this is set.
+     */
+    @ColumnInfo(name = "amount_manually_edited", defaultValue = "0")
+    val amountManuallyEdited: Boolean = false,
+
+    /**
      * For an INCOME row that reverses an earlier expense: the id of that original
      * expense. Linked refunds are netted out of spend and budgets against the
      * original's date.

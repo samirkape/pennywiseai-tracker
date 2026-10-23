@@ -48,10 +48,12 @@ class UpdateTransactionUseCase @Inject constructor(
             .equals(rawUpdated.merchantName.trim(), ignoreCase = true)
         val categoryChanged = original.category != rawUpdated.category
         val typeChanged = original.transactionType != rawUpdated.transactionType
+        val amountChanged = original.amount.compareTo(rawUpdated.amount) != 0
         val updated = rawUpdated.copy(
             merchantManuallyEdited = rawUpdated.merchantManuallyEdited || merchantChanged,
             categoryManuallyEdited = rawUpdated.categoryManuallyEdited || categoryChanged,
             transactionTypeManuallyEdited = rawUpdated.transactionTypeManuallyEdited || typeChanged,
+            amountManuallyEdited = rawUpdated.amountManuallyEdited || amountChanged,
         )
 
         // Delete removed receipts from disk and DB

@@ -91,7 +91,8 @@ object DatabaseModule {
                 SpendlyDatabase.MIGRATION_60_61,
                 SpendlyDatabase.MIGRATION_62_63,
                 SpendlyDatabase.MIGRATION_63_64,
-                SpendlyDatabase.MIGRATION_64_65
+                SpendlyDatabase.MIGRATION_64_65,
+                SpendlyDatabase.MIGRATION_65_66
             )
             .fallbackToDestructiveMigrationOnDowngrade()
 

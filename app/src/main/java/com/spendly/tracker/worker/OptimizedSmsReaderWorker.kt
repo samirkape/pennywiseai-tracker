@@ -679,13 +679,20 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
      * cannot tell a manual categorization/rename made before this feature shipped apart
      * from raw parser output. Auto-"fixing" them here previously reset manually
      * categorized transactions to "Other" — never touch user-owned columns.
+     *
+     * Amount is the exception: it is only written when the user has never edited it
+     * ([TransactionEntity.amountManuallyEdited]). A background rescan runs on every app
+     * foreground and re-reads the last few days of SMS, so without this guard every
+     * manually corrected amount would silently snap back to the parsed value.
      */
     private suspend fun updateExistingTransaction(
         existing: TransactionEntity,
         freshlyParsed: TransactionEntity,
         stats: ProcessingStats,
     ): Boolean {
-        val amountChanged = existing.amount.compareTo(freshlyParsed.amount) != 0
+        val preserveManuallyEditedAmount = existing.amountManuallyEdited
+        val amountChanged = !preserveManuallyEditedAmount &&
+            existing.amount.compareTo(freshlyParsed.amount) != 0
         val balanceChanged = when {
             existing.balanceAfter == null && freshlyParsed.balanceAfter == null -> false
             existing.balanceAfter == null || freshlyParsed.balanceAfter == null -> true
@@ -702,7 +709,7 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
 
         val rows = transactionRepository.updateParsedFieldsById(
             id = existing.id,
-            amount = freshlyParsed.amount,
+            amount = if (preserveManuallyEditedAmount) existing.amount else freshlyParsed.amount,
             accountNumber = freshlyParsed.accountNumber,
             balanceAfter = freshlyParsed.balanceAfter,
             reference = freshlyParsed.reference,

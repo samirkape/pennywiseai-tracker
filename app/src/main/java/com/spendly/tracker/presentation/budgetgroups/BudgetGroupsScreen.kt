@@ -292,6 +292,23 @@ private fun BudgetGroupsContent(
             }
         }
 
+        // Spending trend across recent periods
+        item {
+            val visible = remember { mutableStateOf(hasAnimated) }
+            LaunchedEffect(Unit) {
+                if (!hasAnimated) { delay(75); visible.value = true }
+            }
+            AnimatedVisibility(
+                visible = visible.value,
+                enter = fadeIn(tween(300)) + slideInVertically(
+                    initialOffsetY = { slideOffsetPx },
+                    animationSpec = tween(300)
+                )
+            ) {
+                BudgetTrendCard(trend = uiState.trend, currency = uiState.currency)
+            }
+        }
+
         if (groupCount > 0) {
             item {
                 Text(
@@ -1012,6 +1029,178 @@ private fun HeroStat(
             text = sub,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+        )
+    }
+}
+
+/**
+ * Compact multi-period trend: spending (excluding investments) and investments against
+ * the budget line across the most recent periods, mirroring the Actual/Pace convention
+ * of the per-budget chart. The spending line tints to the breach color when the latest
+ * period's spending alone exceeds the budget, while the caption counts total breaches
+ * (spending + investments) so it always agrees with the hero figure.
+ */
+@Composable
+private fun BudgetTrendCard(
+    trend: List<BudgetTrendPoint>,
+    currency: String,
+    modifier: Modifier = Modifier
+) {
+    if (trend.size < 2 || trend.none { it.budget > BigDecimal.ZERO }) return
+
+    val themeColors = MaterialTheme.colorScheme
+    val spendingOverBudget = trend.last().let { it.budget > BigDecimal.ZERO && it.spent > it.budget }
+    val spentColor = if (spendingOverBudget) themeColors.error else themeColors.primary
+    val investedColor = themeColors.spendPurple
+    val budgetLineColor = themeColors.onSurfaceVariant.copy(alpha = 0.45f)
+    val overCount = trend.count { it.isOverBudget }
+    val shortDate = java.time.format.DateTimeFormatter.ofPattern("MMM d")
+    val rangeText =
+        "${trend.first().periodStart.format(shortDate)} \u00B7 ${trend.last().periodEnd.format(shortDate)}"
+
+    SpendlyCardV2(
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Spending trend",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = themeColors.onSurface
+            )
+            Text(
+                text = rangeText,
+                style = MaterialTheme.typography.labelSmall,
+                color = themeColors.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.height(Spacing.sm))
+
+        LineChart(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(130.dp),
+            data = listOf(
+                Line(
+                    label = "Spending",
+                    values = trend.map { it.spent.toDouble() },
+                    color = SolidColor(spentColor),
+                    firstGradientFillColor = spentColor.copy(alpha = 0.18f),
+                    secondGradientFillColor = Color.Transparent,
+                    strokeAnimationSpec = tween(1000),
+                    gradientAnimationDelay = 400,
+                    drawStyle = DrawStyle.Stroke(width = 2.5.dp),
+                    curvedEdges = true,
+                    dotProperties = DotProperties(enabled = false)
+                ),
+                Line(
+                    label = "Invested",
+                    values = trend.map { it.invested.toDouble() },
+                    color = SolidColor(investedColor),
+                    strokeAnimationSpec = tween(1000),
+                    gradientAnimationDelay = 400,
+                    drawStyle = DrawStyle.Stroke(width = 1.75.dp),
+                    curvedEdges = true,
+                    dotProperties = DotProperties(enabled = false)
+                ),
+                Line(
+                    label = "Budget",
+                    values = trend.map { it.budget.toDouble() },
+                    color = SolidColor(budgetLineColor),
+                    drawStyle = DrawStyle.Stroke(width = 1.5.dp),
+                    strokeAnimationSpec = tween(1000),
+                    curvedEdges = false,
+                    dotProperties = DotProperties(enabled = false)
+                )
+            ),
+            dividerProperties = DividerProperties(enabled = false),
+            indicatorProperties = HorizontalIndicatorProperties(
+                enabled = true,
+                textStyle = MaterialTheme.typography.labelSmall.copy(
+                    color = themeColors.onSurfaceVariant.copy(0.7f)
+                ),
+                contentBuilder = { value ->
+                    CurrencyFormatter.formatAbbreviated(value, currency)
+                }
+            ),
+            labelHelperProperties = LabelHelperProperties(enabled = false),
+            labelProperties = LabelProperties(enabled = false),
+            gridProperties = GridProperties(
+                enabled = true,
+                xAxisProperties = GridProperties.AxisProperties(
+                    enabled = false
+                ),
+                yAxisProperties = GridProperties.AxisProperties(
+                    enabled = true,
+                    style = StrokeStyle.Dashed(),
+                    color = SolidColor(themeColors.onSurface.copy(alpha = 0.08f))
+                )
+            ),
+            animationMode = AnimationMode.Together(delayBuilder = { it * 100L })
+        )
+
+        Spacer(modifier = Modifier.height(Spacing.sm))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(spentColor)
+            )
+            Spacer(modifier = Modifier.width(Spacing.xs))
+            Text(
+                text = "Spending",
+                style = MaterialTheme.typography.labelSmall,
+                color = themeColors.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.width(Spacing.md))
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(investedColor)
+            )
+            Spacer(modifier = Modifier.width(Spacing.xs))
+            Text(
+                text = "Invested",
+                style = MaterialTheme.typography.labelSmall,
+                color = themeColors.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.width(Spacing.md))
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(budgetLineColor)
+            )
+            Spacer(modifier = Modifier.width(Spacing.xs))
+            Text(
+                text = "Budget",
+                style = MaterialTheme.typography.labelSmall,
+                color = themeColors.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.height(Spacing.xs))
+
+        val caption = if (overCount > 0) {
+            "Total over budget in $overCount of the last ${trend.size} periods"
+        } else {
+            "Total within budget across all ${trend.size} periods"
+        }
+        Text(
+            text = caption,
+            style = MaterialTheme.typography.bodySmall,
+            color = themeColors.onSurfaceVariant
         )
     }
 }
