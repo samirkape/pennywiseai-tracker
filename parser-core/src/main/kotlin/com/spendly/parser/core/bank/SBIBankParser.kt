@@ -65,9 +65,16 @@ class SBIBankParser : BaseIndianBankParser() {
 
         // If the base parser already detected this as a credit card bill payment,
         // keep that classification verbatim. Anything else would double-count it
-        // or re-promote it to INCOME / CREDIT on the card side.
+        // or re-promote it to INCOME / CREDIT on the card side. Card-side legs
+        // ("payment of X has been credited to your SBI Credit Card ending with NNNN")
+        // still get the card number and available limit attached.
         if (parsed.isCreditCardBillPayment()) {
-            return parsed
+            val cardLast4 = extractCreditCardLast4(normalizedBody) ?: return parsed
+            return parsed.copy(
+                accountLast4 = cardLast4,
+                creditLimit = extractAvailableLimit(normalizedBody) ?: parsed.creditLimit,
+                isFromCard = true
+            )
         }
 
         // Handle credit card messages
@@ -678,7 +685,8 @@ class SBIBankParser : BaseIndianBankParser() {
             amount = amount!!,
             nextDeductionDate = nextDeductionDate,
             merchant = merchant,
-            umn = umn
+            umn = umn,
+            accountLast4 = extractAccountLast4(message)
         )
     }
 
@@ -689,7 +697,8 @@ class SBIBankParser : BaseIndianBankParser() {
         override val amount: BigDecimal,
         override val nextDeductionDate: String?,
         override val merchant: String,
-        override val umn: String?
+        override val umn: String?,
+        override val accountLast4: String? = null
     ) : MandateInfo {
         override val dateFormat = "dd-MMM-yy"
     }

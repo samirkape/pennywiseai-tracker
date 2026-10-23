@@ -108,8 +108,8 @@ class SmsBroadcastReceiver : BroadcastReceiver() {
                 Log.d(TAG, "Transaction saved with ID: ${result.transactionId}")
 
                 if (!isAppInForeground(context)) {
-                    val parser = com.spendly.parser.core.bank.BankParserFactory.getParser(sender, body)
-                    val parsedTransaction = parser?.parse(body, sender, timestamp)
+                    val parsedTransaction = com.spendly.parser.core.bank.BankParserFactory
+                        .parse(body, sender, timestamp)
 
                     if (parsedTransaction != null) {
                         val entryPoint = EntryPointAccessors.fromApplication(

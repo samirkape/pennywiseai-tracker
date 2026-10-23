@@ -19,6 +19,7 @@ class MainActivity : FragmentActivity() {
         const val EXTRA_OPEN_ADD_TRANSACTION = "com.spendly.tracker.OPEN_ADD_TRANSACTION"
         const val EXTRA_OPEN_TRANSACTIONS = "com.spendly.tracker.OPEN_TRANSACTIONS"
         const val EXTRA_OPEN_SUBSCRIPTIONS = "com.spendly.tracker.OPEN_SUBSCRIPTIONS"
+        const val EXTRA_OPEN_BUDGETS = "com.spendly.tracker.OPEN_BUDGETS"
     }
 
     // Transaction ID to edit when launched from notification
@@ -37,6 +38,10 @@ class MainActivity : FragmentActivity() {
     var openSubscriptions by mutableStateOf(false)
         private set
 
+    // Flag to navigate directly to the Budgets screen when launched from a budget breach alert
+    var openBudgets by mutableStateOf(false)
+        private set
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Install splash screen before super.onCreate()
         installSplashScreen()
@@ -53,10 +58,12 @@ class MainActivity : FragmentActivity() {
                 openAddTransaction = openAddTransaction,
                 openTransactions = openTransactions,
                 openSubscriptions = openSubscriptions,
+                openBudgets = openBudgets,
                 onEditComplete = { editTransactionId = null },
                 onAddTransactionShortcutHandled = { openAddTransaction = false },
                 onOpenTransactionsHandled = { openTransactions = false },
-                onOpenSubscriptionsHandled = { openSubscriptions = false }
+                onOpenSubscriptionsHandled = { openSubscriptions = false },
+                onOpenBudgetsHandled = { openBudgets = false }
             )
         }
     }
@@ -82,6 +89,9 @@ class MainActivity : FragmentActivity() {
         }
         if (intent?.getBooleanExtra(EXTRA_OPEN_SUBSCRIPTIONS, false) == true) {
             openSubscriptions = true
+        }
+        if (intent?.getBooleanExtra(EXTRA_OPEN_BUDGETS, false) == true) {
+            openBudgets = true
         }
     }
 }

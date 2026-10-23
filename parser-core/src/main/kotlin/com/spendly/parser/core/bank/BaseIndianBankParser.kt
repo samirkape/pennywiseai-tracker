@@ -92,6 +92,9 @@ abstract class BaseIndianBankParser : BankParser() {
         return applyCreditCardBillPayment(parsed)
     }
 
+    override fun isCardBillPaymentConfirmation(message: String): Boolean =
+        isCreditCardBillPayment(message)
+
     /**
      * Re-classifies the given parsed transaction as a CC_BILL_PAYMENT transfer
      * if its SMS body matches [isCreditCardBillPayment]. No-op otherwise.
@@ -110,65 +113,15 @@ abstract class BaseIndianBankParser : BankParser() {
      * Contains keywords specific to Indian investment platforms and terms.
      */
     override fun isInvestmentTransaction(lowerMessage: String): Boolean {
-        if (PayrollCreditDetector.isPayrollCreditMessage(lowerMessage)) {
+        // Credits to a bank account are income, not investment (ACH dividends, vendor payments, etc.)
+        // Only use "credited" and "deposited" — "received" is ambiguous
+        // (e.g. "X has received Rs Y from your A/c" means outgoing money)
+        if (lowerMessage.contains("credited") ||
+            lowerMessage.contains("deposited")) {
             return false
         }
-        // Long/specific phrases — substring match is safe
-        val substringKeywords = listOf(
-            // Clearing corporations
-            "iccl",
-            "indian clearing corporation",
-            "nsccl",
-            "nse clearing",
-            "clearing corporation",
 
-            // Investment platforms
-            "groww",
-            "zerodha",
-            "upstox",
-            "kuvera",
-            "paytm money",
-            "etmoney",
-            "coin by zerodha",
-            "smallcase",
-            "angel one",
-            "angel broking",
-            "5paisa",
-            "icici securities",
-            "icici direct",
-            "hdfc securities",
-            "kotak securities",
-            "motilal oswal",
-            "sharekhan",
-            "edelweiss",
-            "axis direct",
-            "sbi securities",
-
-            // Investment types
-            "mutual fund",
-            "elss",
-            "folio",
-            "demat",
-            "stockbroker",
-            "digital gold",
-            "sovereign gold",
-
-            // Stock exchanges
-            "cdsl",
-            "nsdl"
-        )
-
-        // Short keywords — require word boundary to avoid matching inside other words
-        val wordKeywords = listOf(
-            "kite",   // Zerodha's app; avoid matching "kitesurf" etc.
-            "sip",    // Systematic Investment Plan; avoid matching "sipla" etc.
-            "ipo",    // Initial Public Offering
-            "nse",    // National Stock Exchange; avoid matching "license"
-            "bse"     // Bombay Stock Exchange; avoid matching "observe"
-        )
-
-        if (substringKeywords.any { lowerMessage.contains(it) }) return true
-        return wordKeywords.any { Regex("""\b${Regex.escape(it)}\b""").containsMatchIn(lowerMessage) }
+        return super.isInvestmentTransaction(lowerMessage)
     }
 
     // ==========================================
@@ -251,12 +204,17 @@ abstract class BaseIndianBankParser : BankParser() {
         val umnPattern = Regex("""UMN[:\s]+([^.\s]+)""", RegexOption.IGNORE_CASE)
         val umn = umnPattern.find(message)?.groupValues?.get(1)
 
+        // 5. Extract the debiting account's last 4 digits, if the SMS states it
+        // (e.g. "from A/c XX1234"). Reuses the bank's own account helper.
+        val accountLast4 = extractAccountLast4(message)
+
         return object : MandateInfo {
             override val amount = amount
             override val nextDeductionDate = dateStr
             override val merchant = merchant
             override val umn = umn
             override val dateFormat = "dd-MMM-yy" // Default fallback
+            override val accountLast4 = accountLast4
         }
     }
 

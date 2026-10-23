@@ -17,11 +17,52 @@ class KotakBankParser : BankParser() {
     override fun canHandle(sender: String): Boolean {
         val normalizedSender = sender.uppercase()
 
-        // DLT patterns for Kotak Bank
-        return normalizedSender.matches(Regex("^[A-Z]{2}-KOTAKB-[ST]$"))
+        // DLT patterns for Kotak Bank — covers KOTAKB, KOTAKD, and similar variants
+        if (normalizedSender.matches(Regex("^[A-Z]{2}-KOTAK[A-Z]-[ST]$"))) {
+            return true
+        }
+
+        // RCS senders arrive with a decoded display name (e.g. "Kotak",
+        // "Kotak Mahindra Bank", "Kotak811") instead of the DLT header, so match
+        // any sender that contains the brand token.
+        return normalizedSender.contains("KOTAK")
     }
 
     override fun extractMerchant(message: String, sender: String): String? {
+        // ATM: "Rs.1900.00 withdrawn via Kotak Debit Card XX01111 on 15/10/2026 at S1BN000000001." —
+        // "at" names only the terminal ID, so label it like other banks' ATM withdrawals.
+        if (Regex("""\bwithdrawn\s+via\s+Kotak\s+Debit\s+Card\b""", RegexOption.IGNORE_CASE).containsMatchIn(message)) {
+            return "ATM Withdrawal"
+        }
+
+        // Credit-card refund: "INR <amt> from <Merchant> refunded to your Kotak Credit Card xNNNN".
+        // The merchant is the payee that money is coming back from — capture the text between
+        // "<amount> from " and " refunded". Without this the base TO_PATTERN would wrongly grab
+        // "your Kotak Credit Card xNNNN" from the "refunded to your ..." clause. (#616)
+        val refundMerchantPattern = Regex(
+            """(?:INR|Rs\.?|₹)\s*[0-9,]+(?:\.\d{2})?\s+from\s+(.+?)\s+refunded\b""",
+            RegexOption.IGNORE_CASE
+        )
+        refundMerchantPattern.find(message)?.let { match ->
+            val merchant = cleanMerchantName(match.groupValues[1].trim())
+            if (merchant.isNotEmpty()) return merchant
+        }
+
+        // NEFT credit: "credited to your Kotak Bank a/c XXNNNN via NEFT from
+        // beneficiary <Name>. UTR Ref. <utr>" — the counterparty is the sender,
+        // and the clause ends at a full stop rather than the "on/at/Ref" the
+        // generic FROM_PATTERN expects.
+        // Stop at the trailer clause rather than at the first period — names carry
+        // their own ("Mr. John Doe") and would otherwise truncate to "Mr".
+        val neftFromPattern = Regex(
+            """via\s+NEFT\s+from\s+(?:beneficiary\s+)?(.+?)\s*(?:\.\s*(?:UTR|Ref|Avl|Bal|Not|Call|Info)\b|\.?\s*$)""",
+            RegexOption.IGNORE_CASE
+        )
+        neftFromPattern.find(message)?.let { match ->
+            val merchant = cleanMerchantName(match.groupValues[1].trim())
+            if (merchant.isNotEmpty()) return merchant
+        }
+
         // IMPS credit from mobile: "linked to mobile xNNNN"
         val mobileLinkedPattern = Regex(
             """linked\s+to\s+mobile\s+([xX*]+\d{2,})""",
@@ -202,9 +243,11 @@ class KotakBankParser : BankParser() {
         }
 
         return when {
-            // Kotak specific: "Sent Rs.X from Kotak Bank" - money going OUT (EXPENSE)
-            // This indicates the user sent money from their Kotak account to someone else
-            lowerMessage.contains("sent") && lowerMessage.contains("from kotak") -> TransactionType.EXPENSE
+            // Kotak specific: "Sent Rs.X ..." - money going OUT (EXPENSE)
+            // Anchored on "sent rs" so unrelated uses of the word "sent" (e.g. a
+            // refund/cashback notification reading "...has been sent to your A/c...")
+            // don't get misclassified as expense before the INCOME branches run.
+            lowerMessage.contains("sent rs") -> TransactionType.EXPENSE
 
             // Standard expense keywords
             lowerMessage.contains("debited") -> TransactionType.EXPENSE
@@ -226,10 +269,16 @@ class KotakBankParser : BankParser() {
     }
 
     override fun extractReference(message: String): String? {
-        // Kotak specific UPI reference pattern
-        val upiRefPattern = Regex("UPI\\s+Ref\\s+([0-9]+)", RegexOption.IGNORE_CASE)
-        upiRefPattern.find(message)?.let { match ->
-            return match.groupValues[1].trim()
+        // Kotak specific UPI reference patterns
+        val upiRefPatterns = listOf(
+            Regex("""UPI\s+Ref\s+([0-9]+)""", RegexOption.IGNORE_CASE),
+            // New short-SMS format: "UPI ref no. 648604626824"
+            Regex("""UPI\s+ref\s+no\.?\s+([0-9]+)""", RegexOption.IGNORE_CASE)
+        )
+        for (pattern in upiRefPatterns) {
+            pattern.find(message)?.let { match ->
+                return match.groupValues[1].trim()
+            }
         }
 
         // Fall back to generic extraction
@@ -251,6 +300,15 @@ class KotakBankParser : BankParser() {
         val kotakAccountPattern =
             Regex("AC\\s+[X*]*([0-9]{4})(?:\\s|,|\\.)", RegexOption.IGNORE_CASE)
         kotakAccountPattern.find(message)?.let { match ->
+            return match.groupValues[1]
+        }
+
+        // Short-SMS format: "Sent Rs.X from XXXXXX9722 to ..."
+        val kotakMaskedAccountPattern = Regex(
+            """from\s+[xX*]{2,}(\d{4})\b""",
+            RegexOption.IGNORE_CASE
+        )
+        kotakMaskedAccountPattern.find(message)?.let { match ->
             return match.groupValues[1]
         }
 
@@ -282,42 +340,22 @@ class KotakBankParser : BankParser() {
     }
 
     override fun isTransactionMessage(message: String): Boolean {
+        // Shared skip-list (OTP, promos, payment requests, due reminders). This
+        // override used to re-list those checks and had drifted — the reminder
+        // block was missing, so "Payment of INR X ... is due on ..." was booked
+        // as an expense.
+        if (isNonTransactionMessage(message)) return false
+
         val lowerMessage = message.lowercase()
-
-        // Skip fraud warning links
-        if (lowerMessage.contains("not you") && lowerMessage.contains("fraud")) {
-            // This is still a transaction message, just with fraud warning
-            // Continue processing
-        }
-
-        // Skip OTP and promotional messages
-        if (lowerMessage.contains("otp") ||
-            lowerMessage.contains("one time password") ||
-            lowerMessage.contains("verification code") ||
-            lowerMessage.contains("offer") ||
-            lowerMessage.contains("discount") ||
-            lowerMessage.contains("cashback offer") ||
-            lowerMessage.contains("win ")
-        ) {
-            return false
-        }
-
-        // Skip payment request messages
-        if (lowerMessage.contains("has requested") ||
-            lowerMessage.contains("payment request") ||
-            lowerMessage.contains("collect request") ||
-            lowerMessage.contains("requesting payment") ||
-            lowerMessage.contains("requests rs") ||
-            lowerMessage.contains("ignore if already paid")
-        ) {
-            return false
-        }
 
         // Kotak specific transaction keywords
         val kotakTransactionKeywords = listOf(
             "sent", // Kotak uses "Sent Rs.X from Kotak Bank"
             "debited", "credited", "withdrawn", "deposited",
-            "spent", "received", "transferred", "paid"
+            "spent", "received", "transferred", "paid",
+            // Credit-card refund: "INR X from <Merchant> refunded to your Kotak Credit Card ...".
+            // The base keyword list doesn't cover "refunded", so parse() would drop it. (#616)
+            "refund"
         )
 
         return kotakTransactionKeywords.any { lowerMessage.contains(it) }

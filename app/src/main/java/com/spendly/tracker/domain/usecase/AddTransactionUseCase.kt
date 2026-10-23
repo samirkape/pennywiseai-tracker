@@ -12,12 +12,14 @@ import com.spendly.tracker.data.repository.TransactionRepository
 import com.spendly.tracker.domain.repository.RuleRepository
 import com.spendly.tracker.domain.service.RuleEngine
 import com.spendly.tracker.utils.UnrecognizedSmsPrefillParser
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.math.BigDecimal
 import java.security.MessageDigest
 import java.time.LocalDateTime
 import javax.inject.Inject
 
 class AddTransactionUseCase @Inject constructor(
+    @ApplicationContext private val appContext: android.content.Context,
     private val transactionRepository: TransactionRepository,
     private val subscriptionRepository: SubscriptionRepository,
     private val accountBalanceRepository: AccountBalanceRepository,
@@ -155,6 +157,11 @@ class AddTransactionUseCase @Inject constructor(
             )
 
             subscriptionRepository.insertSubscription(subscription)
+        }
+
+        // Re-evaluate budget buckets and alert if this transaction breached one
+        if (transactionId != -1L) {
+            com.spendly.tracker.worker.BudgetBreachCheckWorker.enqueueOneShot(appContext)
         }
 
         return transactionId

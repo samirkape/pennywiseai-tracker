@@ -292,32 +292,6 @@ private fun BudgetGroupsContent(
             }
         }
 
-        // Quick stats row below the hero
-        val overBudgetCount = summary.groups.count { it.remaining < BigDecimal.ZERO && it.totalBudget > BigDecimal.ZERO }
-        val hasSavings = summary.savingsRate > 0f || summary.netSavings > BigDecimal.ZERO
-        val hasStats = hasSavings || summary.dailyAllowance > BigDecimal.ZERO || overBudgetCount > 0
-        if (hasStats) {
-            item {
-                val visible = remember { mutableStateOf(hasAnimated) }
-                LaunchedEffect(Unit) {
-                    if (!hasAnimated) { delay(100); visible.value = true }
-                }
-                AnimatedVisibility(
-                    visible = visible.value,
-                    enter = fadeIn(tween(300)) + slideInVertically(
-                        initialOffsetY = { slideOffsetPx },
-                        animationSpec = tween(300)
-                    )
-                ) {
-                    BudgetQuickStats(
-                        summary = summary,
-                        currency = uiState.currency,
-                        overBudgetCount = overBudgetCount
-                    )
-                }
-            }
-        }
-
         if (groupCount > 0) {
             item {
                 Text(
@@ -489,22 +463,7 @@ private fun BudgetCard(
     val pctUsed = groupSpending.percentageUsed
     val isOverBudget = groupSpending.remaining < BigDecimal.ZERO
 
-    var animatedProgress by remember { mutableFloatStateOf(0f) }
-    val animatedProgressState by animateFloatAsState(
-        targetValue = animatedProgress,
-        animationSpec = tween(durationMillis = 800),
-        label = "progressAnimation"
-    )
-
-    LaunchedEffect(pctUsed) {
-        animatedProgress = (pctUsed / 100f).coerceIn(0f, 1f)
-    }
-
-    val statusColor: Color = when {
-        pctUsed >= 90f -> MaterialTheme.colorScheme.error
-        pctUsed >= 70f -> MaterialTheme.colorScheme.tertiary
-        else -> MaterialTheme.colorScheme.primary
-    }
+    val statusColor: Color = budgetStatusColor(pctUsed)
 
     SpendlyCardV2(
         onClick = { expanded = !expanded },
@@ -520,7 +479,7 @@ private fun BudgetCard(
                     )
                 )
         ) {
-            // Row 1: Budget name + percentage pill + action buttons
+            // Row 1: Budget name + semantic status chip + single overflow menu
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -534,47 +493,17 @@ private fun BudgetCard(
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f, fill = false)
                 )
+
+                Spacer(modifier = Modifier.width(Spacing.sm))
 
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (groupSpending.totalBudget > BigDecimal.ZERO) {
-                        Text(
-                            text = "${pctUsed.toInt()}%",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier
-                                .background(
-                                    color = statusColor,
-                                    shape = RoundedCornerShape(50)
-                                )
-                                .padding(horizontal = Spacing.sm, vertical = 2.dp)
-                        )
-                    }
-                    IconButton(
-                        onClick = onClick,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Edit,
-                            contentDescription = "Edit budget",
-                            modifier = Modifier.size(Dimensions.Icon.small),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    IconButton(
-                        onClick = onDelete,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete budget",
-                            modifier = Modifier.size(Dimensions.Icon.small),
-                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
-                        )
+                        BudgetStatusChip(status = budgetStatusFor(pctUsed))
                     }
                     Box {
                         var showMenu by remember { mutableStateOf(false) }
@@ -584,7 +513,7 @@ private fun BudgetCard(
                         ) {
                             Icon(
                                 Icons.Default.MoreVert,
-                                contentDescription = "More options",
+                                contentDescription = "Budget options",
                                 modifier = Modifier.size(Dimensions.Icon.small),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -593,6 +522,16 @@ private fun BudgetCard(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false }
                         ) {
+                            DropdownMenuItem(
+                                text = { Text("Edit") },
+                                onClick = {
+                                    showMenu = false
+                                    onClick()
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Edit, contentDescription = null)
+                                }
+                            )
                             DropdownMenuItem(
                                 text = { Text("Move up") },
                                 onClick = {
@@ -615,6 +554,21 @@ private fun BudgetCard(
                                 },
                                 enabled = !isLast
                             )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            DropdownMenuItem(
+                                text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    showMenu = false
+                                    onDelete()
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            )
                         }
                     }
                 }
@@ -623,23 +577,9 @@ private fun BudgetCard(
             if (groupSpending.totalBudget > BigDecimal.ZERO) {
                 Spacer(modifier = Modifier.height(Spacing.sm))
 
-                // Row 2: Custom rounded progress bar
-                val barShape = RoundedCornerShape(50)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(10.dp)
-                        .clip(barShape)
-                        .background(statusColor.copy(alpha = 0.15f))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(fraction = animatedProgressState)
-                            .fillMaxHeight()
-                            .clip(barShape)
-                            .background(statusColor)
-                    )
-                }
+                // Row 2: Usage gauge (capped at 100%; over-budget state is carried by
+                // the tinted track, status chip and the amounts below)
+                BudgetGauge(percentageUsed = pctUsed)
 
                 Spacer(modifier = Modifier.height(Spacing.md))
 
@@ -661,25 +601,20 @@ private fun BudgetCard(
 
                 Spacer(modifier = Modifier.height(Spacing.xs))
 
-                // Row 4: Contextual subtitle
+                // Row 4: Single supporting caption - spent, budget and pace in one line
+                val spentOfBudget =
+                    "Spent ${CurrencyFormatter.formatCurrency(groupSpending.totalActual, currency)} of ${CurrencyFormatter.formatCurrency(groupSpending.totalBudget, currency)}"
                 val subtitleText = when {
-                    groupSpending.daysRemaining == 0 -> "Period ended"
-                    isOverBudget -> "Over by ${CurrencyFormatter.formatCurrency(remainingAbs, currency)}"
-                    else -> "${CurrencyFormatter.formatCurrency(groupSpending.dailyAllowance, currency)}/day \u00B7 ${groupSpending.daysRemaining} days left"
+                    isOverBudget -> "$spentOfBudget \u00B7 ${pctUsed.toInt()}% used"
+                    groupSpending.daysRemaining == 0 -> "$spentOfBudget \u00B7 Period ended"
+                    else -> "$spentOfBudget \u00B7 ${CurrencyFormatter.formatCurrency(groupSpending.dailyAllowance, currency)}/day \u00B7 ${groupSpending.daysRemaining} days left"
                 }
                 Text(
                     text = subtitleText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(Spacing.xs))
-
-                // Row 5: Spent X of Y
-                Text(
-                    text = "Spent ${CurrencyFormatter.formatCurrency(groupSpending.totalActual, currency)} of ${CurrencyFormatter.formatCurrency(groupSpending.totalBudget, currency)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             } else if (groupSpending.isTrackingAllExpenses) {
                 Spacer(modifier = Modifier.height(Spacing.sm))
@@ -732,11 +667,7 @@ private fun BudgetCard(
 
                     groupSpending.categorySpending.forEach { catSpending ->
                         val catPctUsed = catSpending.percentageUsed
-                        val catStatusColor: Color = when {
-                            catPctUsed >= 90f -> MaterialTheme.colorScheme.error
-                            catPctUsed >= 70f -> MaterialTheme.colorScheme.tertiary
-                            else -> MaterialTheme.colorScheme.primary
-                        }
+                        val catStatusColor: Color = budgetStatusColor(catPctUsed)
 
                         val categoryInfo = CategoryMapping.categories[catSpending.categoryName]
                             ?: CategoryMapping.categories["Others"]!!
@@ -827,6 +758,123 @@ private fun BudgetCard(
     }
 }
 
+/** Semantic usage state shared by chips, gauges and hero colors. */
+private enum class BudgetStatus(val label: String) {
+    ON_TRACK("On track"),
+    NEAR_LIMIT("Near limit"),
+    BREACHED("Breached")
+}
+
+private fun budgetStatusFor(percentageUsed: Float): BudgetStatus = when {
+    percentageUsed >= 100f -> BudgetStatus.BREACHED
+    percentageUsed >= 80f -> BudgetStatus.NEAR_LIMIT
+    else -> BudgetStatus.ON_TRACK
+}
+
+@Composable
+private fun budgetStatusColor(percentageUsed: Float): Color = when (budgetStatusFor(percentageUsed)) {
+    BudgetStatus.BREACHED -> MaterialTheme.colorScheme.error
+    BudgetStatus.NEAR_LIMIT -> MaterialTheme.colorScheme.tertiary
+    BudgetStatus.ON_TRACK -> MaterialTheme.colorScheme.primary
+}
+
+@Composable
+private fun BudgetStatusChip(
+    status: BudgetStatus,
+    modifier: Modifier = Modifier
+) {
+    StatusPill(text = status.label, status = status, modifier = modifier)
+}
+
+/**
+ * Tonal pill carrying both the usage magnitude and the semantic status color,
+ * e.g. "325% used" in the breach tint. Replaces bare percentages so the number
+ * always has an interpretation.
+ */
+@Composable
+private fun PercentUsedChip(
+    percentageUsed: Float,
+    modifier: Modifier = Modifier
+) {
+    StatusPill(
+        text = "${percentageUsed.toInt()}% used",
+        status = budgetStatusFor(percentageUsed),
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun StatusPill(
+    text: String,
+    status: BudgetStatus,
+    modifier: Modifier = Modifier
+) {
+    val containerColor = when (status) {
+        BudgetStatus.ON_TRACK -> MaterialTheme.colorScheme.primaryContainer
+        BudgetStatus.NEAR_LIMIT -> MaterialTheme.colorScheme.tertiaryContainer
+        BudgetStatus.BREACHED -> MaterialTheme.colorScheme.errorContainer
+    }
+    val contentColor = when (status) {
+        BudgetStatus.ON_TRACK -> MaterialTheme.colorScheme.onPrimaryContainer
+        BudgetStatus.NEAR_LIMIT -> MaterialTheme.colorScheme.onTertiaryContainer
+        BudgetStatus.BREACHED -> MaterialTheme.colorScheme.onErrorContainer
+    }
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(50),
+        color = containerColor
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+            color = contentColor,
+            modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 2.dp)
+        )
+    }
+}
+
+/**
+ * Usage gauge capped at 100%. Once a budget is breached the whole track tints to the
+ * breach color so the "exceeded" state reads instantly; the magnitude of the breach is
+ * carried by the amounts and the "% used" label rather than an unbounded bar.
+ */
+@Composable
+private fun BudgetGauge(
+    percentageUsed: Float,
+    modifier: Modifier = Modifier,
+    height: Dp = 5.dp
+) {
+    val statusColor = budgetStatusColor(percentageUsed)
+    val isBreached = percentageUsed >= 100f
+
+    var targetProgress by remember(percentageUsed) { mutableFloatStateOf(0f) }
+    val animatedProgress by animateFloatAsState(
+        targetValue = targetProgress,
+        animationSpec = tween(durationMillis = 800),
+        label = "gaugeProgress"
+    )
+    LaunchedEffect(percentageUsed) {
+        targetProgress = (percentageUsed / 100f).coerceIn(0f, 1f)
+    }
+
+    val barShape = RoundedCornerShape(50)
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+            .clip(barShape)
+            .background(statusColor.copy(alpha = if (isBreached) 0.22f else 0.15f))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(fraction = animatedProgress)
+                .fillMaxHeight()
+                .clip(barShape)
+                .background(statusColor)
+        )
+    }
+}
+
 @Composable
 private fun BudgetHeroTile(
     summary: BudgetOverallSummary,
@@ -837,23 +885,10 @@ private fun BudgetHeroTile(
     val overallPct = if (hasLimitBudgets) {
         (summary.totalLimitSpent.toFloat() / summary.totalLimitBudget.toFloat() * 100f).coerceAtLeast(0f)
     } else 0f
-    val isOverall = summary.totalLimitSpent > summary.totalLimitBudget
-
-    val statusColor: Color = when {
-        overallPct >= 90f -> MaterialTheme.colorScheme.error
-        overallPct >= 70f -> MaterialTheme.colorScheme.tertiary
-        else -> MaterialTheme.colorScheme.primary
-    }
-
-    var animatedProgress by remember { mutableFloatStateOf(0f) }
-    val animatedProgressState by animateFloatAsState(
-        targetValue = animatedProgress,
-        animationSpec = tween(durationMillis = 900),
-        label = "heroProgressAnimation"
-    )
-    LaunchedEffect(overallPct) {
-        animatedProgress = (overallPct / 100f).coerceIn(0f, 1f)
-    }
+    val isOverBudget = hasLimitBudgets && summary.totalLimitSpent > summary.totalLimitBudget
+    val statusColor: Color = budgetStatusColor(overallPct)
+    val hasSavings = summary.savingsRate > 0f || summary.netSavings > BigDecimal.ZERO
+    val hasDailyAllowance = summary.dailyAllowance > BigDecimal.ZERO
 
     val onHero = MaterialTheme.colorScheme.onPrimaryContainer
     val onHeroMuted = onHero.copy(alpha = 0.72f)
@@ -870,40 +905,41 @@ private fun BudgetHeroTile(
                 .padding(Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
-            Text(
-                text = "Overall Budget",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = onHero
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Overall budget",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = onHero
+                )
+                if (hasLimitBudgets) {
+                    PercentUsedChip(percentageUsed = overallPct)
+                }
+            }
 
             if (hasLimitBudgets) {
                 val remainingAbs = (summary.totalLimitBudget - summary.totalLimitSpent).abs()
-                Text(
-                    text = if (isOverall) {
-                        "${CurrencyFormatter.formatCurrency(remainingAbs, currency)} over budget"
-                    } else {
-                        "${CurrencyFormatter.formatCurrency(summary.totalLimitBudget - summary.totalLimitSpent, currency)} remaining"
-                    },
-                    style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
-                    color = statusColor,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                val barShape = RoundedCornerShape(50)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(10.dp)
-                        .clip(barShape)
-                        .background(statusColor.copy(alpha = 0.22f))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(fraction = animatedProgressState)
-                            .fillMaxHeight()
-                            .clip(barShape)
-                            .background(statusColor)
+                // Amount and suffix form one typographic unit; the suffix stays small
+                // so a long amount never wraps into two lines of display type
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = if (isOverBudget) {
+                            CurrencyFormatter.formatCurrency(remainingAbs, currency)
+                        } else {
+                            CurrencyFormatter.formatCurrency(summary.totalLimitBudget - summary.totalLimitSpent, currency)
+                        },
+                        style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
+                        color = statusColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = if (isOverBudget) "over budget" else "remaining",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = onHeroMuted
                     )
                 }
 
@@ -912,90 +948,71 @@ private fun BudgetHeroTile(
                     style = MaterialTheme.typography.bodySmall,
                     color = onHeroMuted
                 )
+
+                if (hasSavings || hasDailyAllowance) {
+                    HorizontalDivider(color = onHero.copy(alpha = 0.08f))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+                    ) {
+                        if (hasSavings) {
+                            HeroStat(
+                                label = "Net saved",
+                                value = CurrencyFormatter.formatCurrency(summary.netSavings, currency),
+                                sub = "${summary.savingsRate.toInt()}% saved",
+                                valueColor = onHero,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (hasDailyAllowance) {
+                            HeroStat(
+                                label = "Daily left",
+                                value = CurrencyFormatter.formatCurrency(summary.dailyAllowance, currency),
+                                sub = "${summary.daysRemaining} days left",
+                                valueColor = onHero,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+
+                // Slim usage accent anchoring the card
+                BudgetGauge(percentageUsed = overallPct)
             }
         }
     }
 }
 
 @Composable
-private fun BudgetQuickStats(
-    summary: BudgetOverallSummary,
-    currency: String,
-    overBudgetCount: Int,
-    modifier: Modifier = Modifier
-) {
-    val hasSavings = summary.savingsRate > 0f || summary.netSavings > BigDecimal.ZERO
-
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-    ) {
-        if (hasSavings) {
-            QuickStatChip(
-                label = "Net Saved",
-                value = CurrencyFormatter.formatCurrency(summary.netSavings, currency),
-                sub = "${summary.savingsRate.toInt()}% saved",
-                modifier = Modifier.weight(1f)
-            )
-        }
-        if (summary.dailyAllowance > BigDecimal.ZERO) {
-            QuickStatChip(
-                label = "Daily Budget",
-                value = CurrencyFormatter.formatCurrency(summary.dailyAllowance, currency),
-                sub = "${summary.daysRemaining} days left",
-                modifier = Modifier.weight(1f)
-            )
-        }
-        if (overBudgetCount > 0) {
-            QuickStatChip(
-                label = "Breached",
-                value = "$overBudgetCount",
-                sub = if (overBudgetCount == 1) "budget over" else "budgets over",
-                valueColor = MaterialTheme.colorScheme.error,
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun QuickStatChip(
+private fun HeroStat(
     label: String,
     value: String,
     sub: String,
     modifier: Modifier = Modifier,
     valueColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
-    Surface(
+    Column(
         modifier = modifier,
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        tonalElevation = 0.dp
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Spacing.sm, vertical = Spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = valueColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = sub,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+            color = valueColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = sub,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+        )
     }
 }
 

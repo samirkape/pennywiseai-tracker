@@ -75,14 +75,17 @@ class SmsTransactionProcessor @Inject constructor(
         timestamp: Long
     ): ProcessingResult {
         try {
-            // Get the appropriate parser for this sender
-            val parser = BankParserFactory.getParser(sender, body)
-            if (parser == null) {
+            // Several sender IDs are shared by more than one parser (M-Pesa
+            // Kenya/Tanzania/Mozambique, Chase UK/US, Standard Chartered
+            // Nigeria/India, …), so dispatch on message content — not just the
+            // sender — and take the first parser that actually recognises it.
+            val parsers = BankParserFactory.getParsers(sender)
+            if (parsers.isEmpty()) {
                 return ProcessingResult(false, reason = "No parser found for sender: $sender")
             }
 
             // Parse the SMS
-            val parsedTransaction = parser.parse(body, sender, timestamp)
+            val parsedTransaction = parsers.firstNotNullOfOrNull { it.parse(body, sender, timestamp) }
             if (parsedTransaction == null) {
                 return ProcessingResult(false, reason = "Could not parse transaction from SMS")
             }
@@ -242,6 +245,9 @@ class SmsTransactionProcessor @Inject constructor(
 
                 // Trigger widget refresh for recent transactions
                 com.spendly.tracker.widget.RecentTransactionsWidgetUpdateWorker.enqueueOneShot(appContext)
+
+                // Re-evaluate budget buckets and alert if this transaction breached one
+                com.spendly.tracker.worker.BudgetBreachCheckWorker.enqueueOneShot(appContext)
 
                 return ProcessingResult(true, transactionId = rowId)
             } else {
