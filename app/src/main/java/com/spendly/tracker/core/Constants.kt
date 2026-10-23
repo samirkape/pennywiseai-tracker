@@ -13,6 +13,9 @@ object Constants {
     object Features {
         const val AI_CHAT_ENABLED = false
         const val HOME_HTML_REFERENCE_LAYOUT = true
+
+        /** Alert the user when a new transaction pushes a budget bucket over its limit. */
+        const val BUDGET_BREACH_ALERTS_ENABLED = true
     }
     
     /**

@@ -45,10 +45,12 @@ fun SpendlyApp(
     openAddTransaction: Boolean = false,
     openTransactions: Boolean = false,
     openSubscriptions: Boolean = false,
+    openBudgets: Boolean = false,
     onEditComplete: () -> Unit = {},
     onAddTransactionShortcutHandled: () -> Unit = {},
     onOpenTransactionsHandled: () -> Unit = {},
-    onOpenSubscriptionsHandled: () -> Unit = {}
+    onOpenSubscriptionsHandled: () -> Unit = {},
+    onOpenBudgetsHandled: () -> Unit = {}
 ) {
     val themeUiState by themeViewModel.themeUiState.collectAsStateWithLifecycle()
     val appLockUiState by appLockViewModel.uiState.collectAsStateWithLifecycle()
@@ -148,6 +150,16 @@ fun SpendlyApp(
                 launchSingleTop = true
             }
             onOpenSubscriptionsHandled()
+        }
+    }
+
+    // Navigate to the Budgets screen when tapping a budget breach notification
+    LaunchedEffect(openBudgets) {
+        if (openBudgets) {
+            navController.navigate(com.spendly.tracker.navigation.BudgetGroups) {
+                launchSingleTop = true
+            }
+            onOpenBudgetsHandled()
         }
     }
 
