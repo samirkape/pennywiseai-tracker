@@ -10,12 +10,16 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.spendly.tracker.core.Constants.Links
+import com.spendly.tracker.connector.data.preferences.ConnectorPreferencesRepository
+import com.spendly.tracker.connector.data.security.SecureKeyStore
 import com.spendly.tracker.data.contacts.ContactsResolver
 import com.spendly.tracker.data.repository.ModelRepository
 import com.spendly.tracker.data.repository.ModelState
@@ -60,7 +64,9 @@ class SettingsViewModel @Inject constructor(
     private val salaryMonthOverrideRepository: SalaryMonthOverrideRepository,
     private val smsScanManager: SmsScanManager,
     private val premiumManager: PremiumManager,
-    private val contactsResolver: ContactsResolver
+    private val contactsResolver: ContactsResolver,
+    private val connectorPreferencesRepository: ConnectorPreferencesRepository,
+    private val secureKeyStore: SecureKeyStore
 ) : ViewModel() {
     
     private val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
@@ -125,6 +131,14 @@ class SettingsViewModel @Inject constructor(
     
     // Base currency state
     val baseCurrency = userPreferencesRepository.baseCurrency
+
+    // AI connector (ChatGPT / Claude)
+    val connectorEnabled = connectorPreferencesRepository.isEnabled
+
+    val connectorProvider = connectorPreferencesRepository.provider
+
+    private val _connectorHasApiKey = MutableStateFlow(false)
+    val connectorHasApiKey: StateFlow<Boolean> = _connectorHasApiKey.asStateFlow()
 
     // Usual salary day (1–28 or DateRangeUtils.LAST_DAY_SENTINEL = 0)
     val monthStartDay = userPreferencesRepository.monthStartDay
@@ -230,6 +244,15 @@ class SettingsViewModel @Inject constructor(
         checkDownloadStatus()
         // Also sync with model repository
         modelRepository.checkModelState()
+        refreshConnectorApiKey()
+    }
+
+    fun refreshConnectorApiKey() {
+        viewModelScope.launch {
+            _connectorHasApiKey.value = withContext(Dispatchers.IO) {
+                secureKeyStore.hasApiKey()
+            }
+        }
     }
     
     private fun checkDownloadStatus() {
@@ -557,6 +580,12 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             userPreferencesRepository.setUseContactsForVpa(enabled)
             contactsResolver.clearCache()
+        }
+    }
+
+    fun setConnectorEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            connectorPreferencesRepository.setEnabled(enabled)
         }
     }
 

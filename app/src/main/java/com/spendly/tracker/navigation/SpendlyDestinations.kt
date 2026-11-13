@@ -42,6 +42,12 @@ object Analytics
 object Insights
 
 @Serializable
+object ConnectorSettings
+
+@Serializable
+object ConnectorAnalysis
+
+@Serializable
 data class InsightDetail(
     val insightId: String,
     val anchorMonth: String,

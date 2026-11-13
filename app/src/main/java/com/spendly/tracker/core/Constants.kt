@@ -22,8 +22,15 @@ object Constants {
          * and pace/milestone alerts. Flip to false to ship the base Savings page only.
          */
         const val SAVINGS_GOAL_ENHANCEMENTS_ENABLED = true
+
+        /**
+         * ChatGPT / Claude connector. When false the connector routes are not
+         * registered and no UI may navigate to them. Users additionally toggle the
+         * connector on/off at runtime from Settings.
+         */
+        const val AI_CONNECTOR_ENABLED = true
     }
-    
+
     /**
      * SMS Processing Configuration
      */

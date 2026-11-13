@@ -33,9 +33,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.net.Uri
 import com.spendly.tracker.R
+import com.spendly.tracker.core.Constants
+import com.spendly.tracker.connector.domain.AiProvider
 import com.spendly.tracker.data.backup.ImportStrategy
 import com.spendly.tracker.data.backup.RestoreOptions
 import com.spendly.tracker.utils.DateRangeUtils
@@ -87,6 +90,8 @@ fun SettingsScreen(
     onNavigateToImportStatement: () -> Unit = {},
     onNavigateToPayPeriodSettings: () -> Unit = {},
     onNavigateToSmsParserDebug: () -> Unit = {},
+    onNavigateToConnectorSettings: () -> Unit = {},
+    onNavigateToConnectorAnalysis: () -> Unit = {},
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     appLockViewModel: com.spendly.tracker.ui.viewmodel.AppLockViewModel = hiltViewModel(),
     permissionViewModel: com.spendly.tracker.ui.viewmodel.PermissionViewModel = hiltViewModel()
@@ -100,6 +105,11 @@ fun SettingsScreen(
     val smsScanMonths by settingsViewModel.smsScanMonths.collectAsStateWithLifecycle(initialValue = 3)
     val smsScanAllTime by settingsViewModel.smsScanAllTime.collectAsStateWithLifecycle(initialValue = false)
     val autoLinkRefunds by settingsViewModel.autoLinkRefundsEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val connectorEnabled by settingsViewModel.connectorEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val connectorProvider by settingsViewModel.connectorProvider.collectAsStateWithLifecycle(
+        initialValue = AiProvider.OPENAI
+    )
+    val connectorHasApiKey by settingsViewModel.connectorHasApiKey.collectAsStateWithLifecycle(initialValue = false)
     val baseCurrency by settingsViewModel.baseCurrency.collectAsStateWithLifecycle(initialValue = "")
     val monthStartDay by settingsViewModel.monthStartDay.collectAsStateWithLifecycle(initialValue = 1)
     val importExportMessage by settingsViewModel.importExportMessage.collectAsStateWithLifecycle()
@@ -139,6 +149,13 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
     }
 
     val autoBackup = remember { settingsViewModel.latestAutoBackup() }
+
+    // The API key may have been added/removed on the connector screen while this
+    // screen was in the background.
+    LifecycleResumeEffect(Unit) {
+        settingsViewModel.refreshConnectorApiKey()
+        onPauseOrDispose { }
+    }
 
     // File picker for import
     val importLauncher = rememberLauncherForActivityResult(
@@ -436,6 +453,48 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                     onClick = onNavigateToRules,
                     position = ItemPosition.SINGLE
                 )
+            }
+
+            if (Constants.Features.AI_CONNECTOR_ENABLED) {
+                SectionHeaderV2(title = "AI Connector")
+                SettingsGroup {
+                    SettingsSwitchRow(
+                        icon = Icons.Default.Psychology,
+                        iconBgColor = purple_light,
+                        iconTint = purple_dark,
+                        title = "Enable AI Connector",
+                        subtitle = "Analyse your spending with ChatGPT or Claude using your own API key",
+                        checked = connectorEnabled,
+                        onCheckedChange = { settingsViewModel.setConnectorEnabled(it) },
+                        position = if (connectorEnabled) ItemPosition.TOP else ItemPosition.SINGLE
+                    )
+                    AnimatedVisibility(visible = connectorEnabled) {
+                        Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                            SettingsNavItem(
+                                icon = Icons.Default.Key,
+                                iconBgColor = teal_light,
+                                iconTint = teal_dark,
+                                title = "Provider & API Key",
+                                subtitle = if (connectorHasApiKey) {
+                                    "${connectorProvider.displayName} - key saved on this device"
+                                } else {
+                                    "${connectorProvider.displayName} - add your API key"
+                                },
+                                onClick = onNavigateToConnectorSettings,
+                                position = ItemPosition.MIDDLE
+                            )
+                            SettingsNavItem(
+                                icon = Icons.Default.AutoAwesome,
+                                iconBgColor = indigo_light,
+                                iconTint = indigo_dark,
+                                title = "Analyse Spending",
+                                subtitle = "Find patterns in the last days, months or year",
+                                onClick = onNavigateToConnectorAnalysis,
+                                position = ItemPosition.BOTTOM
+                            )
+                        }
+                    }
+                }
             }
 
             // ── Backup & Restore ──
