@@ -24,7 +24,7 @@ data class ConnectorAnalysisUiState(
     val analysis: String = "",
     val errorMessage: String? = null,
     val preview: SpendAnalysis? = null,
-    val provider: AiProvider = AiProvider.OPENAI,
+    val provider: AiProvider = AiProvider.GEMINI,
     val model: String = ""
 )
 

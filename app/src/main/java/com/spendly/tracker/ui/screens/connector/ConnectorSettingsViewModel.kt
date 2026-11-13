@@ -26,10 +26,10 @@ class ConnectorSettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     val provider: StateFlow<AiProvider> = preferencesRepository.provider
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AiProvider.OPENAI)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AiProvider.GEMINI)
 
     val model: StateFlow<String> = preferencesRepository.model
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AiProvider.OPENAI.defaultModel)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AiProvider.GEMINI.defaultModel)
 
     private val _hasApiKey = MutableStateFlow(false)
     val hasApiKey: StateFlow<Boolean> = _hasApiKey.asStateFlow()

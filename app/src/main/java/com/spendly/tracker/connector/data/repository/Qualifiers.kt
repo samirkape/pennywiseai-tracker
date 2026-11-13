@@ -23,3 +23,36 @@ annotation class OpenAiClient
     AnnotationTarget.PROPERTY
 )
 annotation class AnthropicClient
+
+/** Qualifies the Google AI Studio (Gemini) protocol adapter. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+@Target(
+    AnnotationTarget.FUNCTION,
+    AnnotationTarget.VALUE_PARAMETER,
+    AnnotationTarget.FIELD,
+    AnnotationTarget.PROPERTY
+)
+annotation class GeminiClient
+
+/** Qualifies the Groq protocol adapter. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+@Target(
+    AnnotationTarget.FUNCTION,
+    AnnotationTarget.VALUE_PARAMETER,
+    AnnotationTarget.FIELD,
+    AnnotationTarget.PROPERTY
+)
+annotation class GroqClient
+
+/** Qualifies the OpenRouter protocol adapter. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+@Target(
+    AnnotationTarget.FUNCTION,
+    AnnotationTarget.VALUE_PARAMETER,
+    AnnotationTarget.FIELD,
+    AnnotationTarget.PROPERTY
+)
+annotation class OpenRouterClient

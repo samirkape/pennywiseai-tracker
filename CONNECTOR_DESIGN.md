@@ -10,11 +10,25 @@ for any window — last 7/30 days, last 3/6/12 months, or a custom number of day
 ## 1. What the user gets
 
 1. **Settings -> AI Connector -> Enable AI Connector** — the runtime config toggle.
-2. **Provider & API Key** — pick ChatGPT or Claude, choose a model, paste your own API key.
+2. **Provider & API Key** — pick a provider, choose a model, paste your own API key.
 3. **Analyse Spending** — pick the period (or type your own question) and get a written
    analysis with the patterns in your spending and concrete suggestions.
 
 Nothing is sent anywhere while the toggle is off.
+
+### Providers
+
+| Provider | Protocol | Free tier | Get a key |
+|---|---|---|---|
+| **Gemini (Google AI Studio)** | OpenAI-compatible `chat/completions` | **Yes** — free tier, no credit card | https://aistudio.google.com/apikey |
+| **Groq** | OpenAI-compatible `chat/completions` | **Yes** — free plan, rate limited | https://console.groq.com/keys |
+| **OpenRouter** | OpenAI-compatible `chat/completions` | **Yes** — `:free` model variants (20 req/min, 50/day) | https://openrouter.ai/keys |
+| ChatGPT (OpenAI) | OpenAI Responses API | No — paid account | https://platform.openai.com/api-keys |
+| Claude (Anthropic) | Anthropic Messages API | No — paid account | https://console.anthropic.com/settings/keys |
+
+OpenAI and Anthropic do not hand out free API keys, so the free-tier providers are listed
+first and the settings screen links straight to each provider's key page. Every provider is
+a bring-your-own-key integration — Spendly never bundles or proxies a key.
 
 ## 2. Two levels of gating
 
@@ -44,6 +58,8 @@ app/src/main/java/com/spendly/tracker/connector/
 │   │   ├── ProviderClient.kt  # adapter interface
 │   │   ├── OpenAiProviderClient.kt    # OpenAI Responses API
 │   │   ├── AnthropicProviderClient.kt # Anthropic Messages API
+│   │   ├── ChatCompletionsProviderClient.kt # Gemini / Groq / OpenRouter
+│   │   ├── ProviderSpec.kt    # provider -> protocol + base url
 │   │   └── SseReader.kt       # text/event-stream framing
 │   ├── analysis/
 │   │   ├── SpendAnalysisRepository.kt # DB access
@@ -66,10 +82,16 @@ The app never sees a vendor payload. Each adapter translates the neutral contrac
   response is read from `output[] -> content[] -> output_text`.
 * **Anthropic** — `POST https://api.anthropic.com/v1/messages` with `model`, `max_tokens`,
   `system`, `messages[]`, `stream`. Streams `content_block_delta` events.
+* **Gemini / Groq / OpenRouter** — one shared adapter
+  (`ChatCompletionsProviderClient`) for the OpenAI-compatible
+  `POST {base}/chat/completions` shape: `model`, `messages[]` (system + user), `max_tokens`,
+  `stream`. Streams `choices[0].delta.content`. `temperature` is deliberately not sent —
+  several free models reject it and the system prompt already shapes the answer.
 
-Both fall back to a single non-streaming request if the provider refuses to stream, so the user
-always gets an answer. Errors are normalised into `ConnectorError` (missing/invalid key, rate
-limited, network, server, bad request) so the UI never branches on provider.
+Both protocols fall back to a single non-streaming request if the provider refuses to
+stream, so the user always gets an answer. Errors are normalised into `ConnectorError`
+(missing/invalid key, rate limited, network, server, bad request) so the UI never branches
+on provider.
 
 ## 5. Privacy model
 

@@ -53,7 +53,7 @@ Your bank already texts you every transaction — Spendly turns those SMS into a
 - **🤖 Smart SMS Parsing** — <!-- BANKS_SUMMARY -->168 banks across 26 countries<!-- /BANKS_SUMMARY --> with real-time detection of incoming SMS
 - **🌍 Multi-Currency** — Native support for INR, USD, AED, THB, NPR, ETB, and more with exchange rate management
 - **💬 On-Device AI Assistant** — Ask "What did I spend on food?" — powered by Qwen 2.5, runs entirely on your phone
-- **🧠 ChatGPT / Claude Connector** — Optional and off by default. Bring your own API key and get a written analysis of your spending over the last X days, months or year. Only aggregate totals are sent, and the key is stored encrypted on your device
+- **🧠 ChatGPT / Claude Connector** — Optional and off by default. Bring your own API key and get a written analysis of your spending over the last X days, months or year. Free-tier providers supported (Gemini, Groq, OpenRouter - no credit card needed) plus ChatGPT and Claude. Only aggregate totals are sent, and the key is stored encrypted on your device
 - **🏷️ Auto-Categorization & Smart Rules** — Pattern-based rules that auto-categorize transactions
 - **💰 Budget Tracking** — Multiple budget groups (Limit/Target/Expected types), daily allowance, category-level budgets
 - **📊 Analytics & Charts** — Bar charts, line trends, heatmaps, category breakdowns, top merchants, custom date ranges

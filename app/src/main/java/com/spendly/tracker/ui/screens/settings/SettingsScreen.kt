@@ -107,7 +107,7 @@ fun SettingsScreen(
     val autoLinkRefunds by settingsViewModel.autoLinkRefundsEnabled.collectAsStateWithLifecycle(initialValue = true)
     val connectorEnabled by settingsViewModel.connectorEnabled.collectAsStateWithLifecycle(initialValue = false)
     val connectorProvider by settingsViewModel.connectorProvider.collectAsStateWithLifecycle(
-        initialValue = AiProvider.OPENAI
+        initialValue = AiProvider.GEMINI
     )
     val connectorHasApiKey by settingsViewModel.connectorHasApiKey.collectAsStateWithLifecycle(initialValue = false)
     val baseCurrency by settingsViewModel.baseCurrency.collectAsStateWithLifecycle(initialValue = "")
