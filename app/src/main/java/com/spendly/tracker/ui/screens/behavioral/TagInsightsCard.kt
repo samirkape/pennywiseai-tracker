@@ -113,7 +113,7 @@ fun TagInsightsCard(
                     val isActive = pagerState.currentPage == index
                     val width by animateDpAsState(
                         targetValue = if (isActive) 16.dp else 6.dp,
-                        animationSpec = tween(200),
+                        animationSpec = tween(Dimensions.Animation.quick),
                         label = "tag_dot_$index"
                     )
                     Box(

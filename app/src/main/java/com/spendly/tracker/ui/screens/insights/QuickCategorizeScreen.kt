@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -29,6 +31,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
@@ -52,20 +56,27 @@ import kotlin.math.roundToInt
 @Composable
 fun QuickCategorizeScreen(
     viewModel: QuickCategorizeViewModel = hiltViewModel(),
-    onBack: () -> Unit = {}
+    onBack: () -> Unit = {},
+    onReviewOlder: () -> Unit = {}
 ) {
     val transactions by viewModel.uncategorizedTransactions.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
+    val allTags by viewModel.allUsedTags.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val hazeState = remember { HazeState() }
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val title = when (viewModel.scope) {
+        QuickCategorizeScope.TODAY -> "Review today"
+        QuickCategorizeScope.HISTORICAL -> "Uncategorized history"
+        QuickCategorizeScope.ALL -> "Quick Categorize"
+    }
 
     Scaffold(
         modifier = Modifier,
         containerColor = Color.Transparent,
         topBar = {
             CustomTitleTopAppBar(
-                title = "Quick Categorize",
+                title = title,
                 scrollBehaviorSmall = scrollBehavior,
                 scrollBehaviorLarge = scrollBehavior,
                 hazeState = hazeState,
@@ -90,14 +101,19 @@ fun QuickCategorizeScreen(
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
                 transactions.isEmpty() -> {
-                    EmptyCategorizeState(onBack)
+                    EmptyCategorizeState(
+                        onBack = onBack,
+                        scope = viewModel.scope,
+                        onReviewOlder = onReviewOlder,
+                    )
                 }
                 else -> {
                     CategorizeContent(
                         transactions = transactions,
                         categories = categories,
-                        onCategorize = { id, category, bulk ->
-                            viewModel.categorizeTransaction(id, category, bulk)
+                        tagSuggestions = allTags,
+                        onCategorize = { id, category, tags, bulk ->
+                            viewModel.categorizeTransaction(id, category, tags, bulk)
                         },
                         onSkip = { id -> viewModel.skipTransaction(id) },
                         onEdit = { id -> }
@@ -108,16 +124,27 @@ fun QuickCategorizeScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CategorizeContent(
     transactions: List<TransactionEntity>,
     categories: List<CategoryEntity>,
-    onCategorize: (Long, String, Boolean) -> Unit,
+    tagSuggestions: List<String>,
+    onCategorize: (Long, String, List<String>, Boolean) -> Unit,
     onSkip: (Long) -> Unit,
     onEdit: (Long) -> Unit = {}
 ) {
     val currentTransaction = transactions.firstOrNull() ?: return
-    var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var selectedCategory by remember(currentTransaction.id) { mutableStateOf<String?>(null) }
+    var selectedTags by remember(currentTransaction.id) {
+        mutableStateOf(
+            currentTransaction.tags
+                .split(",")
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+        )
+    }
+    var showTagSheet by remember(currentTransaction.id) { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -132,7 +159,14 @@ private fun CategorizeContent(
             onEdit = { onEdit(currentTransaction.id) }
         )
 
-        Spacer(modifier = Modifier.height(Spacing.lg))
+        Spacer(modifier = Modifier.height(Spacing.sm))
+
+        TagSummaryRow(
+            tags = selectedTags,
+            onClick = { showTagSheet = true }
+        )
+
+        Spacer(modifier = Modifier.height(Spacing.sm))
 
         Text(
             text = "Select Category",
@@ -182,7 +216,7 @@ private fun CategorizeContent(
             Button(
                 onClick = {
                     selectedCategory?.let {
-                        onCategorize(currentTransaction.id, it, false)
+                        onCategorize(currentTransaction.id, it, selectedTags, false)
                         selectedCategory = null
                     }
                 },
@@ -200,6 +234,181 @@ private fun CategorizeContent(
                 Spacer(modifier = Modifier.width(Spacing.xs))
                 Text("Confirm")
             }
+        }
+    }
+
+    if (showTagSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showTagSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            TagEditorSheet(
+                selectedTags = selectedTags,
+                suggestions = tagSuggestions,
+                onAddTag = { tag ->
+                    if (tag !in selectedTags) selectedTags = selectedTags + tag
+                },
+                onRemoveTag = { tag -> selectedTags = selectedTags - tag },
+                onDone = { showTagSheet = false },
+            )
+        }
+    }
+}
+
+@Composable
+private fun TagSummaryRow(
+    tags: List<String>,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = Spacing.sm, vertical = Spacing.sm),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.Label,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.width(Spacing.xs))
+        Text(
+            text = if (tags.isEmpty()) "Add tags (optional)" else tags.joinToString(" · "),
+            style = MaterialTheme.typography.labelLarge,
+            color = if (tags.isEmpty()) {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = "Edit",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun TagEditorSheet(
+    selectedTags: List<String>,
+    suggestions: List<String>,
+    onAddTag: (String) -> Unit,
+    onRemoveTag: (String) -> Unit,
+    onDone: () -> Unit,
+) {
+    var input by remember { mutableStateOf("") }
+    val filteredSuggestions = remember(suggestions, input, selectedTags) {
+        val query = input.trim()
+        suggestions
+            .filter { tag ->
+                tag !in selectedTags &&
+                    (query.isBlank() || tag.contains(query, ignoreCase = true))
+            }
+            .take(12)
+    }
+
+    fun commitInput() {
+        val trimmed = input.trim()
+        if (trimmed.isNotEmpty()) {
+            onAddTag(trimmed)
+            input = ""
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .imePadding()
+            .padding(horizontal = Spacing.lg)
+            .padding(bottom = Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+    ) {
+        Text(
+            text = "Tags",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = "Optional labels to group transactions across categories.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        if (selectedTags.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+            ) {
+                selectedTags.forEach { tag ->
+                    FilterChip(
+                        selected = true,
+                        onClick = { onRemoveTag(tag) },
+                        label = { Text(tag) },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Remove tag",
+                                modifier = Modifier.size(16.dp),
+                            )
+                        },
+                    )
+                }
+            }
+        }
+
+        if (filteredSuggestions.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+            ) {
+                filteredSuggestions.forEach { tag ->
+                    SuggestionChip(
+                        onClick = {
+                            onAddTag(tag)
+                            input = ""
+                        },
+                        label = { Text(tag) },
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+        ) {
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Add tag…") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Text,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(onDone = { commitInput() }),
+            )
+            TextButton(onClick = { commitInput() }) {
+                Text("Add")
+            }
+        }
+
+        Button(
+            onClick = onDone,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+        ) {
+            Text("Done")
         }
     }
 }
@@ -390,7 +599,12 @@ private fun CategorySelectChip(
 }
 
 @Composable
-private fun EmptyCategorizeState(onBack: () -> Unit) {
+private fun EmptyCategorizeState(
+    onBack: () -> Unit,
+    scope: QuickCategorizeScope,
+    onReviewOlder: () -> Unit,
+) {
+    val isTodayScope = scope == QuickCategorizeScope.TODAY
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -412,7 +626,14 @@ private fun EmptyCategorizeState(onBack: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(Spacing.sm))
         Text(
-            text = "You've categorized all your recent transactions. Your insights will be more accurate now.",
+            text = when (scope) {
+                QuickCategorizeScope.TODAY ->
+                    "Every transaction from today has a category. Add tags from the review screen whenever you want extra context."
+                QuickCategorizeScope.HISTORICAL ->
+                    "There are no older uncategorized transactions left. Every past transaction has a category."
+                QuickCategorizeScope.ALL ->
+                    "You've categorized all your recent transactions. Your insights will be more accurate now."
+            },
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -423,7 +644,17 @@ private fun EmptyCategorizeState(onBack: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Text("Back to Analytics")
+            Text(if (scope == QuickCategorizeScope.ALL) "Back to Analytics" else "Back")
+        }
+        if (isTodayScope) {
+            Spacer(modifier = Modifier.height(Spacing.sm))
+            OutlinedButton(
+                onClick = onReviewOlder,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Review older uncategorized")
+            }
         }
     }
 }

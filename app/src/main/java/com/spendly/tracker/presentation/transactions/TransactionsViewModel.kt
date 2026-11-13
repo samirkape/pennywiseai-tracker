@@ -15,6 +15,7 @@ import com.spendly.tracker.presentation.common.PaymentMode
 import com.spendly.tracker.presentation.common.PaymentModeGroup
 import com.spendly.tracker.presentation.common.matchesPaymentModeGroup
 import com.spendly.tracker.presentation.common.TimePeriod
+import com.spendly.tracker.presentation.common.matchesAnalyticsIncomeFilter
 import com.spendly.tracker.presentation.common.matchesAnalyticsSpendingFilter
 import com.spendly.tracker.presentation.common.paymentMode
 import com.spendly.tracker.presentation.common.TransactionTypeFilter
@@ -33,7 +34,8 @@ import com.spendly.tracker.data.database.entity.ProfileEntity
 import com.spendly.tracker.data.repository.AccountBalanceRepository
 import com.spendly.tracker.data.repository.ProfileRepository
 import com.spendly.tracker.utils.CurrencyUtils
-import com.spendly.tracker.utils.TransactionSearchMatcher
+import com.spendly.tracker.utils.DateRangeUtils
+import com.spendly.tracker.utils.TransactionQueryParser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -63,6 +65,10 @@ class TransactionsViewModel @Inject constructor(
     
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    /** Non-null when the search query uses advanced syntax that failed to parse. */
+    private val _searchQueryError = MutableStateFlow<String?>(null)
+    val searchQueryError: StateFlow<String?> = _searchQueryError.asStateFlow()
     
     private val _selectedPeriod = MutableStateFlow(TimePeriod.THIS_MONTH)
     val selectedPeriod: StateFlow<TimePeriod> = _selectedPeriod.asStateFlow()
@@ -176,9 +182,17 @@ class TransactionsViewModel @Inject constructor(
             userPreferencesRepository.useFinancialMonth,
             userPreferencesRepository.useFixedBudgetPeriodEnd,
             userPreferencesRepository.budgetPeriodEndDay,
-            salaryMonthOverrideRepository.overridesMap
-        ) { day, useFin, useFixed, endDom, overrides ->
-            listOf(day, useFin, useFixed, endDom, overrides)
+            salaryMonthOverrideRepository.overridesMap,
+            userPreferencesRepository.salaryDayAdjustment
+        ) { args ->
+            val day = args[0] as Int
+            val useFin = args[1] as Boolean
+            val useFixed = args[2] as Boolean
+            val endDom = args[3] as Int
+            @Suppress("UNCHECKED_CAST")
+            val overrides = args[4] as Map<String, Int>
+            val adjustment = args[5] as DateRangeUtils.SalaryDayAdjustment
+            listOf(day, useFin, useFixed, endDom, overrides, adjustment)
         }
     ) { period, customRange, prefs ->
         Triple(period, customRange, prefs)
@@ -189,6 +203,7 @@ class TransactionsViewModel @Inject constructor(
         val budgetPeriodEndDay = prefs[3] as Int
         @Suppress("UNCHECKED_CAST")
         val overrides = prefs[4] as Map<String, Int>
+        val salaryAdjustment = prefs[5] as DateRangeUtils.SalaryDayAdjustment
         if (period == TimePeriod.ALL) {
             transactionRepository.getAllCurrencies()
         } else if (period == TimePeriod.CUSTOM && customRange != null) {
@@ -203,7 +218,8 @@ class TransactionsViewModel @Inject constructor(
                 useFinancialMonth,
                 overrides,
                 useFixedBudgetPeriodEnd,
-                budgetPeriodEndDay
+                budgetPeriodEndDay,
+                salaryAdjustment
             )
             if (dateRange != null) {
                 val (startDate, endDate) = dateRange
@@ -323,7 +339,7 @@ class TransactionsViewModel @Inject constructor(
 
         // Determine which transaction types count towards the category breakdown.
         val breakdownTransactions = when (typeFilter) {
-            TransactionTypeFilter.INCOME -> transactions.filter { it.transactionType == TransactionType.INCOME }
+            TransactionTypeFilter.INCOME -> transactions.filter { it.matchesAnalyticsIncomeFilter() }
             TransactionTypeFilter.EXPENSE -> transactions.filter { it.transactionType == TransactionType.EXPENSE }
             TransactionTypeFilter.CREDIT -> transactions.filter { it.transactionType == TransactionType.CREDIT }
             TransactionTypeFilter.INVESTMENT -> transactions.filter { it.transactionType == TransactionType.INVESTMENT }
@@ -490,6 +506,47 @@ class TransactionsViewModel @Inject constructor(
     private val _availableCategories = MutableStateFlow<List<String>>(emptyList())
     val availableCategories: StateFlow<List<String>> = _availableCategories.asStateFlow()
 
+    // Advanced search wizard: distinct merchant names for the value picker
+    val merchantSuggestions: StateFlow<List<String>> = transactionRepository.getAllMerchants()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    // Advanced search wizard: categories defined in the categories table, which
+    // is the source of truth for the categories that currently exist. Reading
+    // distinct values off transactions would also surface categories that were
+    // deleted or renamed but are still stored on older rows.
+    val allCategories: StateFlow<List<String>> = categoryRepository.getAllCategories()
+        .map { categories -> categories.map { it.name } }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    // Advanced search wizard: account keys across the whole dataset (same
+    // rationale as [allCategories]).
+    val allAccountKeys: StateFlow<Set<String>> = transactionRepository.getAllTransactions()
+        .map { transactions ->
+            transactions.asSequence().mapNotNull { tx ->
+                val bankName = tx.bankName?.trim().orEmpty()
+                val accountLast4 = tx.accountNumber?.trim().orEmpty()
+                if (bankName.isBlank() || accountLast4.isBlank()) null
+                else "${bankName}_${accountLast4}"
+            }.toSet()
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptySet()
+        )
+
+    // Advanced search wizard: tags the user has already used, frequency-sorted
+    private val _usedTags = MutableStateFlow<List<String>>(emptyList())
+    val usedTags: StateFlow<List<String>> = _usedTags.asStateFlow()
+
     // SMS scan period for info banner
     val smsScanMonths: StateFlow<Int> = userPreferencesRepository.smsScanMonths
         .stateIn(
@@ -566,6 +623,12 @@ class TransactionsViewModel @Inject constructor(
             }
         }
 
+        // Advanced search wizard: tags used across transactions (frequency-sorted)
+        viewModelScope.launch {
+            _usedTags.value = runCatching { transactionRepository.getAllUsedTags() }
+                .getOrDefault(emptyList())
+        }
+
         // Load unified mode preferences
         viewModelScope.launch {
             val baseCurrency = userPreferencesRepository.baseCurrency.first()
@@ -608,6 +671,7 @@ class TransactionsViewModel @Inject constructor(
                 val useFixedBudgetPeriodEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
                 val budgetPeriodEndDay = userPreferencesRepository.budgetPeriodEndDay.first()
                 val salaryOverrides = salaryMonthOverrideRepository.overridesMap.first()
+                val salaryAdjustment = userPreferencesRepository.salaryDayAdjustment.first()
                 // Get all transactions without category filter applied
                 getFilteredTransactions(
                     "",
@@ -619,7 +683,8 @@ class TransactionsViewModel @Inject constructor(
                     useFinancialMonth,
                     salaryOverrides,
                     useFixedBudgetPeriodEnd,
-                    budgetPeriodEndDay
+                    budgetPeriodEndDay,
+                    salaryAdjustment
                 )
                     .collect { transactions ->
                         val txIds = transactions.map { it.id }
@@ -669,6 +734,7 @@ class TransactionsViewModel @Inject constructor(
             userPreferencesRepository.useFixedBudgetPeriodEnd.map { "useFixedBudgetPeriodEnd" },
             userPreferencesRepository.budgetPeriodEndDay.map { "budgetPeriodEndDay" },
             salaryMonthOverrideRepository.overridesMap.map { "salaryOverrides" },
+            userPreferencesRepository.salaryDayAdjustment.map { "salaryDayAdjustment" },
             _includeExcluded.map { "includeExcluded" },
         )
             .flatMapLatest {
@@ -678,6 +744,7 @@ class TransactionsViewModel @Inject constructor(
                 val useFixedBudgetPeriodEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
                 val budgetPeriodEndDay = userPreferencesRepository.budgetPeriodEndDay.first()
                 val salaryOverrides = salaryMonthOverrideRepository.overridesMap.first()
+                val salaryAdjustment = userPreferencesRepository.salaryDayAdjustment.first()
                 val includeExcluded = _includeExcluded.value
 
                 getFilteredTransactions(
@@ -691,6 +758,7 @@ class TransactionsViewModel @Inject constructor(
                     salaryOverrides,
                     useFixedBudgetPeriodEnd,
                     budgetPeriodEndDay,
+                    salaryAdjustment,
                     includeExcluded,
                 ).map { transactions ->
                     transactions
@@ -730,6 +798,7 @@ class TransactionsViewModel @Inject constructor(
             userPreferencesRepository.useFixedBudgetPeriodEnd.map { "useFixedBudgetPeriodEnd" },
             userPreferencesRepository.budgetPeriodEndDay.map { "budgetPeriodEndDay" },
             salaryMonthOverrideRepository.overridesMap.map { "salaryOverrides" },
+            userPreferencesRepository.salaryDayAdjustment.map { "salaryDayAdjustment" },
             _includeExcluded.map { "includeExcluded" },
             _paymentModeFilter.map { "paymentMode" },
             _paymentModeGroupFilter.map { "paymentModeGroup" },
@@ -758,6 +827,7 @@ class TransactionsViewModel @Inject constructor(
                 val useFixedBudgetPeriodEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
                 val budgetPeriodEndDay = userPreferencesRepository.budgetPeriodEndDay.first()
                 val salaryOverrides = salaryMonthOverrideRepository.overridesMap.first()
+                val salaryAdjustment = userPreferencesRepository.salaryDayAdjustment.first()
                 val includeExcluded = _includeExcluded.value
 
                 val profileId = _selectedProfileId.value
@@ -774,6 +844,7 @@ class TransactionsViewModel @Inject constructor(
                     salaryOverrides,
                     useFixedBudgetPeriodEnd,
                     budgetPeriodEndDay,
+                    salaryAdjustment,
                     includeExcluded,
                     paymentModeFilter,
                     paymentModeGroupFilter,
@@ -875,6 +946,9 @@ class TransactionsViewModel @Inject constructor(
     
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
+        // Validate advanced (Kibana-style) syntax eagerly; a null error means
+        // the query is either plain text or valid field syntax.
+        _searchQueryError.value = TransactionQueryParser.parse(query).error
     }
     
     fun selectPeriod(period: TimePeriod) {
@@ -983,6 +1057,7 @@ class TransactionsViewModel @Inject constructor(
             val useFixedEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
             val endDom = userPreferencesRepository.budgetPeriodEndDay.first()
             val overrides = salaryMonthOverrideRepository.overridesMap.first()
+            val adjustment = userPreferencesRepository.salaryDayAdjustment.first()
             when {
                 yearMonth == YearMonth.now() && payPeriodEnabled ->
                     selectPeriod(TimePeriod.THIS_MONTH)
@@ -996,6 +1071,7 @@ class TransactionsViewModel @Inject constructor(
                         monthStartOverrides = overrides,
                         useFixedBudgetPeriodEnd = useFixedEnd,
                         budgetPeriodEndDay = endDom,
+                        salaryDayAdjustment = adjustment,
                     )
                     setCustomDateRange(range.first, range.second)
                 }
@@ -1371,6 +1447,8 @@ class TransactionsViewModel @Inject constructor(
         monthStartOverrides: Map<String, Int> = emptyMap(),
         useFixedBudgetPeriodEnd: Boolean = false,
         budgetPeriodEndDay: Int = 31,
+        salaryDayAdjustment: DateRangeUtils.SalaryDayAdjustment =
+            DateRangeUtils.SalaryDayAdjustment.EXACT,
         includeExcluded: Boolean = false,
         paymentModeFilter: PaymentMode? = null,
         paymentModeGroupFilter: PaymentModeGroup? = null,
@@ -1427,8 +1505,15 @@ class TransactionsViewModel @Inject constructor(
             excludedBaseFlow
         }
         
-        // Apply period filter
-        val periodFilteredFlow = when (period) {
+        // Apply period filter. A `date:…` clause in the search query IS the
+        // chosen time window, so it supersedes the screen's period filter:
+        // a broader search date range would otherwise be silently clipped
+        // by the period and appear inert (restored when the chip is removed).
+        val dateClauseOverridesPeriod = searchQuery.isNotBlank() &&
+            TransactionQueryParser.parse(searchQuery).hasDateClause()
+        val periodFilteredFlow = if (dateClauseOverridesPeriod) {
+            categoriesFilteredFlow
+        } else when (period) {
             TimePeriod.ALL -> categoriesFilteredFlow
             TimePeriod.CUSTOM -> {
                 val customRange = customDateRange.value
@@ -1445,7 +1530,8 @@ class TransactionsViewModel @Inject constructor(
                         useFinancialMonth,
                         monthStartOverrides,
                         useFixedBudgetPeriodEnd,
-                        budgetPeriodEndDay
+                        budgetPeriodEndDay,
+                        salaryDayAdjustment
                     )!!
                     val startDateTime = startDate.atStartOfDay()
                     val endDateTime = endDate.atTime(23, 59, 59)
@@ -1469,7 +1555,8 @@ class TransactionsViewModel @Inject constructor(
                     useFinancialMonth,
                     monthStartOverrides,
                     useFixedBudgetPeriodEnd,
-                    budgetPeriodEndDay
+                    budgetPeriodEndDay,
+                    salaryDayAdjustment
                 )
                 android.util.Log.d("PWDebug", "=== TransactionsVM date range ===")
                 android.util.Log.d("PWDebug", "period=$period useFinancialMonth=$useFinancialMonth monthStartDay=$monthStartDay range=$dateRange category=$category")
@@ -1491,7 +1578,9 @@ class TransactionsViewModel @Inject constructor(
         val typeFilteredFlow = periodFilteredFlow.map { transactions ->
             when (typeFilter) {
                 TransactionTypeFilter.ALL -> transactions
-                TransactionTypeFilter.INCOME -> transactions.filter { it.transactionType == TransactionType.INCOME }
+                // Loan-linked income (repayments of lent money) is not real income,
+                // mirroring the expense chip which excludes loan-linked rows
+                TransactionTypeFilter.INCOME -> transactions.filter { it.matchesAnalyticsIncomeFilter() }
                 TransactionTypeFilter.EXPENSE -> transactions.filter { it.matchesAnalyticsSpendingFilter() }
                 TransactionTypeFilter.CREDIT -> transactions.filter { it.transactionType == TransactionType.CREDIT && it.loanId == null }
                 TransactionTypeFilter.TRANSFER -> transactions.filter { it.transactionType == TransactionType.TRANSFER }
@@ -1551,12 +1640,15 @@ class TransactionsViewModel @Inject constructor(
             amountFilteredFlow
         }
 
-        // Apply search filter
+        // Apply search filter. Supports both plain text and Kibana-style
+        // field syntax (merchant:"UPI", amount>100, NOT type:transfer, ...);
+        // parse errors fall back to plain-text matching (see TransactionQuery).
         return if (searchQuery.isBlank()) {
             withLinkedRefundsFlow
         } else {
             withLinkedRefundsFlow.map { transactions ->
-                transactions.filter { TransactionSearchMatcher.matches(it, searchQuery) }
+                val parsedQuery = TransactionQueryParser.parse(searchQuery)
+                transactions.filter { parsedQuery.matches(it) }
             }
         }
     }
@@ -1606,6 +1698,7 @@ class TransactionsViewModel @Inject constructor(
                     val useFixedEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
                     val endDom = userPreferencesRepository.budgetPeriodEndDay.first()
                     val overrides = salaryMonthOverrideRepository.overridesMap.first()
+                    val adjustment = userPreferencesRepository.salaryDayAdjustment.first()
 
                     when {
                         useFinancialMonth && yearMonth == YearMonth.now() ->
@@ -1619,7 +1712,8 @@ class TransactionsViewModel @Inject constructor(
                                 useFinancialMonth,
                                 overrides,
                                 useFixedEnd,
-                                endDom
+                                endDom,
+                                adjustment
                             )
                             setCustomDateRange(range.first, range.second)
                         }
@@ -1636,6 +1730,7 @@ class TransactionsViewModel @Inject constructor(
         val useFixedEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
         val endDom = userPreferencesRepository.budgetPeriodEndDay.first()
         val overrides = salaryMonthOverrideRepository.overridesMap.first()
+        val adjustment = userPreferencesRepository.salaryDayAdjustment.first()
 
         val payMonthRange = getDateRangeForPeriod(
             TimePeriod.THIS_MONTH,
@@ -1643,7 +1738,8 @@ class TransactionsViewModel @Inject constructor(
             useFinancialMonth,
             overrides,
             useFixedEnd,
-            endDom
+            endDom,
+            adjustment
         )
         val calendarMonthRange = getDateRangeForPeriod(
             TimePeriod.THIS_MONTH,
@@ -1721,7 +1817,7 @@ class TransactionsViewModel @Inject constructor(
 
         val totalsByCurrency = transactionsByCurrency.mapValues { (currency, currencyTransactions) ->
             val income = currencyTransactions
-                .filter { it.transactionType == TransactionType.INCOME && !RefundAdjustments.isLinkedRefund(it) }
+                .filter { it.matchesAnalyticsIncomeFilter() && !RefundAdjustments.isLinkedRefund(it) }
                 .sumOf { it.amount.toDouble() }
                 .toBigDecimal()
 

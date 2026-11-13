@@ -5,6 +5,7 @@ import com.spendly.tracker.data.database.entity.MerchantAliasEntity
 import com.spendly.tracker.utils.MerchantAliasAuditor
 import com.spendly.tracker.utils.MerchantAliasResolver
 import com.spendly.tracker.utils.MerchantNameMatcher
+import com.spendly.tracker.utils.MerchantNameNormalizer
 import java.time.LocalDateTime
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -16,6 +17,8 @@ enum class MerchantAliasSaveResult {
     DUPLICATE_SOURCE,
     NOT_FOUND,
 }
+
+enum class MerchantAliasSortMode { LAST_USED, ALPHABETICAL }
 
 @Singleton
 class MerchantAliasRepository @Inject constructor(
@@ -67,8 +70,28 @@ class MerchantAliasRepository @Inject constructor(
 
     /** Exact match only — safe for automatic SMS ingest. */
     suspend fun resolveDisplayNameForIngest(sourceMerchant: String): String {
-        return MerchantAliasResolver.resolveExact(sourceMerchant, getAllAliasesList())
+        val source = sourceMerchant.trim()
+        val resolved = MerchantAliasResolver.resolveExact(source, getAllAliasesList())
+        if (!resolved.equals(source, ignoreCase = true)) {
+            markAliasUsed(source)
+        }
+        // Keep alias display names consistent with SMS-ingested names: a raw
+        // (un-normalized) alias label must not replace the already-normalized
+        // parser output with shouty caps (e.g. "THE NEW INDIA Assurance Company").
+        return MerchantNameNormalizer.normalize(resolved)
     }
+
+    /** Records that an alias was applied to a real SMS/transaction, for "last used" sorting. */
+    suspend fun markAliasUsed(sourceMerchant: String) {
+        merchantAliasDao.markAliasUsed(sourceMerchant.trim(), LocalDateTime.now())
+    }
+
+    /**
+     * Stamps last_used_at for aliases created before usage tracking existed, based on
+     * transaction history. Idempotent — only touches aliases without a last-used stamp.
+     */
+    suspend fun backfillAliasLastUsed(): Int =
+        merchantAliasDao.backfillLastUsedFromTransactions()
 
     suspend fun resolveDisplayName(sourceMerchant: String): String {
         return MerchantAliasResolver.resolve(sourceMerchant, getAllAliasesList())
@@ -97,6 +120,7 @@ class MerchantAliasRepository @Inject constructor(
                 displayName = display,
                 createdAt = existing?.createdAt ?: LocalDateTime.now(),
                 updatedAt = LocalDateTime.now(),
+                lastUsedAt = existing?.lastUsedAt,
             )
         )
     }
@@ -138,6 +162,7 @@ class MerchantAliasRepository @Inject constructor(
                 displayName = display,
                 createdAt = existing.createdAt,
                 updatedAt = LocalDateTime.now(),
+                lastUsedAt = existing.lastUsedAt,
             )
         )
         return MerchantAliasSaveResult.SUCCESS

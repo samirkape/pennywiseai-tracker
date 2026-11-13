@@ -3,6 +3,7 @@ package com.spendly.tracker.domain.service
 import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.database.entity.TransactionType
 import com.spendly.tracker.utils.DateRangeUtils
+import com.spendly.tracker.utils.DateRangeUtils.SalaryDayAdjustment
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -24,6 +25,10 @@ object SalaryPayPeriodDetector {
         val suggestedDay: Int,
         val salaryDate: LocalDate,
         val transactionId: Long,
+        /** Current pay-period window before accepting. */
+        val currentRange: Pair<LocalDate, LocalDate>,
+        /** Pay-period window that results from accepting this suggestion. */
+        val newRange: Pair<LocalDate, LocalDate>,
     ) {
         val dismissToken: String = "${yearMonth}:${suggestedDay}"
     }
@@ -31,6 +36,8 @@ object SalaryPayPeriodDetector {
     /**
      * @param transactions Credits in the salary calendar month (typically month-to-date).
      * @param useFixedBudgetPeriodEnd When true, per-month overrides are ignored for ranges — no suggestion.
+     * @param adjustment weekend payday convention; a credit matching the rule-adjusted
+     *   expected payday is *not* a surprise and never prompts.
      */
     fun findSuggestion(
         transactions: List<TransactionEntity>,
@@ -40,6 +47,7 @@ object SalaryPayPeriodDetector {
         defaultStartDay: Int,
         overrides: Map<String, Int>,
         dismissedTokens: Set<String>,
+        adjustment: SalaryDayAdjustment = SalaryDayAdjustment.EXACT,
     ): Suggestion? {
         if (!useFinancialMonth || useFixedBudgetPeriodEnd) return null
 
@@ -66,23 +74,39 @@ object SalaryPayPeriodDetector {
 
         val salaryDate = best.dateTime.toLocalDate()
         val suggestedDay = salaryDate.dayOfMonth
-        val effectiveDefaultDay = DateRangeUtils.resolveStartDay(calendarMonth, defaultStartDay)
-        if (suggestedDay == effectiveDefaultDay) return null
+
+        // A credit that simply matched the configured payday rule (e.g. the 25th
+        // preponed from a Sunday to a Friday) is the expected normal payday — nothing
+        // to confirm. Only genuine deviations are worth prompting about.
+        val expected = DateRangeUtils.expectedPayday(calendarMonth, defaultStartDay, adjustment)
+        if (salaryDate == expected) return null
+        if (suggestedDay == DateRangeUtils.resolveStartDay(calendarMonth, defaultStartDay)) return null
 
         val token = "${yearMonthKey}:$suggestedDay"
         if (dismissedTokens.contains(token)) return null
+
+        val currentRange = DateRangeUtils.calculateFinancialMonthRangeWithOverrides(
+            today, defaultStartDay, overrides, adjustment,
+        )
+        val newRange = DateRangeUtils.calculateFinancialMonthRangeWithOverrides(
+            today, defaultStartDay, overrides + (yearMonthKey to suggestedDay), adjustment,
+        )
 
         return Suggestion(
             yearMonth = calendarMonth,
             suggestedDay = suggestedDay,
             salaryDate = salaryDate,
             transactionId = best.id,
+            currentRange = currentRange,
+            newRange = newRange,
         )
     }
 
     internal fun scoreCandidate(transaction: TransactionEntity): Int {
         if (transaction.isDeleted || transaction.isExcludedFromTracking) return 0
         if (transaction.transactionType != TransactionType.INCOME) return 0
+        // Loan repayments are not salary
+        if (transaction.loanId != null) return 0
 
         var score = 0
         if (transaction.category.equals("Salary", ignoreCase = true)) {

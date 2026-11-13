@@ -8,6 +8,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -30,6 +32,7 @@ import androidx.navigation.toRoute
 import com.spendly.tracker.ui.LocalNavAnimatedVisibilityScope
 import com.spendly.tracker.ui.LocalSharedTransitionScope
 import com.spendly.tracker.ui.MainScreen
+import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.utils.adaptiveMaxWidth
 import com.spendly.tracker.ui.viewmodel.ThemeViewModel
 
@@ -49,7 +52,11 @@ fun SpendlyNavHost(
     modifier: Modifier = Modifier,
     themeViewModel: ThemeViewModel = hiltViewModel(),
     startDestination: Any = Home(),
-    onEditComplete: () -> Unit = {}
+    onEditComplete: () -> Unit = {},
+    openSavings: Boolean = false,
+    editSavingsGoal: Boolean = false,
+    onOpenSavingsHandled: () -> Unit = {},
+    onEditSavingsGoalHandled: () -> Unit = {}
 ) {
     // Use a stable start destination
     val stableStartDestination = remember { startDestination }
@@ -69,17 +76,22 @@ fun SpendlyNavHost(
             .adaptiveMaxWidth()
             .fillMaxWidth()
             .fillMaxHeight(),
-        enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-        exitTransition = { fadeOut(tween(200)) },
-        popEnterTransition = { fadeIn(tween(300)) },
-        popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+        enterTransition = {
+            fadeIn(tween(Dimensions.Animation.standard, easing = Dimensions.Easing.standard)) +
+                slideInVertically(
+                    animationSpec = tween(Dimensions.Animation.standard, easing = Dimensions.Easing.standard)
+                ) { it / 4 }
+        },
+        exitTransition = { fadeOut(tween(Dimensions.Animation.quick)) },
+        popEnterTransition = { fadeIn(tween(Dimensions.Animation.standard, easing = Dimensions.Easing.standard)) },
+        popExitTransition = {
+            fadeOut(tween(Dimensions.Animation.quick)) +
+                slideOutVertically(
+                    animationSpec = tween(Dimensions.Animation.quick, easing = Dimensions.Easing.standard)
+                ) { it / 4 }
+        }
     ) {
-        composable<AppLock>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<AppLock> {
             com.spendly.tracker.ui.screens.AppLockScreen(
                 onUnlocked = {
                     navController.navigate(Home()) {
@@ -89,12 +101,7 @@ fun SpendlyNavHost(
                 }
             )
         }
-        composable<OnBoarding>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<OnBoarding> {
             com.spendly.tracker.ui.screens.onboarding.OnBoardingScreen(
                 onOnboardingComplete = {
                     navController.navigate(Home()) {
@@ -123,17 +130,16 @@ fun SpendlyNavHost(
                     initialEndDateEpochDay = homeArgs.endDateEpochDay,
                     initialPaymentMode = homeArgs.paymentMode,
                     initialBankName = homeArgs.bankName,
-                    initialAccountLast4 = homeArgs.accountLast4
+                    initialAccountLast4 = homeArgs.accountLast4,
+                    openSavings = openSavings,
+                    editSavingsGoal = editSavingsGoal,
+                    onOpenSavingsHandled = onOpenSavingsHandled,
+                    onEditSavingsGoalHandled = onEditSavingsGoalHandled
                 )
             }
         }
 
-        composable<Settings>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<Settings> {
             com.spendly.tracker.ui.screens.settings.SettingsScreen(
                 themeViewModel = themeViewModel,
                 onNavigateBack = {
@@ -163,12 +169,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<Subscriptions>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<Subscriptions> {
             com.spendly.tracker.presentation.subscriptions.SubscriptionsScreen(
                 onNavigateBack = {
                     navController.safePopBackStack()
@@ -179,12 +180,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<PrepaidExpenses>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<PrepaidExpenses> {
             com.spendly.tracker.presentation.prepaid.PrepaidExpensesScreen(
                 onAddPrepaidClick = {
                     navController.navigate(AddTransaction(initialTab = 2)) { launchSingleTop = true }
@@ -195,23 +191,13 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<PayPeriodSettings>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<PayPeriodSettings> {
             com.spendly.tracker.ui.screens.settings.PayPeriodSettingsScreen(
                 onNavigateBack = { navController.safePopBackStack() }
             )
         }
 
-        composable<Categories>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<Categories> {
             com.spendly.tracker.presentation.categories.CategoriesScreen(
                 onNavigateBack = {
                     navController.safePopBackStack()
@@ -255,27 +241,36 @@ fun SpendlyNavHost(
             }
         }
         
-        composable<MerchantDetail>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) { backStackEntry ->
+        composable<MerchantDetail> { backStackEntry ->
             val args = backStackEntry.toRoute<MerchantDetail>()
-            com.spendly.tracker.presentation.merchant.MerchantDetailScreen(
-                merchant = args.merchant,
-                onNavigateBack = { navController.safePopBackStack() },
-                onViewAllTransactions = { merchant ->
-                    navController.navigate(TransactionsByMerchant(merchant)) { launchSingleTop = true }
-                }
-            )
+            CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this@composable) {
+                com.spendly.tracker.presentation.merchant.MerchantDetailScreen(
+                    merchant = args.merchant,
+                    onNavigateBack = { navController.safePopBackStack() },
+                    onViewAllTransactions = { merchant ->
+                        navController.navigate(TransactionsByMerchant(merchant)) { launchSingleTop = true }
+                    }
+                )
+            }
         }
 
         composable<AddTransaction>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+            // FAB morph: the entered screen scales up from the FAB press,
+            // and shrinks back on pop (design.md § Motion & Animation).
+            enterTransition = {
+                fadeIn(tween(Dimensions.Animation.standard, easing = Dimensions.Easing.standard)) +
+                    scaleIn(
+                        initialScale = 0.92f,
+                        animationSpec = tween(Dimensions.Animation.standard, easing = Dimensions.Easing.standard),
+                    )
+            },
+            popExitTransition = {
+                fadeOut(tween(Dimensions.Animation.quick)) +
+                    scaleOut(
+                        targetScale = 0.92f,
+                        animationSpec = tween(Dimensions.Animation.quick, easing = Dimensions.Easing.standard),
+                    )
+            },
         ) { backStackEntry ->
             com.spendly.tracker.presentation.add.AddScreen(
                 initialTab = backStackEntry.toRoute<AddTransaction>().initialTab,
@@ -285,23 +280,13 @@ fun SpendlyNavHost(
             )
         }
         
-        composable<MerchantAliases>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<MerchantAliases> {
             com.spendly.tracker.ui.screens.settings.MerchantAliasesScreen(
                 onNavigateBack = { navController.safePopBackStack() },
             )
         }
 
-        composable<UnrecognizedSms>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<UnrecognizedSms> {
             com.spendly.tracker.ui.screens.unrecognized.UnrecognizedSmsScreen(
                 onNavigateBack = {
                     navController.safePopBackStack()
@@ -324,12 +309,7 @@ fun SpendlyNavHost(
             )
         }
         
-        composable<Faq>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<Faq> {
             com.spendly.tracker.ui.screens.settings.FAQScreen(
                 onNavigateBack = {
                     navController.safePopBackStack()
@@ -337,12 +317,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<Rules>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<Rules> {
             com.spendly.tracker.ui.screens.rules.RulesScreen(
                 onNavigateBack = {
                     navController.safePopBackStack()
@@ -365,12 +340,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<QuickKeywordRules>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } },
-        ) {
+        composable<QuickKeywordRules> {
             com.spendly.tracker.ui.screens.rules.QuickKeywordRulesScreen(
                 onNavigateBack = { navController.safePopBackStack() },
                 onNavigateToEdit = { ruleId ->
@@ -381,12 +351,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<EditQuickKeywordRule>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } },
-        ) { backStackEntry ->
+        composable<EditQuickKeywordRule> { backStackEntry ->
             val route = backStackEntry.toRoute<EditQuickKeywordRule>()
             com.spendly.tracker.ui.screens.rules.EditQuickKeywordRuleScreen(
                 ruleId = route.ruleId,
@@ -396,12 +361,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<CreateRule>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) { backStackEntry ->
+        composable<CreateRule> { backStackEntry ->
             val createRule = backStackEntry.toRoute<CreateRule>()
             val rulesViewModel: com.spendly.tracker.ui.viewmodel.RulesViewModel = hiltViewModel()
 
@@ -423,12 +383,7 @@ fun SpendlyNavHost(
             )
         }
         
-        composable<AccountDetail>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<AccountDetail> {
             com.spendly.tracker.presentation.accounts.AccountDetailScreen(
                 onNavigateBack = { navController.safePopBackStack() },
                 onTransactionClick = { id ->
@@ -439,12 +394,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<BudgetGroups>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<BudgetGroups> {
             com.spendly.tracker.presentation.budgetgroups.BudgetGroupsScreen(
                 onNavigateBack = {
                     navController.safePopBackStack()
@@ -462,12 +412,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<BudgetGroupEdit>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<BudgetGroupEdit> {
             com.spendly.tracker.presentation.budgetgroups.BudgetGroupEditScreen(
                 onNavigateBack = {
                     navController.safePopBackStack()
@@ -475,12 +420,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<Loans>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<Loans> {
             com.spendly.tracker.presentation.loans.LoansScreen(
                 onNavigateBack = {
                     navController.safePopBackStack()
@@ -498,12 +438,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<LoanAccountAnalytics>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<LoanAccountAnalytics> {
             com.spendly.tracker.presentation.loans.LoanAccountAnalyticsScreen(
                 onNavigateBack = { navController.safePopBackStack() },
                 onNavigateToTransactionDetail = { txId ->
@@ -514,12 +449,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<LoanDetail>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<LoanDetail> {
             com.spendly.tracker.presentation.loans.LoanDetailScreen(
                 onNavigateBack = {
                     navController.safePopBackStack()
@@ -532,12 +462,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<TransactionGroups>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<TransactionGroups> {
             com.spendly.tracker.presentation.groups.TransactionGroupsScreen(
                 onNavigateBack = {
                     navController.safePopBackStack()
@@ -550,12 +475,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<TransactionGroupDetail>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<TransactionGroupDetail> {
             com.spendly.tracker.presentation.groups.TransactionGroupDetailScreen(
                 onNavigateBack = {
                     navController.safePopBackStack()
@@ -568,12 +488,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<ExchangeRates>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<ExchangeRates> {
             com.spendly.tracker.presentation.exchangerates.ExchangeRatesScreen(
                 onNavigateBack = {
                     navController.safePopBackStack()
@@ -581,12 +496,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<ImportStatement>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<ImportStatement> {
             com.spendly.tracker.presentation.statement.ImportStatementScreen(
                 onNavigateBack = {
                     navController.safePopBackStack()
@@ -594,12 +504,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<TransactionsWithFilter>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) { backStackEntry ->
+        composable<TransactionsWithFilter> { backStackEntry ->
             val args = backStackEntry.toRoute<TransactionsWithFilter>()
             com.spendly.tracker.presentation.transactions.TransactionsScreen(
                 initialCategory = args.category,
@@ -618,12 +523,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<TransactionsByMerchant>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) { backStackEntry ->
+        composable<TransactionsByMerchant> { backStackEntry ->
             val args = backStackEntry.toRoute<TransactionsByMerchant>()
             com.spendly.tracker.presentation.transactions.TransactionsScreen(
                 initialMerchant = args.merchant,
@@ -641,19 +541,14 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<Insights>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<Insights> {
             com.spendly.tracker.ui.screens.insights.InsightsScreen(
                 onBack = { navController.safePopBackStack() },
                 onNavigateToBehavioralStats = { month ->
                     navController.navigate(BehavioralStats(month.toString())) { launchSingleTop = true }
                 },
                 onNavigateToQuickCategorize = {
-                    navController.navigate(QuickCategorize) { launchSingleTop = true }
+                    navController.navigate(QuickCategorize()) { launchSingleTop = true }
                 },
                 onNavigateToTransactions = { category, merchant, period, currency, transactionType, startDateEpoch, endDateEpoch, paymentMode, bankName, accountLast4 ->
                     navController.navigate(
@@ -682,12 +577,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<InsightDetail>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<InsightDetail> {
             com.spendly.tracker.ui.screens.insights.InsightDetailScreen(
                 onBack = { navController.safePopBackStack() },
                 onTransactionClick = { transactionId ->
@@ -696,12 +586,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<BehavioralStats>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<BehavioralStats> {
             com.spendly.tracker.ui.screens.behavioral.BehavioralStatsScreen(
                 onNavigateBack = { navController.safePopBackStack() },
                 onNavigateToTransaction = { transactionId ->
@@ -723,12 +608,7 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<TransactionsByCategories>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) { backStackEntry ->
+        composable<TransactionsByCategories> { backStackEntry ->
             val args = backStackEntry.toRoute<TransactionsByCategories>()
             com.spendly.tracker.presentation.transactions.TransactionsScreen(
                 initialCategories = args.categories,
@@ -756,16 +636,16 @@ fun SpendlyNavHost(
             popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
         ) {
             com.spendly.tracker.ui.screens.insights.QuickCategorizeScreen(
-                onBack = { navController.safePopBackStack() }
+                onBack = { navController.safePopBackStack() },
+                onReviewOlder = {
+                    navController.navigate(QuickCategorize(scope = "historical")) {
+                        launchSingleTop = true
+                    }
+                }
             )
         }
 
-        composable<Goals>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<Goals> {
             com.spendly.tracker.presentation.goals.GoalsScreen(
                 onNavigateBack = { navController.safePopBackStack() },
                 onGoalClick = { goalId ->
@@ -777,29 +657,21 @@ fun SpendlyNavHost(
             )
         }
 
-        composable<GoalDetail>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
-            com.spendly.tracker.presentation.goals.GoalDetailScreen(
-                onNavigateBack = { navController.safePopBackStack() },
-                onNavigateToEdit = { goalId ->
-                    navController.navigate(GoalEdit(goalId)) { launchSingleTop = true }
-                },
-                onNavigateToTransaction = { txId ->
-                    navController.navigate(TransactionDetail(txId)) { launchSingleTop = true }
-                }
-            )
+        composable<GoalDetail> { backStackEntry ->
+            CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this@composable) {
+                com.spendly.tracker.presentation.goals.GoalDetailScreen(
+                    onNavigateBack = { navController.safePopBackStack() },
+                    onNavigateToEdit = { goalId ->
+                        navController.navigate(GoalEdit(goalId)) { launchSingleTop = true }
+                    },
+                    onNavigateToTransaction = { txId ->
+                        navController.navigate(TransactionDetail(txId)) { launchSingleTop = true }
+                    }
+                )
+            }
         }
 
-        composable<GoalEdit>(
-            enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
-        ) {
+        composable<GoalEdit> {
             com.spendly.tracker.presentation.goals.GoalEditScreen(
                 onNavigateBack = { navController.safePopBackStack() },
                 onSaved = { navController.safePopBackStack() }

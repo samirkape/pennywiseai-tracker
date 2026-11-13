@@ -50,7 +50,7 @@ data class InsightDetail(
 )
 
 @Serializable
-object QuickCategorize
+data class QuickCategorize(val scope: String = "all")
 
 @Serializable
 data class BehavioralStats(val initialMonthStr: String? = null)

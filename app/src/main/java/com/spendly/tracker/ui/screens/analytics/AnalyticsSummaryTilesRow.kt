@@ -91,17 +91,6 @@ fun AnalyticsSummaryTilesRow(
     val showOutflowTile = periodOutflow != null
 
     val tiles = buildList {
-        periodOutflow?.let { outflow ->
-            add(
-                AnalyticsSummaryTileEntry.Outflow(
-                    key = "outflow",
-                    summary = outflow,
-                    onClick = onOutflowClick,
-                ),
-            )
-        }
-
-
         paymentModeBreakdown?.let { breakdown ->
             val cardAndBank = breakdown.cardAndBank
             val cash = breakdown.cash
@@ -156,6 +145,16 @@ fun AnalyticsSummaryTilesRow(
                     ),
                 )
             }
+        }
+
+        periodOutflow?.let { outflow ->
+            add(
+                AnalyticsSummaryTileEntry.Outflow(
+                    key = "outflow",
+                    summary = outflow,
+                    onClick = onOutflowClick,
+                ),
+            )
         }
 
         investmentInsights?.let { insights ->

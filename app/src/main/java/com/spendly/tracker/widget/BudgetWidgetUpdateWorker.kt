@@ -18,6 +18,7 @@ import com.spendly.tracker.data.repository.BudgetCategorySpending
 import com.spendly.tracker.data.repository.BudgetGroupRepository
 import com.spendly.tracker.data.repository.BudgetGroupSpending
 import com.spendly.tracker.data.repository.SalaryMonthOverrideRepository
+import com.spendly.tracker.data.repository.countsTowardBudgetSpending
 import com.spendly.tracker.utils.DateRangeUtils
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -72,6 +73,7 @@ class BudgetWidgetUpdateWorker @AssistedInject constructor(
             val useFixedEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
             val budgetPeriodEndDay = userPreferencesRepository.budgetPeriodEndDay.first()
             val overrides = salaryMonthOverrideRepository.overridesMap.first()
+            val adjustment = userPreferencesRepository.salaryDayAdjustment.first()
 
             val today = java.time.LocalDate.now()
             val yearMonth = java.time.YearMonth.from(today)
@@ -81,7 +83,8 @@ class BudgetWidgetUpdateWorker @AssistedInject constructor(
                     monthStartDay,
                     useFixedEnd,
                     budgetPeriodEndDay,
-                    overrides
+                    overrides,
+                    adjustment
                 )
             } else {
                 yearMonth.atDay(1) to yearMonth.atEndOfMonth()
@@ -93,7 +96,8 @@ class BudgetWidgetUpdateWorker @AssistedInject constructor(
                     monthStartDay,
                     useFixedEnd,
                     budgetPeriodEndDay,
-                    overrides
+                    overrides,
+                    adjustment
                 )
             } else {
                 val prevYM = yearMonth.minusMonths(1)
@@ -107,7 +111,9 @@ class BudgetWidgetUpdateWorker @AssistedInject constructor(
 
                 // Convert raw to summary with currency conversion
                 val incomeTransactions = raw.allTransactions.filter {
-                    it.transaction.transactionType == TransactionType.INCOME
+                    // Loan-linked rows (lent money / repayments) are not real income
+                    it.transaction.transactionType == TransactionType.INCOME &&
+                        it.transaction.loanId == null
                 }
                 var totalIncome = java.math.BigDecimal.ZERO
                 for (tx in incomeTransactions) {
@@ -118,7 +124,8 @@ class BudgetWidgetUpdateWorker @AssistedInject constructor(
 
                 val categoryAmounts = mutableMapOf<String, java.math.BigDecimal>()
                 raw.allTransactions.forEach { txWithSplits ->
-                    if (txWithSplits.transaction.transactionType != TransactionType.INCOME) {
+                    // Spending only; transfers and investments never consume budget limits.
+                    if (txWithSplits.transaction.countsTowardBudgetSpending()) {
                         txWithSplits.getAmountByCategory().forEach { (category, amount) ->
                             val converted = currencyConversionService.convertAmount(amount, txWithSplits.transaction.currency, displayCurrency)
                             val categoryName = category.ifEmpty { "Others" }
@@ -162,7 +169,7 @@ class BudgetWidgetUpdateWorker @AssistedInject constructor(
 
                 val prevCategoryAmounts = mutableMapOf<String, java.math.BigDecimal>()
                 raw.prevTransactions.forEach { txWithSplits ->
-                    if (txWithSplits.transaction.transactionType != TransactionType.INCOME) {
+                    if (txWithSplits.transaction.countsTowardBudgetSpending()) {
                         txWithSplits.getAmountByCategory().forEach { (category, amount) ->
                             val converted = currencyConversionService.convertAmount(
                                 amount, txWithSplits.transaction.currency, displayCurrency
@@ -180,7 +187,8 @@ class BudgetWidgetUpdateWorker @AssistedInject constructor(
 
                 var prevIncome = java.math.BigDecimal.ZERO
                 raw.prevTransactions
-                    .filter { it.transaction.transactionType == TransactionType.INCOME }
+                    .filter { it.transaction.transactionType == TransactionType.INCOME &&
+                        it.transaction.loanId == null }
                     .forEach { tx ->
                         prevIncome += currencyConversionService.convertAmount(
                             tx.transaction.amount, tx.transaction.currency, displayCurrency

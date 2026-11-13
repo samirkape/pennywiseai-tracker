@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
 import com.spendly.tracker.R
+import com.spendly.tracker.data.contacts.LocalMerchantDisplay
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
@@ -46,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalResources
@@ -64,6 +66,8 @@ import com.spendly.tracker.data.database.entity.GoalContributionEntity
 import com.spendly.tracker.data.database.entity.GoalEntity
 import com.spendly.tracker.data.database.entity.LoanDirection
 import com.spendly.tracker.data.database.entity.LoanEntity
+import com.spendly.tracker.data.database.entity.PrepaidExpenseEntity
+import com.spendly.tracker.data.database.entity.PrepaidExpenseStatus
 import com.spendly.tracker.data.database.entity.ProfileEntity
 import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.database.entity.TransactionGroupEntity
@@ -93,8 +97,11 @@ import dev.chrisbanes.haze.hazeSource
 import com.spendly.tracker.utils.formatAmount
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.LocalDateTime
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 // Reusable filled field colors for edit mode
@@ -910,7 +917,7 @@ private fun TransactionDetailContent(
     showSplitEditor: Boolean,
     hasSplits: Boolean,
     loan: LoanEntity?,
-    prepaidPlan: com.spendly.tracker.data.database.entity.PrepaidExpenseEntity?,
+    prepaidPlan: PrepaidExpenseEntity?,
     onNavigateToLoanDetail: (Long) -> Unit,
     onFindSimilar: (String) -> Unit,
     onNavigateToTransactionDetail: (Long) -> Unit,
@@ -1022,6 +1029,114 @@ private fun TransactionDetailContent(
 
 // ==================== Clean detail read-only view ====================
 
+@Composable
+private fun PrepaidPlanProgressCard(plan: PrepaidExpenseEntity) {
+    val totalMonths = plan.totalMonths.coerceAtLeast(1)
+    val currentMonth = YearMonth.now()
+    val elapsedMonths = if (plan.status == PrepaidExpenseStatus.COMPLETED) {
+        totalMonths
+    } else {
+        (ChronoUnit.MONTHS.between(YearMonth.from(plan.startDate), currentMonth) + 1)
+            .toInt()
+            .coerceIn(0, totalMonths)
+    }
+    val isCompleted = plan.status == PrepaidExpenseStatus.COMPLETED ||
+        (plan.status == PrepaidExpenseStatus.ACTIVE && elapsedMonths >= totalMonths)
+    val accentColor = when {
+        isCompleted -> MaterialTheme.colorScheme.tertiary
+        plan.status == PrepaidExpenseStatus.ACTIVE -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val statusLabel = if (isCompleted) {
+        "Completed"
+    } else {
+        plan.status.name.lowercase().replaceFirstChar { it.uppercase() }
+    }
+    val monthlyAmount = remember(plan.totalAmount, totalMonths) {
+        plan.totalAmount.divide(BigDecimal(totalMonths), 2, RoundingMode.HALF_UP)
+    }
+    val monthFormatter = remember { DateTimeFormatter.ofPattern("MMM yyyy") }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 1.dp,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CalendarMonth,
+                    contentDescription = null,
+                    modifier = Modifier.size(Dimensions.Icon.medium),
+                    tint = accentColor,
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Prepaid plan",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "${plan.startDate.format(monthFormatter)} – ${plan.endDate.format(monthFormatter)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = accentColor.copy(alpha = 0.12f),
+                ) {
+                    Text(
+                        text = statusLabel,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = accentColor,
+                    )
+                }
+            }
+
+            LinearProgressIndicator(
+                progress = { (elapsedMonths.toFloat() / totalMonths).coerceIn(0f, 1f) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp)),
+                color = accentColor,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                strokeCap = StrokeCap.Round,
+                drawStopIndicator = {},
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "$elapsedMonths of $totalMonths months",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = "${CurrencyFormatter.formatCurrency(monthlyAmount, plan.currency)}/mo",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TransactionReceipt(
@@ -1032,7 +1147,7 @@ private fun TransactionReceipt(
     splits: List<SplitItem>,
     hasSplits: Boolean,
     loan: LoanEntity?,
-    prepaidPlan: com.spendly.tracker.data.database.entity.PrepaidExpenseEntity?,
+    prepaidPlan: PrepaidExpenseEntity?,
     onNavigateToLoanDetail: (Long) -> Unit,
     onFindSimilar: (String) -> Unit = {},
     onNavigateToTransactionDetail: (Long) -> Unit = {},
@@ -1099,8 +1214,12 @@ private fun TransactionReceipt(
 
                 Spacer(modifier = Modifier.height(Spacing.sm))
 
+                // Show the contact-resolved name when the user has the
+                // toggle on; the raw merchant is still what the Edit
+                // field below renders so users can correct mis-detections.
+                val merchantDisplay = LocalMerchantDisplay.current
                 Text(
-                    text = transaction.merchantName,
+                    text = merchantDisplay(transaction.merchantName) ?: transaction.merchantName,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center,
@@ -1235,6 +1354,11 @@ private fun TransactionReceipt(
                     )
                 }
             }
+        }
+
+        // ── Prepaid plan progress ──
+        prepaidPlan?.let { plan ->
+            PrepaidPlanProgressCard(plan = plan)
         }
 
         // ── Refund link info ──
@@ -1615,16 +1739,6 @@ private fun TransactionReceipt(
                         value = "#$linkedId"
                     )
                 }
-            }
-
-            // Prepaid expense plan hint
-            prepaidPlan?.let { plan ->
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                DetailInfoRow(
-                    icon = Icons.Default.CalendarMonth,
-                    label = "Prepaid Plan",
-                    value = "Spread over ${plan.totalMonths} months (${plan.startDate} – ${plan.endDate})"
-                )
             }
 
             // Classification

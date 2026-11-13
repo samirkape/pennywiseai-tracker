@@ -487,6 +487,7 @@ class ComputeInsightsUseCase @Inject constructor(
         val income = allTransactions
             .filter {
                 it.transactionType == TransactionType.INCOME &&
+                    it.loanId == null && // Loan repayments are not real income
                     !it.dateTime.isBefore(start) && it.dateTime.isBefore(endExclusive)
             }
             .sumOf { it.amount }
@@ -1096,9 +1097,12 @@ class ComputeInsightsUseCase @Inject constructor(
         val endExclusive = dateRange.second.plusDays(1).atStartOfDay()
         val periodTxns = transactions.filter { !it.dateTime.isBefore(start) && it.dateTime.isBefore(endExclusive) }
 
-        val income = periodTxns.filter { it.transactionType == TransactionType.INCOME }.sumOf { it.amount }
+        val income = periodTxns.filter {
+            it.transactionType == TransactionType.INCOME && it.loanId == null
+        }.sumOf { it.amount }
         val expenseTotal = periodTxns.filter {
-            it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT
+            it.loanId == null &&
+                (it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT)
         }.sumOf { it.amount }
 
         if (income == BigDecimal.ZERO) return null

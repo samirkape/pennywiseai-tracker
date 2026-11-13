@@ -191,6 +191,7 @@ interface TransactionDao {
         SELECT SUM(amount) FROM transactions
         WHERE is_deleted = 0
         AND is_excluded_from_tracking = 0
+        AND loan_id IS NULL
         AND transaction_type = :type
         AND date_time BETWEEN :startDate AND :endDate
     """)
@@ -820,6 +821,7 @@ interface TransactionDao {
         FROM transactions
         WHERE is_deleted = 0
         AND is_excluded_from_tracking = 0
+        AND loan_id IS NULL
         AND LOWER(merchant_name) = LOWER(:merchantName)
         AND (
             transaction_type IN ('EXPENSE', 'CREDIT', 'INVESTMENT')

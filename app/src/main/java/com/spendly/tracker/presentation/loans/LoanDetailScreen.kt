@@ -160,7 +160,13 @@ fun LoanDetailScreen(
         val totalRepaid = activeLinked
             .filter { it.transactionType == repaymentType }
             .fold(BigDecimal.ZERO) { acc, t -> acc + t.amount }
-        val originalAmount = if (linkedOriginal > BigDecimal.ZERO) linkedOriginal else loan.originalAmount
+        // Mirrors LoanRepository.recalculateRemaining: principal is the linked original
+        // transactions, falling back to the stored amount which is never below the repaid total.
+        val originalAmount = when {
+            linkedOriginal > BigDecimal.ZERO -> linkedOriginal
+            totalRepaid > loan.originalAmount -> totalRepaid
+            else -> loan.originalAmount
+        }
         val normalizedRemaining = (originalAmount - totalRepaid).coerceAtLeast(BigDecimal.ZERO)
         val progress = if (originalAmount > BigDecimal.ZERO) {
             (BigDecimal.ONE - normalizedRemaining.divide(
@@ -725,11 +731,23 @@ private fun RecordPaymentBottomSheet(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(txn.merchantName, style = MaterialTheme.typography.bodyMedium)
-                                Text(
-                                    txn.dateTime.format(DateTimeFormatter.ofPattern("d MMM")),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                                ) {
+                                    Text(
+                                        txn.dateTime.format(DateTimeFormatter.ofPattern("d MMM")),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (txn.loanId != null) {
+                                        Text(
+                                            "Linked — moves here",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.tertiary
+                                        )
+                                    }
+                                }
                             }
                             Text(
                                 CurrencyFormatter.formatCurrency(txn.amount, txn.currency),

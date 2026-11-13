@@ -93,6 +93,8 @@ class AccountDetailViewModel @Inject constructor(
                 var totalExpenses = BigDecimal.ZERO
 
                 filteredTransactions.forEach { transaction ->
+                    // Loan-linked rows (lent money / repayments) are not real income or expense
+                    if (transaction.loanId != null) return@forEach
                     val convertedAmount = if (transaction.currency != targetCurrency) {
                         currencyConversionService.convertAmount(
                             amount = transaction.amount,

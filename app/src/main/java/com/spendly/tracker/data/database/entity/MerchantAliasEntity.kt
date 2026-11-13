@@ -18,5 +18,8 @@ data class MerchantAliasEntity(
     val createdAt: LocalDateTime = LocalDateTime.now(),
 
     @ColumnInfo(name = "updated_at")
-    val updatedAt: LocalDateTime = LocalDateTime.now()
+    val updatedAt: LocalDateTime = LocalDateTime.now(),
+
+    @ColumnInfo(name = "last_used_at")
+    val lastUsedAt: LocalDateTime? = null
 )

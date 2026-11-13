@@ -39,9 +39,20 @@
     <string name="pay_period_sheet_title">This month\'s salary date</string>
     <string name="pay_period_sheet_description">Pick the day your salary landed this month. Spending, budgets, and reports will use this as the start of your pay period.</string>
     <string name="pay_period_suggestion_title">Salary detected on %1$s</string>
-    <string name="pay_period_suggestion_message">We found a credit that looks like your salary. Use this as the start of this month\'s pay period?</string>
-    <string name="pay_period_suggestion_use">Use this date</string>
-    <string name="pay_period_suggestion_dismiss">Dismiss</string>
+    <string name="pay_period_suggestion_message">A credit that looks like your salary arrived on %1$s. Your pay period would become %2$s instead of %3$s.</string>
+    <string name="pay_period_suggestion_use">Use %1$s</string>
+    <string name="pay_period_suggestion_dismiss">Keep current setup</string>
+    <string name="pay_period_update_snackbar">Pay period updated to %1$s</string>
+    <string name="pay_period_weekend_adjustment_title">Weekend payday</string>
+    <string name="pay_period_weekend_adjustment_subtitle">When salary day falls on a weekend</string>
+    <string name="pay_period_weekend_adjustment_exact">Keep exact date</string>
+    <string name="pay_period_weekend_adjustment_preceding">Prepone to nearest weekday</string>
+    <string name="pay_period_weekend_adjustment_following">Postpone to next weekday</string>
+    <string name="pay_period_weekend_example_exact">Payday stays on %1$s (this happens in %2$s)</string>
+    <string name="pay_period_weekend_example_preceding">Salary arrives earlier — on %1$s, like in %2$s</string>
+    <string name="pay_period_weekend_example_following">Salary arrives later — on %1$s, like in %2$s</string>
+    <string name="pay_period_expected_payday">This month\u2019s payday: %1$s</string>
+    <string name="pay_period_custom_window">Custom pay window</string>
     <string name="pay_period_change_usual_day">Change usual salary day</string>
     <string name="pay_period_save">Save</string>
     <string name="pay_period_cancel">Cancel</string>
@@ -450,6 +461,293 @@
     <string name="merchant_rename_undo_message">Renamed %1$d transaction(s). Undo to revert.</string>
     <string name="merchant_rename_undo_action">Undo</string>
     <string name="merchant_rename_undo_done">Merchant rename reverted</string>
+
+    <!-- Savings page: planner, forecast, what-if and history -->
+    <string name="savings_title">Savings</string>
+    <string name="savings_goal_section">Savings goal</string>
+    <string name="savings_goal_planner_title">Save %1$d%% of income</string>
+    <string name="savings_goal_planner_deadline">by %1$s</string>
+    <string name="savings_goal_preset_this_year">This year</string>
+    <string name="savings_goal_preset_next_year">Next year</string>
+    <string name="savings_goal_preset_custom">Custom</string>
+    <string name="savings_goal_zero_percent">0%</string>
+    <string name="savings_goal_full_percent">100%</string>
+    <string name="savings_goal_target_label">%1$d%% target</string>
+    <string name="savings_goal_no_income_period">No income recorded yet in this period</string>
+    <string name="savings_goal_overspent_so_far">%1$d%% overspent so far</string>
+    <string name="savings_goal_saved_so_far">%1$d%% saved so far</string>
+    <string name="savings_goal_savings_rate">Savings rate %1$d%%</string>
+    <string name="savings_goal_progress_of_target">%1$d%% of %2$s target</string>
+    <string name="savings_goal_remaining_to_save">%1$s left to save</string>
+    <string name="savings_goal_progress_cd">Savings goal progress: %1$d%% of the target amount</string>
+    <string name="savings_goal_target_short">Target %1$d%%</string>
+    <string name="savings_goal_deadline_passed">Deadline passed</string>
+    <string name="savings_goal_save_per_month_label">SAVE / MONTH</string>
+    <string name="savings_goal_spend_per_month_label">SPENDABLE / MONTH</string>
+    <string name="savings_goal_status_no_income">Add income transactions to see how much you can spend each month.</string>
+    <string name="savings_goal_status_passed">The goal date has passed. Pick a new deadline to keep planning.</string>
+    <string name="savings_goal_status_shortfall">Income alone can\'t cover this. Save %1$s/month or lower the target.</string>
+    <string name="savings_goal_status_shortfall_split">Goals need %1$s/month — %2$s here and %3$s for other goals. Lower a target or extend a deadline.</string>
+    <string name="savings_goal_status_cut">Spend %1$s less per month to stay on track.</string>
+    <string name="savings_goal_status_on_track">You\'re on track. Keep saving %1$s/month.</string>
+    <string name="savings_goal_plan_next_year">Plan next year</string>
+    <string name="savings_goal_how_calculated">How is this calculated?</string>
+    <string name="savings_goal_planning_period">Planning %1$s – %2$s</string>
+    <string name="savings_goal_income_basis_salary">Based on your average salary of %1$s/month</string>
+    <string name="savings_goal_income_basis_average">Based on average income of %1$s/month since %2$s</string>
+    <string name="savings_goal_income_basis_projection">Based on projected income of %1$s/month</string>
+    <string name="savings_goal_income_basis_none">No income recorded</string>
+    <string name="savings_goal_picker_title">Goal deadline</string>
+
+    <string name="savings_forecast_title">Forecast</string>
+    <string name="savings_forecast_subtitle">How your savings rate tracks toward %1$d%% by %2$s</string>
+    <string name="savings_forecast_subtitle_fixed">How your savings track toward %1$s by %2$s</string>
+    <string name="savings_forecast_empty">Add income transactions to see a forecast for this goal.</string>
+    <string name="savings_forecast_milestones_label">Milestones</string>
+    <string name="savings_forecast_milestones_target">Target %1$s</string>
+    <string name="savings_forecast_milestones_no_target">Add income to set a target amount</string>
+    <string name="savings_forecast_selected_cumulative">Cumulative</string>
+    <string name="savings_forecast_tap_hint">Tap or drag the chart to inspect a month</string>
+    <string name="savings_forecast_not_reached">Not reached</string>
+    <string name="savings_forecast_legend_actual">Actual</string>
+    <string name="savings_forecast_legend_projected">Projected</string>
+    <string name="savings_forecast_legend_target">Target %1$d%%</string>
+    <string name="savings_forecast_cd">Savings goal forecast</string>
+    <string name="savings_forecast_cd_range">Savings rate forecast from %1$s to %2$s.</string>
+    <string name="savings_forecast_cd_actual">Actual rate %1$d%%.</string>
+    <string name="savings_forecast_cd_projected">Projected rate %1$d%% by the deadline.</string>
+    <string name="savings_forecast_cd_target">Target %1$d%%.</string>
+
+    <string name="savings_what_if_title">What if you saved more?</string>
+    <string name="savings_what_if_subtitle">Add a little each month and see when you reach the goal.</string>
+    <string name="savings_what_if_extra">+ %1$s/month</string>
+    <string name="savings_what_if_cd">Extra monthly savings: %1$s</string>
+    <string name="savings_what_if_already_done">You\'ve already saved enough for this goal.</string>
+    <string name="savings_what_if_unreachable">Income alone can\'t reach this goal. Lower the target or extend the deadline.</string>
+    <string name="savings_what_if_complete">Goal complete by %1$s</string>
+    <string name="savings_what_if_total">Total %1$s/month</string>
+    <string name="savings_what_if_total_rate"> · ≈ %1$d%% of income saved by the deadline</string>
+
+    <string name="savings_history_title">Monthly history</string>
+    <string name="savings_history_subtitle">Saved each month toward your %1$d%% goal.</string>
+    <string name="savings_history_empty">Your monthly snapshots will appear here after your first month of income.</string>
+    <string name="savings_history_rate">%1$d%% saved</string>
+    <string name="savings_history_overspent">%1$d%% overspent</string>
+    <string name="savings_history_no_income">No income</string>
+
+    <string name="savings_reminder_card_title">Reminder</string>
+    <string name="savings_reminder_card_subtitle">Get a nudge on %1$s at %2$s with your goal progress.</string>
+    <string name="savings_reminder_card_subtitle_off">Get a nudge on your chosen days with your goal progress.</string>
+    <string name="savings_reminder_day_label">Days</string>
+    <string name="savings_reminder_time_label">Time</string>
+
+    <string name="savings_details_title">How this is calculated</string>
+    <string name="savings_details_body">Your goal is a share of income for the planning period. Actual income and spending come from the savings-rate window above; future months use your salary or average income and recent spending.</string>
+    <string name="savings_details_target">Target</string>
+    <string name="savings_details_target_value">%1$d%% of income</string>
+    <string name="savings_details_period">Period</string>
+    <string name="savings_details_period_value">%1$s – %2$s</string>
+    <string name="savings_details_income_basis">Income basis</string>
+    <string name="savings_details_income_so_far">Income so far</string>
+    <string name="savings_details_spent_so_far">Spent so far</string>
+    <string name="savings_details_saved_so_far">Saved so far</string>
+    <string name="savings_details_projected_income">Projected income</string>
+    <string name="savings_details_required_savings">Required savings</string>
+    <string name="savings_details_still_to_save">Still to save</string>
+    <string name="savings_details_save_per_month">Save per month</string>
+    <string name="savings_details_spend_per_month">Spend per month</string>
+    <string name="savings_details_projected_rate">Projected rate</string>
+    <string name="savings_details_projected_rate_value">≈ %1$d%% by %2$s</string>
+    <string name="savings_details_deadline">Deadline</string>
+    <string name="savings_details_deadline_passed">Passed</string>
+    <string name="savings_details_footnote">The forecast moves as new transactions arrive, so the projected rate is an estimate rather than a guarantee.</string>
+
+    <string name="savings_preview_overall">OVERALL</string>
+    <string name="savings_preview_no_income">No income yet</string>
+    <string name="savings_preview_add_income">Add income to see how much you keep each month.</string>
+    <string name="savings_preview_last_months">Last %1$d months</string>
+    <string name="savings_preview_projected">PROJECTED</string>
+    <string name="savings_preview_next_months">next %1$d months</string>
+    <string name="savings_preview_overspent">≈ %1$d%% overspent</string>
+    <string name="savings_preview_saved">≈ %1$d%% saved</string>
+
+    <!-- Savings rate card (Savings page window + projection controls) -->
+    <string name="savings_rate_custom">Custom</string>
+    <string name="savings_rate_custom_with_range">Custom · %1$s</string>
+    <string name="savings_rate_from">From · %1$s</string>
+    <string name="savings_rate_to">To · %1$s</string>
+    <string name="savings_rate_pick_date">Pick date</string>
+    <string name="savings_rate_now">Now</string>
+    <string name="savings_rate_empty">Add income transactions to see how much of your income you save each month.</string>
+    <string name="savings_rate_overall">Overall</string>
+    <string name="savings_rate_tap_bar">· tap a bar for details</string>
+    <string name="savings_rate_tap_bar_current">· * in progress · tap a bar for details</string>
+    <string name="savings_rate_projected">PROJECTED</string>
+    <string name="savings_rate_projected_range">PROJECTED · %1$s</string>
+    <string name="savings_rate_projection_empty">Add a few days of spending to see a projection.</string>
+    <string name="savings_rate_no_estimate">No estimate yet</string>
+    <string name="savings_rate_projection_months">≈ %1$s saved · based on last %2$d months</string>
+    <string name="savings_rate_projection_current">≈ %1$s saved · based on this month so far</string>
+    <string name="savings_rate_projection_overspent_months">≈ %1$s overspent · based on last %2$d months</string>
+    <string name="savings_rate_projection_overspent_current">≈ %1$s overspent · based on this month so far</string>
+    <string name="savings_rate_start_date">Start date</string>
+    <string name="savings_rate_end_date">End date</string>
+    <string name="savings_rate_headline_overall">OVERALL · LAST %1$d MONTHS</string>
+    <string name="savings_rate_headline_custom">CUSTOM · %1$s</string>
+    <string name="savings_rate_stat_income">Income</string>
+    <string name="savings_rate_stat_spent">Spent</string>
+    <string name="savings_rate_stat_saved">Saved</string>
+    <string name="savings_rate_stat_overspent">Overspent</string>
+
+    <string name="savings_reminder_channel_name">Savings goal reminders</string>
+    <string name="savings_reminder_channel_description">Progress update for your savings goal</string>
+    <string name="savings_reminder_notification_title">Savings goal check-in</string>
+    <string name="savings_reminder_no_income">Add income to track your %1$d%% goal. Tap to set your target.</string>
+    <string name="savings_reminder_no_rate">Tap to review your %1$d%% savings goal.</string>
+    <string name="savings_reminder_ahead">You\'re at %1$d%%, ahead of your %2$d%% goal. Keep it up!</string>
+    <string name="savings_reminder_behind">You\'re at %1$d%%. Save %2$s/month to reach %3$d%% by %4$s.</string>
+    <string name="savings_reminder_fixed_complete">You\'ve saved %1$s and reached your goal. Well done!</string>
+    <string name="savings_reminder_fixed_progress">You\'ve saved %1$s of your %2$s goal. Keep it up!</string>
+    <string name="savings_reminder_fixed_behind">You\'ve saved %1$s of %2$s. Save %3$s/month to reach your goal by %4$s.</string>
+
+    <string name="savings_pace_channel_name">Savings goal alerts</string>
+    <string name="savings_pace_channel_description">Pace, milestone and deadline alerts for your savings goal</string>
+    <string name="savings_pace_milestone_title">Savings milestone reached</string>
+    <string name="savings_pace_milestone_complete">You\'ve saved %1$s and completed your %2$d%% goal. Well done!</string>
+    <string name="savings_pace_milestone_progress">You\'ve saved %1$s so far, %2$d%% of the way to your %3$d%% goal.</string>
+    <string name="savings_pace_milestone_complete_fixed">You\'ve saved %1$s and reached your %2$s goal. Well done!</string>
+    <string name="savings_pace_milestone_progress_fixed">You\'ve saved %1$s so far, %2$d%% of the way to your %3$s goal.</string>
+    <string name="savings_pace_deadline_title">Savings goal deadline approaching</string>
+    <string name="savings_pace_deadline_text">You have %1$s left to reach your %2$d%% goal by %3$s. Keep saving %4$s/month to finish on time.</string>
+    <string name="savings_pace_deadline_text_fixed">You have %1$s left to reach your %2$s goal by %3$s. Keep saving %4$s/month to finish on time.</string>
+    <string name="savings_pace_behind_title">Savings goal needs attention</string>
+    <string name="savings_pace_behind_critical">You\'re well behind pace</string>
+    <string name="savings_pace_behind">You\'re behind pace</string>
+    <string name="savings_pace_behind_text">%1$s on your %2$d%% goal by %3$s. Open your plan to see how much to save each month.</string>
+    <string name="savings_pace_behind_text_fixed">%1$s on your %2$s goal — %3$s short. Open your plan to see how much to save each month.</string>
+    <string name="savings_pace_view_plan">View plan</string>
+
+    <string name="widget_name_savings">Savings Goal</string>
+    <string name="widget_description_savings">Track progress toward your savings goal and see how much to save each month.</string>
+    <string name="savings_widget_title">Savings Goal</string>
+    <string name="savings_widget_target">%1$d%% target</string>
+    <string name="savings_widget_setup">Tap to set up</string>
+    <string name="savings_widget_per_month">%1$s/mo needed</string>
+    <string name="savings_widget_remaining">%1$s left to save</string>
+    <string name="savings_widget_deadline">by %1$s</string>
+    <string name="savings_widget_deadline_target">by %1$s · %2$s goal</string>
+    <string name="savings_widget_config_title">Choose a goal</string>
+    <string name="savings_widget_config_subtitle">This widget will always show the goal you pick.</string>
+    <string name="savings_widget_config_percent_detail">%1$d%% of income · by %2$s</string>
+    <string name="savings_widget_config_fixed_detail">%1$s goal · by %2$s</string>
+    <string name="savings_widget_config_save">Save widget</string>
+    <string name="savings_widget_no_income">Add income to start tracking</string>
+    <string name="savings_widget_preview_target">70% target</string>
+    <string name="savings_reminder_time_cd">Reminder time: %1$s</string>
+
+    <!-- Multiple goals and fixed-amount targets -->
+    <string name="savings_goal_default_name">Main goal</string>
+    <string name="savings_goal_selector_add">+ New goal</string>
+    <string name="savings_goal_selector_cd">Choose which savings goal to track</string>
+    <string name="savings_goal_planner_title_fixed">Save %1$s</string>
+    <string name="savings_goal_target_amount_short">Target %1$s</string>
+    <string name="savings_goal_saved_amount_so_far">%1$s of %2$s saved</string>
+    <string name="savings_goal_progress_cd_fixed">Savings goal progress: %1$d%% of %2$s</string>
+    <string name="savings_goal_edit_action">Edit goal</string>
+    <string name="savings_goal_edit_title">Edit goal</string>
+    <string name="savings_goal_new_title">New goal</string>
+    <string name="savings_goal_name_label">Goal name</string>
+    <string name="savings_goal_name_placeholder">Emergency fund</string>
+    <string name="savings_goal_kind_percent">Percent of income</string>
+    <string name="savings_goal_kind_fixed">Fixed amount</string>
+    <string name="savings_goal_amount_label">Target amount</string>
+    <string name="savings_goal_amount_placeholder">50000</string>
+    <string name="savings_goal_amount_invalid">Enter an amount greater than zero</string>
+    <string name="savings_goal_save">Save goal</string>
+    <string name="savings_goal_add_contribution">Add money</string>
+    <string name="savings_goal_add_contribution_cd">Add money set aside for this goal</string>
+    <string name="savings_goal_contribution_title">Add to goal</string>
+    <string name="savings_goal_contribution_text">Money you set aside for this goal. It reduces your spendable amount and doesn\'t change your main goal.</string>
+    <string name="savings_goal_contribution_amount_label">Amount</string>
+    <string name="savings_goal_contribution_invalid">Enter an amount greater than zero</string>
+    <string name="savings_goal_contribution_add">Add</string>
+    <string name="savings_goal_contribution_added">%1$s added to this goal</string>
+    <string name="savings_goal_contribution_undo">Undo</string>
+    <string name="savings_goal_contribution_basis">Based on %1$s set aside and %2$s/month planned</string>
+    <string name="savings_goal_contribution_history">Recent contributions</string>
+    <string name="savings_goal_contribution_remove">Remove</string>
+    <string name="savings_goal_tab_plan">Plan</string>
+    <string name="savings_goal_tab_forecast">Forecast</string>
+    <string name="savings_goal_tab_what_if">What if</string>
+    <string name="savings_goal_tab_history">History</string>
+    <string name="savings_goal_delete">Delete goal</string>
+    <string name="savings_goal_delete_title">Delete this goal?</string>
+    <string name="savings_goal_delete_text">Its settings will be removed. Monthly history is kept.</string>
+
+    <!-- Time to goal and safe-to-spend -->
+    <string name="savings_time_to_goal">At your current pace, you\'ll reach this goal around %1$s.</string>
+    <string name="savings_time_to_goal_ahead">At your current pace, you\'ll finish around %1$s — ahead of your deadline.</string>
+    <string name="savings_time_to_goal_on_schedule">On pace to finish by %1$s.</string>
+    <string name="savings_time_to_goal_fixed">At %2$s/month, you\'ll reach this goal around %1$s.</string>
+    <string name="savings_time_to_goal_fixed_ahead">At %2$s/month, you\'ll finish around %1$s — ahead of your deadline.</string>
+    <string name="savings_time_to_goal_complete">You\'ve reached this goal.</string>
+    <string name="savings_time_to_goal_unreachable">At the current pace this goal won\'t be reached. Increase monthly savings or extend the deadline.</string>
+    <string name="savings_safe_to_spend">Safe to spend %1$s/day · %2$d days left this month</string>
+
+    <!-- Rate attribution, streaks and history integrity -->
+    <string name="savings_attribution_up">Up %1$d pts vs %2$s — %3$s</string>
+    <string name="savings_attribution_down">Down %1$d pts vs %2$s — %3$s</string>
+    <string name="savings_attribution_flat">About the same as %1$s</string>
+    <string name="savings_attribution_driver_spending">mostly spending changes</string>
+    <string name="savings_attribution_driver_income">mostly income changes</string>
+    <string name="savings_attribution_driver_both">income and spending both moved</string>
+    <string name="savings_attribution_driver_none">no single driver</string>
+    <string name="savings_streak_line">Current streak: %1$s · Best: %2$s</string>
+    <string name="savings_history_tracking_since">Tracking since %1$s</string>
+    <string name="savings_history_clear">Clear history</string>
+    <string name="savings_history_clear_title">Clear monthly history?</string>
+    <string name="savings_history_clear_text">This removes the saved monthly snapshots. Months still in the current window will be captured again.</string>
+    <string name="savings_history_target_note">Goal was %1$d%% that month</string>
+
+    <!-- Milestone celebration -->
+    <string name="savings_celebration_title">Milestone reached</string>
+    <string name="savings_celebration_text">You\'re %1$d%% of the way to this goal.</string>
+    <string name="savings_celebration_complete">Goal complete! You saved %1$s.</string>
+    <string name="savings_celebration_continue">Keep going</string>
+
+    <!-- Notification quick actions -->
+    <string name="savings_notification_action_log">Log savings</string>
+    <string name="savings_notification_action_adjust">Adjust goal</string>
+    <string name="savings_notification_action_snooze">Snooze 1 week</string>
+
+    <!-- Widget family -->
+    <string name="savings_widget_amount_target">%1$s goal</string>
+    <string name="savings_widget_complete">Goal reached</string>
+    <string name="savings_widget_safe_to_spend">Safe to spend %1$s/day</string>
+
+    <string name="common_ok">OK</string>
+    <string name="common_cancel">Cancel</string>
+
+    <plurals name="savings_months_left">
+        <item quantity="one">%d month left</item>
+        <item quantity="other">%d months left</item>
+    </plurals>
+    <plurals name="savings_month_count">
+        <item quantity="one">%d month</item>
+        <item quantity="other">%d months</item>
+    </plurals>
+    <plurals name="savings_pace_days_left">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
+    <plurals name="savings_streak_months">
+        <item quantity="one">%d month</item>
+        <item quantity="other">%d months</item>
+    </plurals>
+    <plurals name="savings_widget_days_left">
+        <item quantity="one">%d day left</item>
+        <item quantity="other">%d days left</item>
+    </plurals>
 
     <plurals name="subs_active_subscription_count">
         <item quantity="one">%d active subscription</item>

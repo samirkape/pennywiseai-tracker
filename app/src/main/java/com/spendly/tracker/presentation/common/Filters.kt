@@ -28,6 +28,7 @@ fun getDateRangeForYearMonthNavigation(
     monthStartOverrides: Map<String, Int> = emptyMap(),
     useFixedBudgetPeriodEnd: Boolean = false,
     budgetPeriodEndDay: Int = 31,
+    salaryDayAdjustment: DateRangeUtils.SalaryDayAdjustment = DateRangeUtils.SalaryDayAdjustment.EXACT,
 ): Pair<LocalDate, LocalDate> {
     if (useCalendarMonth) {
         val start = yearMonth.atDay(1)
@@ -45,6 +46,7 @@ fun getDateRangeForYearMonthNavigation(
         monthStartOverrides,
         useFixedBudgetPeriodEnd,
         budgetPeriodEndDay,
+        salaryDayAdjustment,
     )
 }
 
@@ -55,6 +57,7 @@ fun getDateRangeForYearMonth(
     monthStartOverrides: Map<String, Int> = emptyMap(),
     useFixedBudgetPeriodEnd: Boolean = false,
     budgetPeriodEndDay: Int = 31,
+    salaryDayAdjustment: DateRangeUtils.SalaryDayAdjustment = DateRangeUtils.SalaryDayAdjustment.EXACT,
 ): Pair<LocalDate, LocalDate> {
     if (!useFinancialMonth) {
         return yearMonth.atDay(1) to yearMonth.atEndOfMonth()
@@ -70,6 +73,7 @@ fun getDateRangeForYearMonth(
         yearMonth,
         monthStartDay,
         monthStartOverrides,
+        salaryDayAdjustment,
     )
 }
 
@@ -97,6 +101,15 @@ const val MANUAL_ENTRY_BANK_NAME = "Manual Entry"
 fun TransactionEntity.matchesAnalyticsSpendingFilter(): Boolean =
     (transactionType == TransactionType.EXPENSE || transactionType == TransactionType.CREDIT) &&
         loanId == null
+
+/**
+ * Matches the "real income" filter: income rows that are not linked to a loan.
+ * Loan-linked rows (money lent out, or its repayment coming back) move money between
+ * parties but do not create real income, so they must be excluded from income totals,
+ * savings calculations, and income-driven actions.
+ */
+fun TransactionEntity.matchesAnalyticsIncomeFilter(): Boolean =
+    transactionType == TransactionType.INCOME && loanId == null
 
 enum class PaymentMode(val label: String) {
     CREDIT_CARD("Credit Card"),
@@ -159,6 +172,7 @@ fun resolveDateRangeForSelection(
     monthStartOverrides: Map<String, Int> = emptyMap(),
     useFixedBudgetPeriodEnd: Boolean = false,
     budgetPeriodEndDay: Int = 31,
+    salaryDayAdjustment: DateRangeUtils.SalaryDayAdjustment = DateRangeUtils.SalaryDayAdjustment.EXACT,
 ): Pair<LocalDate, LocalDate>? {
     if (period == TimePeriod.CUSTOM) {
         return customRange
@@ -170,6 +184,7 @@ fun resolveDateRangeForSelection(
         monthStartOverrides,
         useFixedBudgetPeriodEnd,
         budgetPeriodEndDay,
+        salaryDayAdjustment,
     )
 }
 
@@ -179,7 +194,8 @@ fun getDateRangeForPeriod(
     useFinancialMonth: Boolean = true,
     monthStartOverrides: Map<String, Int> = emptyMap(),
     useFixedBudgetPeriodEnd: Boolean = false,
-    budgetPeriodEndDay: Int = 31
+    budgetPeriodEndDay: Int = 31,
+    salaryDayAdjustment: DateRangeUtils.SalaryDayAdjustment = DateRangeUtils.SalaryDayAdjustment.EXACT,
 ): Pair<LocalDate, LocalDate>? {
     val today = LocalDate.now()
     return when (period) {
@@ -190,7 +206,8 @@ fun getDateRangeForPeriod(
                     monthStartDay,
                     useFixedBudgetPeriodEnd,
                     budgetPeriodEndDay,
-                    monthStartOverrides
+                    monthStartOverrides,
+                    salaryDayAdjustment
                 )
                 start to end
             } else {
@@ -210,7 +227,8 @@ fun getDateRangeForPeriod(
                     monthStartDay,
                     useFixedBudgetPeriodEnd,
                     budgetPeriodEndDay,
-                    monthStartOverrides
+                    monthStartOverrides,
+                    salaryDayAdjustment
                 ).first
                 val prevPeriodEnd = currentPeriodStart.minusDays(1)
                 DateRangeUtils.calculateBudgetPeriodRange(
@@ -218,7 +236,8 @@ fun getDateRangeForPeriod(
                     monthStartDay,
                     useFixedBudgetPeriodEnd,
                     budgetPeriodEndDay,
-                    monthStartOverrides
+                    monthStartOverrides,
+                    salaryDayAdjustment
                 )
             } else {
                 val lastMonth = YearMonth.now().minusMonths(1)
@@ -233,6 +252,7 @@ fun getDateRangeForPeriod(
                     useFixedBudgetPeriodEnd = useFixedBudgetPeriodEnd,
                     budgetPeriodEndDay = budgetPeriodEndDay,
                     monthStartOverrides = monthStartOverrides,
+                    salaryDayAdjustment = salaryDayAdjustment,
                 )
             } else {
                 rollingCalendarRangeForLastMonths(3)
@@ -246,6 +266,7 @@ fun getDateRangeForPeriod(
                     useFixedBudgetPeriodEnd = useFixedBudgetPeriodEnd,
                     budgetPeriodEndDay = budgetPeriodEndDay,
                     monthStartOverrides = monthStartOverrides,
+                    salaryDayAdjustment = salaryDayAdjustment,
                 )
             } else {
                 rollingCalendarRangeForLastMonths(6)
@@ -330,6 +351,7 @@ private fun rollingPayPeriodRangeForLastPeriods(
     useFixedBudgetPeriodEnd: Boolean,
     budgetPeriodEndDay: Int,
     monthStartOverrides: Map<String, Int>,
+    salaryDayAdjustment: DateRangeUtils.SalaryDayAdjustment = DateRangeUtils.SalaryDayAdjustment.EXACT,
 ): Pair<LocalDate, LocalDate> {
     val today = LocalDate.now()
     var start = DateRangeUtils.calculateBudgetPeriodRange(
@@ -338,6 +360,7 @@ private fun rollingPayPeriodRangeForLastPeriods(
         useFixedBudgetPeriodEnd,
         budgetPeriodEndDay,
         monthStartOverrides,
+        salaryDayAdjustment,
     ).first
     repeat(periods - 1) {
         val previousPeriodEnd = start.minusDays(1)
@@ -347,6 +370,7 @@ private fun rollingPayPeriodRangeForLastPeriods(
             useFixedBudgetPeriodEnd,
             budgetPeriodEndDay,
             monthStartOverrides,
+            salaryDayAdjustment,
         ).first
     }
     return start to today

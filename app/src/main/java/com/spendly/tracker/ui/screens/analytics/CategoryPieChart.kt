@@ -1,7 +1,12 @@
 package com.spendly.tracker.ui.screens.analytics
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -83,37 +88,44 @@ fun CategoryPieChart(
                 modifier = Modifier.size(168.dp),
                 data = chartData,
                 onPieClick = { clickedPie -> select(clickedPie) },
-                selectedScale = 1.08f,
-                scaleAnimEnterSpec = tween(400),
+                selectedScale = 1.14f,
+                scaleAnimEnterSpec = tween(350, easing = FastOutSlowInEasing),
                 colorAnimEnterSpec = tween(500),
                 style = Pie.Style.Stroke(width = 22.dp)
             )
 
             // Center: selected category details, or the overall total when nothing is selected.
-            Column(
-                modifier = Modifier.widthIn(max = 88.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text = selectedPie?.label ?: "Total",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = CurrencyFormatter.formatAbbreviated(selectedPie?.data ?: total, currency),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                )
-                if (selectedPie != null) {
+            Crossfade(
+                targetState = selectedPie?.label,
+                animationSpec = tween(250),
+                label = "pie_center_details",
+            ) { selectedLabel ->
+                val selected = selectedLabel?.let { name -> chartData.find { it.label == name } }
+                Column(
+                    modifier = Modifier.widthIn(max = 88.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
                     Text(
-                        text = "${(selectedPie.data / total * 100).toInt()}%",
+                        text = selectedLabel ?: "Total",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
+                    Text(
+                        text = CurrencyFormatter.formatAbbreviated(selected?.data ?: total, currency),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                    )
+                    if (selected != null) {
+                        Text(
+                            text = "${(selected.data / total * 100).toInt()}%",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
@@ -151,31 +163,47 @@ private fun PieLegendItem(
 ) {
     val percentage = (value / totalAmount * 100).toInt()
 
+    // Animated selection feedback so taps feel responsive.
+    val containerColor by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        else Color.Transparent,
+        animationSpec = tween(200),
+        label = "legend_container",
+    )
+    val dotSize by animateDpAsState(
+        targetValue = if (isSelected) 12.dp else 10.dp,
+        animationSpec = tween(200),
+        label = "legend_dot",
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .sizeIn(minHeight = 48.dp)
             .padding(vertical = 4.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (isSelected) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                else Color.Transparent
-            )
+            .background(containerColor)
             .padding(6.dp)
             .clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(10.dp)
+                .size(dotSize)
                 .clip(CircleShape)
                 .background(color)
+                .border(
+                    width = if (isSelected) 2.dp else 0.dp,
+                    color = color.copy(alpha = 0.3f),
+                    shape = CircleShape
+                )
         )
         Spacer(modifier = Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -184,12 +212,14 @@ private fun PieLegendItem(
                 Text(
                     text = CurrencyFormatter.formatAbbreviated(value, currency),
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (isSelected) MaterialTheme.colorScheme.onSurface
+                    else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     text = "($percentage%)",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (isSelected) MaterialTheme.colorScheme.onSurface
+                    else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

@@ -40,8 +40,11 @@ interface LoanDao {
     @Query("SELECT DISTINCT person_name FROM loans ORDER BY updated_at DESC")
     fun getRecentPersonNames(): Flow<List<String>>
 
-    @Query("SELECT * FROM loans WHERE person_name = :personName AND direction = :direction AND status = 'ACTIVE' LIMIT 1")
+    @Query("SELECT * FROM loans WHERE person_name = :personName COLLATE NOCASE AND direction = :direction AND status = 'ACTIVE' ORDER BY created_at DESC LIMIT 1")
     suspend fun getActiveLoanByPersonAndDirection(personName: String, direction: String): LoanEntity?
+
+    @Query("SELECT * FROM loans WHERE person_name = :personName COLLATE NOCASE AND direction = :direction ORDER BY created_at DESC LIMIT 1")
+    suspend fun getMostRecentLoanByPersonAndDirection(personName: String, direction: String): LoanEntity?
 
     @Query("SELECT * FROM transactions WHERE loan_id IS NOT NULL AND is_deleted = 0")
     fun getAllLoanTransactions(): Flow<List<TransactionEntity>>
@@ -77,14 +80,15 @@ interface LoanDao {
     @Query("DELETE FROM loans")
     suspend fun deleteAllLoans()
 
+    /** Recent transactions of a type regardless of loan linkage — used for the "Link existing" picker. */
     @Query("""
         SELECT * FROM transactions
-        WHERE loan_id IS NULL AND is_deleted = 0
+        WHERE is_deleted = 0
         AND transaction_type = :type
         ORDER BY date_time DESC
         LIMIT :limit
     """)
-    fun getRecentUnlinkedTransactionsByType(type: String, limit: Int = 20): Flow<List<TransactionEntity>>
+    fun getRecentTransactionsByType(type: String, limit: Int = 20): Flow<List<TransactionEntity>>
 
     @Query("""
         SELECT * FROM transactions

@@ -1,5 +1,6 @@
 package com.spendly.tracker.presentation.goals
 
+import com.spendly.tracker.ui.theme.Dimensions
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -35,6 +36,7 @@ import com.spendly.tracker.data.database.entity.GoalType
 import com.spendly.tracker.domain.model.GoalProgress
 import com.spendly.tracker.ui.components.SpendlyEmptyState
 import com.spendly.tracker.ui.components.cards.SpendlyCardV2
+import com.spendly.tracker.ui.sharedElementIfAvailable
 import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.components.cards.SummaryCardV2
 import com.spendly.tracker.ui.components.shimmer
@@ -141,9 +143,9 @@ fun GoalsScreen(
                     }
                     AnimatedVisibility(
                         visible = visible.value,
-                        enter = fadeIn(tween(300)) + slideInVertically(
+                        enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                             initialOffsetY = { slideOffsetPx },
-                            animationSpec = tween(300)
+                            animationSpec = tween(Dimensions.Animation.standard)
                         )
                     ) {
                         GoalsSummaryCard(
@@ -168,9 +170,9 @@ fun GoalsScreen(
                     }
                     AnimatedVisibility(
                         visible = visible.value,
-                        enter = fadeIn(tween(300)) + slideInVertically(
+                        enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                             initialOffsetY = { slideOffsetPx },
-                            animationSpec = tween(300)
+                            animationSpec = tween(Dimensions.Animation.standard)
                         )
                     ) {
                         GoalCard(
@@ -274,6 +276,7 @@ fun GoalCard(
             ) {
                 Box(
                     modifier = Modifier
+                        .sharedElementIfAvailable(key = "goal_icon_${goal.id}")
                         .size(48.dp)
                         .clip(CircleShape)
                         .background(goalColor.copy(alpha = if (dimmed) 0.08f else 0.15f)),
@@ -430,7 +433,7 @@ private fun GoalType.displayName(customTypeName: String? = null): String = when 
     GoalType.CUSTOM -> customTypeName?.takeIf { it.isNotBlank() } ?: "Custom"
 }
 
-private fun GoalType.icon(): ImageVector = when (this) {
+internal fun GoalType.icon(): ImageVector = when (this) {
     GoalType.SAVINGS -> Icons.Default.Savings
     GoalType.EMERGENCY_FUND -> Icons.Default.HealthAndSafety
     GoalType.PURCHASE -> Icons.Default.ShoppingBag

@@ -137,7 +137,8 @@ class InsightDetailViewModel @Inject constructor(
             category != null -> periodTransactions.filter { it.category == category }
             merchant != null -> periodTransactions.filter { it.merchantName == merchant }
             insight.type in AGGREGATE_TYPES -> periodTransactions.filter {
-                it.transactionType in transactionTypesFor(insight.type)
+                it.transactionType in transactionTypesFor(insight.type) &&
+                    it.loanId == null // Loan rows are not part of real income/spend insights
             }
             else -> emptyList()
         }

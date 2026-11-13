@@ -1,9 +1,13 @@
 package com.spendly.tracker.ui.screens.analytics
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.spendly.tracker.ui.components.BrandIcon
 import com.spendly.tracker.ui.components.cards.ListItemCardV2
+import com.spendly.tracker.ui.sharedElementIfAvailable
+import com.spendly.tracker.ui.LocalNavAnimatedVisibilityScope
+import com.spendly.tracker.ui.LocalSharedTransitionScope
 
 @Composable
 fun AnalyticsMerchantListItem(
@@ -21,10 +25,14 @@ fun AnalyticsMerchantListItem(
 
     ListItemCardV2(
         leadingContent = {
+            // Source anchor: brand icon morphs into the merchant detail header.
             BrandIcon(
                 merchantName = merchant.name,
                 size = 48.dp,
                 showBackground = true,
+                modifier = Modifier.sharedElementIfAvailable(
+                    key = "merchant_icon_${merchant.name}"
+                ),
             )
         },
         title = merchant.name,

@@ -21,6 +21,7 @@ import com.spendly.tracker.data.preferences.UserPreferencesRepository
 import com.spendly.tracker.presentation.common.buildProfileAccountKeys
 import com.spendly.tracker.presentation.common.filterAccountsByProfile
 import com.spendly.tracker.presentation.common.filterTransactionsByProfile
+import com.spendly.tracker.presentation.common.matchesAnalyticsIncomeFilter
 import com.spendly.tracker.presentation.common.matchesAnalyticsSpendingFilter
 import com.spendly.tracker.data.repository.AccountBalanceRepository
 import com.spendly.tracker.data.repository.ProfileRepository
@@ -108,6 +109,8 @@ class HomeViewModel @Inject constructor(
     private var currentMonthOverrides: Map<String, Int> = emptyMap()
     private var currentUseFixedBudgetPeriodEnd: Boolean = false
     private var currentBudgetPeriodEndDay: Int = 31
+    private var currentSalaryDayAdjustment: DateRangeUtils.SalaryDayAdjustment =
+        DateRangeUtils.SalaryDayAdjustment.EXACT
     private var dataLoadingJob: Job? = null
     
     private val _deletedTransaction = MutableStateFlow<TransactionEntity?>(null)
@@ -199,7 +202,13 @@ class HomeViewModel @Inject constructor(
                 suggestion.yearMonth.toString(),
                 suggestion.suggestedDay,
             )
-            _uiState.value = _uiState.value.copy(payPeriodSuggestion = null)
+            _uiState.value = _uiState.value.copy(
+                payPeriodSuggestion = null,
+                payPeriodUpdateInfo = PayPeriodUpdateInfo(
+                    yearMonth = suggestion.yearMonth,
+                    newRange = suggestion.newRange,
+                ),
+            )
         }
     }
 
@@ -211,6 +220,19 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /** Reverts the last accepted suggestion (snackbar undo). */
+    fun undoPayPeriodOverride() {
+        val info = _uiState.value.payPeriodUpdateInfo ?: return
+        viewModelScope.launch {
+            salaryMonthOverrideRepository.clearOverride(info.yearMonth.toString())
+            _uiState.value = _uiState.value.copy(payPeriodUpdateInfo = null)
+        }
+    }
+
+    fun consumePayPeriodUpdateInfo() {
+        _uiState.value = _uiState.value.copy(payPeriodUpdateInfo = null)
+    }
+
     fun toggleSpendingMonthMode() {
         viewModelScope.launch {
             userPreferencesRepository.updateUseFinancialMonth(!_uiState.value.useFinancialMonth)
@@ -218,14 +240,27 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun observePayPeriodSuggestion() {
-        combine(
+        val baseFlow = combine(
             userPreferencesRepository.useFinancialMonth,
             userPreferencesRepository.monthStartDay,
             userPreferencesRepository.useFixedBudgetPeriodEnd,
+        ) { useFinancial, startDay, useFixedEnd ->
+            Triple(useFinancial, startDay, useFixedEnd)
+        }
+        combine(
+            baseFlow,
             salaryMonthOverrideRepository.overridesMap,
             userPreferencesRepository.dismissedSalarySuggestions,
-        ) { useFinancial, startDay, useFixedEnd, overrides, dismissed ->
-            PayPeriodSuggestionInputs(useFinancial, startDay, useFixedEnd, overrides, dismissed)
+            userPreferencesRepository.salaryDayAdjustment,
+        ) { prefs, overrides, dismissed, adjustment ->
+            PayPeriodSuggestionInputs(
+                useFinancialMonth = prefs.first,
+                defaultStartDay = prefs.second,
+                useFixedEnd = prefs.third,
+                overrides = overrides,
+                dismissed = dismissed,
+                adjustment = adjustment,
+            )
         }.flatMapLatest { inputs ->
             if (!inputs.useFinancialMonth) {
                 flowOf(null)
@@ -242,6 +277,7 @@ class HomeViewModel @Inject constructor(
                             defaultStartDay = inputs.defaultStartDay,
                             overrides = inputs.overrides,
                             dismissedTokens = inputs.dismissed,
+                            adjustment = inputs.adjustment,
                         )
                     }
             }
@@ -256,6 +292,7 @@ class HomeViewModel @Inject constructor(
         val useFixedEnd: Boolean,
         val overrides: Map<String, Int>,
         val dismissed: Set<String>,
+        val adjustment: DateRangeUtils.SalaryDayAdjustment,
     )
 
     private fun loadUserName() {
@@ -408,13 +445,15 @@ class HomeViewModel @Inject constructor(
             currentMonthStartDay,
             currentUseFixedBudgetPeriodEnd,
             currentBudgetPeriodEndDay,
-            currentMonthOverrides
+            currentMonthOverrides,
+            currentSalaryDayAdjustment
         )
 
     private suspend fun refreshPayPeriodPrefsCache() {
         currentMonthStartDay = userPreferencesRepository.monthStartDay.first()
         currentUseFixedBudgetPeriodEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
         currentBudgetPeriodEndDay = userPreferencesRepository.budgetPeriodEndDay.first()
+        currentSalaryDayAdjustment = userPreferencesRepository.salaryDayAdjustment.first()
     }
 
     private fun loadHomeData() {
@@ -2085,7 +2124,7 @@ class HomeViewModel @Inject constructor(
         val today = now
         val incomeTodayCount = periodTransactions.count { tx ->
             !tx.isExcludedFromTracking &&
-                tx.transactionType == TransactionType.INCOME &&
+                tx.matchesAnalyticsIncomeFilter() &&
                 tx.dateTime.toLocalDate() == today
         }
         val incomeTodayLabel = when (incomeTodayCount) {
@@ -2193,6 +2232,8 @@ data class HomeUiState(
     val selectedProfileId: Long? = null,
     val profiles: List<ProfileEntity> = emptyList(),
     val payPeriodSuggestion: SalaryPayPeriodDetector.Suggestion? = null,
+    /** Last accepted pay-period suggestion — drives the "updated / Undo" snackbar. */
+    val payPeriodUpdateInfo: PayPeriodUpdateInfo? = null,
     val periodDayLabel: String = "",
     val incomeTodayLabel: String = "",
     val topCategoryName: String = "",
@@ -2231,4 +2272,10 @@ data class GoalsSummaryForHome(
     val totalTarget: BigDecimal,
     val totalCurrent: BigDecimal,
     val currency: String
+)
+
+/** Result of an accepted pay-period suggestion, used for the confirmation/undo snackbar. */
+data class PayPeriodUpdateInfo(
+    val yearMonth: YearMonth,
+    val newRange: Pair<LocalDate, LocalDate>,
 )

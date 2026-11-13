@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.spendly.tracker.ui.components.AnimatedCurrencyText
 import com.spendly.tracker.ui.components.CategoryIcon
 import com.spendly.tracker.ui.components.SpendlyCard
 import com.spendly.tracker.ui.icons.CategoryMapping
@@ -100,13 +101,11 @@ fun AnalyticsMetricTile(
                 verticalAlignment = Alignment.Bottom,
             ) {
                 val isLong = content.primaryValue.length > 14
-                Text(
+                AnimatedCurrencyText(
                     text = content.primaryValue,
                     style = if (isLong) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.displaySmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 val delta = content.deltaPercent

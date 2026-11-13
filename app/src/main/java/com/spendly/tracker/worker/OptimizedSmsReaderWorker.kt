@@ -24,7 +24,6 @@ import com.spendly.tracker.domain.model.rule.TransactionRule
 import com.spendly.tracker.domain.repository.RuleRepository
 import com.spendly.tracker.domain.service.RuleEngine
 import com.spendly.tracker.utils.CurrencyFormatter
-import com.spendly.tracker.utils.MerchantAliasResolver
 import com.spendly.tracker.worker.InsightsWorker
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -436,6 +435,7 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
             if (unrecognizedBatch.isNotEmpty()) flushUnrecognizedBatch(unrecognizedBatch)
             if (widgetNeedsUpdate) {
                 com.spendly.tracker.widget.RecentTransactionsWidgetUpdateWorker.enqueueOneShot(applicationContext)
+                com.spendly.tracker.widget.SavingsWidgetUpdateWorker.enqueueOneShot(applicationContext)
                 InsightsWorker.enqueueOneShot(applicationContext)
             }
         }
@@ -625,7 +625,13 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
                 return updateExistingTransaction(existing, entity, stats)
             }
 
-            val resolvedMerchant = MerchantAliasResolver.resolveExact(entity.merchantName, merchantAliasCache)
+            val aliasSource = merchantAliasCache.firstOrNull {
+                it.sourceMerchant.equals(entity.merchantName, ignoreCase = true)
+            }
+            val resolvedMerchant = aliasSource?.displayName ?: entity.merchantName
+            if (aliasSource != null) {
+                merchantAliasRepository.markAliasUsed(aliasSource.sourceMerchant)
+            }
             val withName = if (resolvedMerchant != entity.merchantName) {
                 entity.copy(merchantName = resolvedMerchant)
             } else {

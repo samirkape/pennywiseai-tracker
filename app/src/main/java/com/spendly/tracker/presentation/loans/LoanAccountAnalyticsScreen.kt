@@ -176,8 +176,8 @@ private fun AccountDonut(
                 color = if (selectedLabel == null || selectedLabel == a.label) color else color.copy(alpha = 0.35f),
                 selectedColor = color,
                 selected = selectedLabel == a.label,
-                scaleAnimEnterSpec = tween(300),
-                colorAnimEnterSpec = tween(300)
+                scaleAnimEnterSpec = tween(Dimensions.Animation.standard),
+                colorAnimEnterSpec = tween(Dimensions.Animation.standard)
             )
         }
     }
@@ -192,8 +192,8 @@ private fun AccountDonut(
                 data = pies,
                 onPieClick = { pie -> pie.label?.let(onSelect) },
                 selectedScale = 1.08f,
-                scaleAnimEnterSpec = tween(300),
-                colorAnimEnterSpec = tween(300),
+                scaleAnimEnterSpec = tween(Dimensions.Animation.standard),
+                colorAnimEnterSpec = tween(Dimensions.Animation.standard),
                 style = Pie.Style.Stroke(width = 36.dp)
             )
             Column(

@@ -56,8 +56,9 @@ class InsightsViewModel @Inject constructor(
                 val startDay = userPreferencesRepository.monthStartDay.first()
                 val useFixed = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
                 val endDay = userPreferencesRepository.budgetPeriodEndDay.first()
+                val adjustment = userPreferencesRepository.salaryDayAdjustment.first()
                 val (periodStart, _) = DateRangeUtils.calculateBudgetPeriodRange(
-                    LocalDate.now(), startDay, useFixed, endDay
+                    LocalDate.now(), startDay, useFixed, endDay, adjustment = adjustment
                 )
                 val correctMonth = YearMonth.from(periodStart)
                 if (correctMonth != YearMonth.now()) {
@@ -99,6 +100,8 @@ class InsightsViewModel @Inject constructor(
         val monthStartOverrides: Map<String, Int>,
         val useFixedBudgetPeriodEnd: Boolean,
         val budgetPeriodEndDay: Int,
+        val salaryDayAdjustment: DateRangeUtils.SalaryDayAdjustment =
+            DateRangeUtils.SalaryDayAdjustment.EXACT,
     )
 
     private val insightsParams = combine(
@@ -109,6 +112,7 @@ class InsightsViewModel @Inject constructor(
         salaryMonthOverrideRepository.overridesMap,
         userPreferencesRepository.useFixedBudgetPeriodEnd,
         userPreferencesRepository.budgetPeriodEndDay,
+        userPreferencesRepository.salaryDayAdjustment,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         InsightsParams(
@@ -119,6 +123,7 @@ class InsightsViewModel @Inject constructor(
             monthStartOverrides = values[4] as Map<String, Int>,
             useFixedBudgetPeriodEnd = values[5] as Boolean,
             budgetPeriodEndDay = values[6] as Int,
+            salaryDayAdjustment = values[7] as DateRangeUtils.SalaryDayAdjustment,
         )
     }
 
@@ -170,6 +175,7 @@ class InsightsViewModel @Inject constructor(
             monthStartOverrides = monthStartOverrides,
             useFixedBudgetPeriodEnd = useFixedBudgetPeriodEnd,
             budgetPeriodEndDay = budgetPeriodEndDay,
+            salaryDayAdjustment = salaryDayAdjustment,
         )
 
     private fun InsightsParams.resolvePreviousDateRange(): Pair<LocalDate, LocalDate> =
@@ -180,6 +186,7 @@ class InsightsViewModel @Inject constructor(
             monthStartOverrides = monthStartOverrides,
             useFixedBudgetPeriodEnd = useFixedBudgetPeriodEnd,
             budgetPeriodEndDay = budgetPeriodEndDay,
+            salaryDayAdjustment = salaryDayAdjustment,
         )
 
     /**

@@ -2,6 +2,7 @@ package com.spendly.tracker.domain.service
 
 import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.database.entity.TransactionType
+import com.spendly.tracker.utils.DateRangeUtils
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -84,6 +85,71 @@ class SalaryPayPeriodDetectorTest {
             salaryTxn(day = 10).copy(smsBody = null, merchantName = "NEFT Credit"),
         )
         assertEquals(40, score)
+    }
+
+    @Test
+    fun findSuggestion_ignoresLoanRepaymentWithSalaryText() {
+        // A loan repayment whose SMS happens to mention salary must not be treated as payroll
+        val repayment = salaryTxn(day = 20).copy(
+            id = 99L,
+            category = "Income",
+            merchantName = "Friend",
+            smsBody = "salary repayment",
+            loanId = 7L,
+        )
+        assertNull(find(listOf(repayment)))
+        assertEquals(0, SalaryPayPeriodDetector.scoreCandidate(repayment))
+    }
+
+    @Test
+    fun findSuggestion_silentWhenSalaryMatchesWeekendRule() {
+        // Weekend payday rule: Oct 25 2026 is a Sunday → expected payday Oct 23 (Fri).
+        // A credit on Oct 23 is the normal, rule-adjusted payday — never prompts.
+        val oct23 = LocalDate.of(2026, 10, 23)
+        val txn = salaryTxn(day = 23).copy(
+           dateTime = LocalDateTime.of(2026, 10, 23, 10, 0),
+            transactionHash = "hash-oct2026",
+        )
+        assertNull(
+            SalaryPayPeriodDetector.findSuggestion(
+                transactions = listOf(txn),
+                today = oct23,
+                useFinancialMonth = true,
+                useFixedBudgetPeriodEnd = false,
+                defaultStartDay = 25,
+                overrides = emptyMap(),
+                dismissedTokens = emptySet(),
+                adjustment = DateRangeUtils.SalaryDayAdjustment.PRECEDING_WEEKDAY,
+            ),
+        )
+    }
+
+    @Test
+    fun findSuggestion_promptsWhenSalaryDeviatesFromRule_andCarriesRanges() {
+        // Salary arrived Oct 21 instead of the rule-adjusted Oct 23 → worthwhile prompt
+        val today = LocalDate.of(2026, 10, 23)
+        val txn = salaryTxn(day = 21).copy(
+            dateTime = LocalDateTime.of(2026, 10, 21, 10, 0),
+            transactionHash = "hash-oct2026",
+        )
+        val suggestion = SalaryPayPeriodDetector.findSuggestion(
+            transactions = listOf(txn),
+            today = today,
+            useFinancialMonth = true,
+            useFixedBudgetPeriodEnd = false,
+            defaultStartDay = 25,
+            overrides = emptyMap(),
+            dismissedTokens = emptySet(),
+            adjustment = DateRangeUtils.SalaryDayAdjustment.PRECEDING_WEEKDAY,
+        )
+        assertNotNull(suggestion)
+        assertEquals(21, suggestion!!.suggestedDay)
+        // With the rule on, Oct 23 is already rule-payday: current window is Oct 23 – Nov 24;
+        // the deviation suggestion re-anchors the window to the actual Oct 21 arrival
+        assertEquals(LocalDate.of(2026, 10, 23), suggestion.currentRange.first)
+        assertEquals(LocalDate.of(2026, 11, 24), suggestion.currentRange.second)
+        assertEquals(LocalDate.of(2026, 10, 21), suggestion.newRange.first)
+        assertEquals(LocalDate.of(2026, 11, 24), suggestion.newRange.second)
     }
 
     private fun find(

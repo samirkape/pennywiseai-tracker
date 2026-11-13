@@ -427,7 +427,9 @@ class BudgetGroupRepository @Inject constructor(
         daysInMonth: Int = 30
     ): BudgetOverallSummary {
         val incomeTransactions = allTransactions.filter {
-            it.transaction.transactionType == TransactionType.INCOME
+            // Loan-linked rows (lent money / repayments) are not real income
+            it.transaction.transactionType == TransactionType.INCOME &&
+                it.transaction.loanId == null
         }
         val totalIncome = incomeTransactions.fold(BigDecimal.ZERO) { acc, tx ->
             acc + tx.transaction.amount
@@ -435,20 +437,16 @@ class BudgetGroupRepository @Inject constructor(
 
         // Build category → amount map from primary category or split lines only.
         // transaction_categories junction rows are tags (filter/insights) and must not add amounts.
+        // Spending only: investments are savings, not spending, so they never count
+        // against budget limits.
         val categoryAmounts = mutableMapOf<String, BigDecimal>()
-        val investedCategoryAmounts = mutableMapOf<String, BigDecimal>()
         allTransactions.forEach { txWithSplits ->
             val tx = txWithSplits.transaction
-            if (tx.transactionType != TransactionType.INCOME &&
-                tx.transactionType != TransactionType.TRANSFER) {
-                val isInvestment = tx.transactionType == TransactionType.INVESTMENT
+            if (tx.countsTowardBudgetSpending()) {
                 txWithSplits.getAmountByCategory().forEach { (category, amount) ->
                     val categoryName = category.ifEmpty { "Others" }
-                    categoryAmounts[categoryName] = (categoryAmounts[categoryName] ?: BigDecimal.ZERO) + amount
-                    if (isInvestment) {
-                        investedCategoryAmounts[categoryName] =
-                            (investedCategoryAmounts[categoryName] ?: BigDecimal.ZERO) + amount
-                    }
+                    categoryAmounts[categoryName] =
+                        (categoryAmounts[categoryName] ?: BigDecimal.ZERO) + amount
                 }
             }
         }
@@ -457,7 +455,8 @@ class BudgetGroupRepository @Inject constructor(
         val categoryLimitBoosts = mutableMapOf<String, BigDecimal>()
         allTransactions.forEach { txWithSplits ->
             val tx = txWithSplits.transaction
-            if (tx.transactionType == TransactionType.INCOME && tx.budgetCategory != null) {
+            if (tx.transactionType == TransactionType.INCOME && tx.budgetCategory != null &&
+                tx.loanId == null) {
                 when (tx.budgetImpactType) {
                     BudgetImpactType.DEDUCT_SPENT -> {
                         val current = categoryAmounts[tx.budgetCategory] ?: BigDecimal.ZERO
@@ -485,10 +484,7 @@ class BudgetGroupRepository @Inject constructor(
             val dailyAmounts = DoubleArray(daysInMonth)
             allTransactions.forEach { txWithSplits ->
                 val tx = txWithSplits.transaction
-                if (tx.transactionType != TransactionType.INCOME &&
-                    tx.transactionType != TransactionType.TRANSFER &&
-                    tx.loanId == null
-                ) {
+                if (tx.countsTowardBudgetSpending()) {
                     val day = tx.dateTime.dayOfMonth.coerceIn(1, daysInMonth)
                     if (categoryNames == null) {
                         dailyAmounts[day - 1] += tx.amount.toDouble()
@@ -599,16 +595,6 @@ class BudgetGroupRepository @Inject constructor(
 
         val totalLimitBudget = limitGroups.fold(BigDecimal.ZERO) { acc, g -> acc + g.totalBudget }
         val totalLimitSpent = limitGroups.fold(BigDecimal.ZERO) { acc, g -> acc + g.totalActual }
-        // Mirror totalLimitSpent's per-group scoping so spent - invested splits cleanly.
-        val totalInvested = limitGroups.fold(BigDecimal.ZERO) { acc, g ->
-            acc + if (g.isTrackingAllExpenses) {
-                investedCategoryAmounts.values.fold(BigDecimal.ZERO) { a, v -> a + v }
-            } else {
-                g.group.categories.fold(BigDecimal.ZERO) { a, c ->
-                    a + (investedCategoryAmounts[c.categoryName] ?: BigDecimal.ZERO)
-                }
-            }
-        }
         val totalTargetGoal = targetGroups.fold(BigDecimal.ZERO) { acc, g -> acc + g.totalBudget }
         val totalTargetActual = targetGroups.fold(BigDecimal.ZERO) { acc, g -> acc + g.totalActual }
         val totalExpectedBudget = expectedGroups.fold(BigDecimal.ZERO) { acc, g -> acc + g.totalBudget }
@@ -629,7 +615,6 @@ class BudgetGroupRepository @Inject constructor(
             totalIncome = totalIncome,
             totalLimitBudget = totalLimitBudget,
             totalLimitSpent = totalLimitSpent,
-            totalInvested = totalInvested,
             totalTargetGoal = totalTargetGoal,
             totalTargetActual = totalTargetActual,
             totalExpectedBudget = totalExpectedBudget,
@@ -689,19 +674,8 @@ class BudgetGroupRepository @Inject constructor(
             ),
             displayOrder = 1
         )
-
-        // Group 3: Investments (TARGET) - savings goals
-        createGroup(
-            name = "Investments",
-            groupType = BudgetGroupType.TARGET,
-            color = "#00D09C",
-            currency = baseCurrency,
-            categories = listOf(
-                "Investments" to amount(10000),
-                "Banking" to amount(5000)
-            ),
-            displayOrder = 2
-        )
+        // Note: no Investments bucket - investing is saving, not spending, so it never
+        // counts against budgets. Investment targets belong in the Goals feature.
     }
 
     suspend fun moveGroupUp(budgetId: Long) {

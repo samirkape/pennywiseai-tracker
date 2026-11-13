@@ -2,6 +2,9 @@ package com.spendly.tracker.ui.components.cards
 
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -33,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.spendly.tracker.R
 import com.spendly.tracker.ui.components.AnimatedCurrencyText
+import com.spendly.tracker.ui.effects.rememberReducedMotion
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.PlayfairDisplayFontFamily
 import com.spendly.tracker.ui.theme.Spacing
@@ -307,7 +312,7 @@ fun HeroSpendCard(
                     )
                 }
                 if (incomeForProgress > BigDecimal.ZERO) {
-                    Text(
+                    AnimatedCurrencyText(
                         text = "$remainingFormatted remaining",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
@@ -489,6 +494,33 @@ internal fun SpendProgressBar(
     val trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
     val totalFraction = (expenseFraction + investmentFraction).coerceIn(0f, 1f)
 
+    // Animate from empty on first appearance; springs keep subsequent updates
+    // interruptible/predictive (design.md § Motion & Animation). Skipped when the
+    // user has disabled system animations.
+    val reducedMotion = rememberReducedMotion()
+    val progressSpring = spring<Float>(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMedium,
+    )
+    val animatedTotal = remember { Animatable(0f) }
+    val animatedExpense = remember { Animatable(0f) }
+    LaunchedEffect(totalFraction) {
+        if (reducedMotion) {
+            animatedTotal.snapTo(totalFraction)
+        } else {
+            animatedTotal.animateTo(totalFraction, progressSpring)
+        }
+    }
+    LaunchedEffect(expenseFraction) {
+        if (reducedMotion) {
+            animatedExpense.snapTo(expenseFraction)
+        } else {
+            animatedExpense.animateTo(expenseFraction, progressSpring)
+        }
+    }
+    val drawnTotal = animatedTotal.value.coerceIn(0f, 1f)
+    val drawnExpense = animatedExpense.value.coerceIn(0f, drawnTotal)
+
     Box(
         modifier = modifier
             .height(trackHeightDp.dp)
@@ -501,20 +533,20 @@ internal fun SpendProgressBar(
                 .background(trackColor),
         )
         // Investment segment — drawn first (fills from 0 to total), shows as green
-        if (totalFraction > 0f) {
+        if (drawnTotal > 0f) {
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .fillMaxWidth(totalFraction)
+                    .fillMaxWidth(drawnTotal)
                     .background(investmentColor),
             )
         }
         // Expense segment — overlays investment from left, shows expense color
-        if (expenseFraction > 0f) {
+        if (drawnExpense > 0f) {
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .fillMaxWidth(expenseFraction)
+                    .fillMaxWidth(drawnExpense)
                     .background(expenseColor),
             )
         }

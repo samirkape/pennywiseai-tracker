@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.spendly.tracker.BuildConfig
+import com.spendly.tracker.data.contacts.ContactsResolver
 import com.spendly.tracker.data.manager.PremiumManager
 import com.spendly.tracker.data.preferences.UserPreferencesRepository
 import com.spendly.tracker.ui.components.WhatsNewContent
@@ -11,8 +12,10 @@ import com.spendly.tracker.ui.components.WhatsNewVersion
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -20,13 +23,20 @@ import javax.inject.Inject
 class MainViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val userPreferencesRepository: UserPreferencesRepository,
-    premiumManager: PremiumManager
+    premiumManager: PremiumManager,
+    internal val contactsResolver: ContactsResolver
 ) : ViewModel() {
 
     val isPremium: StateFlow<Boolean> = premiumManager.isPremium
 
     private val _whatsNewVersion = MutableStateFlow<WhatsNewVersion?>(null)
     val whatsNewVersion: StateFlow<WhatsNewVersion?> = _whatsNewVersion.asStateFlow()
+
+    // Project the toggle as a StateFlow so MainScreen can synchronously
+    // build a CompositionLocal closure over the latest value without
+    // collecting on every render path.
+    val useContactsForVpa: StateFlow<Boolean> = userPreferencesRepository.useContactsForVpa
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     init {
         checkWhatsNew()

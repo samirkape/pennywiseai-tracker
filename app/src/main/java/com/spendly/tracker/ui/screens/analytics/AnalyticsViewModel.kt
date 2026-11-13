@@ -83,6 +83,10 @@ class AnalyticsViewModel @Inject constructor(
     private val navOverridesMap: StateFlow<Map<String, Int>> = salaryMonthOverrideRepository.overridesMap
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
+    private val navSalaryDayAdjustment: StateFlow<DateRangeUtils.SalaryDayAdjustment> =
+        userPreferencesRepository.salaryDayAdjustment
+            .stateIn(viewModelScope, SharingStarted.Eagerly, DateRangeUtils.SalaryDayAdjustment.EXACT)
+
     private val _selectedChartType = MutableStateFlow(ChartType.LINE)
     val selectedChartType: StateFlow<ChartType> = _selectedChartType.asStateFlow()
 
@@ -97,17 +101,6 @@ class AnalyticsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     init {
-        viewModelScope.launch {
-            userPreferencesRepository.getSavingsRateWindowMonths().first()?.let { _savingsWindowMonths.value = it }
-            userPreferencesRepository.getSavingsRateRange().first()?.let { (start, end) ->
-                runCatching {
-                    val range = SavingsCustomRange(YearMonth.parse(start), end?.let { YearMonth.parse(it) })
-                    _savingsCustomRange.value = range
-                    _savingsWindowMonths.value = range.windowMonths()
-                }
-            }
-        }
-
         viewModelScope.launch {
             val default = defaultTimePeriod(userPreferencesRepository.useFinancialMonth.first())
             _selectedPeriod.value = default
@@ -194,8 +187,13 @@ class AnalyticsViewModel @Inject constructor(
             userPreferencesRepository.useFixedBudgetPeriodEnd,
             userPreferencesRepository.budgetPeriodEndDay,
             salaryMonthOverrideRepository.overridesMap,
-        ) { monthStartDay, useFinancialMonth, useFixedEnd, endDom, overrides ->
-            listOf(monthStartDay, useFinancialMonth, useFixedEnd, endDom, overrides)
+            userPreferencesRepository.salaryDayAdjustment,
+        ) { args ->
+            @Suppress("UNCHECKED_CAST")
+            listOf(
+                args[0], args[1], args[2], args[3], args[4],
+                args[5] as DateRangeUtils.SalaryDayAdjustment,
+            )
         },
     ) { periodPack, filterPack, prefsPack ->
         @Suppress("UNCHECKED_CAST")
@@ -216,6 +214,7 @@ class AnalyticsViewModel @Inject constructor(
             monthStartOverrides = pr[4] as Map<String, Int>,
             useFixedBudgetPeriodEnd = pr[2] as Boolean,
             budgetPeriodEndDay = pr[3] as Int,
+            salaryDayAdjustment = pr[5] as DateRangeUtils.SalaryDayAdjustment,
         )
     }.flatMapLatest { filterState ->
         var dateRange = resolveDateRangeForSelection(
@@ -226,6 +225,7 @@ class AnalyticsViewModel @Inject constructor(
             monthStartOverrides = filterState.monthStartOverrides,
             useFixedBudgetPeriodEnd = filterState.useFixedBudgetPeriodEnd,
             budgetPeriodEndDay = filterState.budgetPeriodEndDay,
+            salaryDayAdjustment = filterState.salaryDayAdjustment,
         )
         if (dateRange == null && filterState.period == TimePeriod.CUSTOM) {
             val fallbackPeriod = defaultTimePeriod(filterState.useFinancialMonth)
@@ -242,6 +242,7 @@ class AnalyticsViewModel @Inject constructor(
                 monthStartOverrides = filterState.monthStartOverrides,
                 useFixedBudgetPeriodEnd = filterState.useFixedBudgetPeriodEnd,
                 budgetPeriodEndDay = filterState.budgetPeriodEndDay,
+                salaryDayAdjustment = filterState.salaryDayAdjustment,
             )
         }
 
@@ -421,6 +422,7 @@ class AnalyticsViewModel @Inject constructor(
                     monthStartOverrides = filterState.monthStartOverrides,
                     useFixedBudgetPeriodEnd = filterState.useFixedBudgetPeriodEnd,
                     budgetPeriodEndDay = filterState.budgetPeriodEndDay,
+                    salaryDayAdjustment = filterState.salaryDayAdjustment,
                 )
                 val previousPeriodTxs = if (filterState.isUnifiedMode) {
                     transactionRepository.getTransactionsWithSplitsFiltered(
@@ -575,116 +577,6 @@ class AnalyticsViewModel @Inject constructor(
         initialValue = AnalyticsUiState(isLoading = true)
     )
 
-    private val _savingsWindowMonths = MutableStateFlow(SAVINGS_RATE_DEFAULT_WINDOW)
-    val savingsWindowMonths: StateFlow<Int> = _savingsWindowMonths.asStateFlow()
-
-    /** Last month count chosen with the Custom slider, kept even while a preset is active. */
-    val savingsCustomMonths: StateFlow<Int> = userPreferencesRepository.getSavingsRateCustomMonths()
-        .map { it ?: SAVINGS_RATE_DEFAULT_WINDOW }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, SAVINGS_RATE_DEFAULT_WINDOW)
-
-    fun saveSavingsCustomMonths(months: Int) {
-        viewModelScope.launch { userPreferencesRepository.saveSavingsRateCustomMonths(months) }
-    }
-
-    private val _savingsCustomRange = MutableStateFlow<SavingsCustomRange?>(null)
-    val savingsCustomRange: StateFlow<SavingsCustomRange?> = _savingsCustomRange.asStateFlow()
-
-    /** Sets a date-picked savings window (end null = Now) and points the page at it. */
-    fun applySavingsRange(startMonth: YearMonth, endMonth: YearMonth?) {
-        val range = SavingsCustomRange(startMonth, endMonth)
-        _savingsCustomRange.value = range
-        viewModelScope.launch {
-            userPreferencesRepository.saveSavingsRateRange(startMonth.toString(), endMonth?.toString())
-        }
-        applySavingsWindowInternal(range.windowMonths(), range)
-    }
-
-    /** Sets the savings window and points the whole page at the same date range. */
-    fun applySavingsWindow(months: Int) {
-        _savingsCustomRange.value = null
-        viewModelScope.launch { userPreferencesRepository.saveSavingsRateRange(null, null) }
-        applySavingsWindowInternal(months, null)
-    }
-
-    private fun applySavingsWindowInternal(months: Int, range: SavingsCustomRange?) {
-        _savingsWindowMonths.value = months
-        viewModelScope.launch { userPreferencesRepository.saveSavingsRateWindowMonths(months) }
-        val ranges = savingsMonthRanges(
-            window = months,
-            endMonth = range?.resolvedEnd() ?: YearMonth.now(),
-            usesCalendar = !useFinancialMonth.value,
-            nav = SavingsNav(
-                monthStartDay = navMonthStartDay.value,
-                overrides = navOverridesMap.value,
-                fixedPeriodEnd = navUseFixedBudgetPeriodEnd.value,
-                periodEndDay = navBudgetPeriodEndDay.value,
-            ),
-        )
-        setCustomDateRange(ranges.minOf { it.second.first }, ranges.maxOf { it.second.second })
-    }
-
-    private fun savingsMonthRanges(
-        window: Int,
-        usesCalendar: Boolean,
-        nav: SavingsNav,
-        endMonth: YearMonth = YearMonth.now(),
-    ): List<Pair<YearMonth, Pair<LocalDate, LocalDate>>> =
-        (window - 1 downTo 0).map { back ->
-            val ym = endMonth.minusMonths(back.toLong())
-            ym to getDateRangeForYearMonthNavigation(
-                yearMonth = ym,
-                useCalendarMonth = usesCalendar,
-                monthStartDay = nav.monthStartDay,
-                monthStartOverrides = nav.overrides,
-                useFixedBudgetPeriodEnd = nav.fixedPeriodEnd,
-                budgetPeriodEndDay = nav.periodEndDay,
-            )
-        }
-
-    /** Income vs. spending for the last N months, independent of the selected analytics period. */
-    val savingsRate: StateFlow<SavingsRateSummary> = combine(
-        combine(_savingsWindowMonths, _savingsCustomRange) { window, range -> window to range },
-        _selectedCurrency,
-        _isUnifiedMode,
-        combine(navMonthStartDay, navOverridesMap, navUseFixedBudgetPeriodEnd, navBudgetPeriodEndDay) { a, b, c, d ->
-            SavingsNav(a, b, c, d)
-        },
-        useFinancialMonth,
-    ) { windowAndRange, currency, unified, nav, financial ->
-        SavingsInputs(windowAndRange.first, currency, unified, nav, financial, windowAndRange.second)
-    }.flatMapLatest { input ->
-        val ranges = savingsMonthRanges(
-            input.window,
-            !input.useFinancialMonth,
-            input.nav,
-            input.customRange?.resolvedEnd() ?: YearMonth.now(),
-        )
-        transactionRepository.getNetTransactionsBetweenDates(
-            startDate = ranges.minOf { it.second.first },
-            endDate = ranges.maxOf { it.second.second },
-        ).mapLatest { all ->
-            val txs = if (input.unified) all else all.filter { it.currency == input.currency }
-            val months = computeMonthlySavingsRates(
-                transactions = txs,
-                ranges = ranges,
-                currentMonth = YearMonth.now(),
-                amountOf = { tx ->
-                    if (input.unified) {
-                        currencyConversionService.convertAmount(tx.amount, tx.currency, input.currency)
-                    } else {
-                        tx.amount
-                    }
-                },
-            )
-            SavingsRateSummary(months = months, windowMonths = input.window, customRange = input.customRange, currency = input.currency)
-        }
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = SavingsRateSummary(),
-    )
-
     fun selectPeriod(period: TimePeriod) {
         if (period != TimePeriod.CUSTOM) {
             savedStateHandle["customDateRange"] = null
@@ -801,6 +693,7 @@ class AnalyticsViewModel @Inject constructor(
                     monthStartOverrides = navOverridesMap.value,
                     useFixedBudgetPeriodEnd = navUseFixedBudgetPeriodEnd.value,
                     budgetPeriodEndDay = navBudgetPeriodEndDay.value,
+                    salaryDayAdjustment = navSalaryDayAdjustment.value,
                 )
                 setCustomDateRange(range.first, range.second, anchorMonth = yearMonth)
             }
@@ -1259,6 +1152,7 @@ internal fun previousPeriodRange(
     monthStartOverrides: Map<String, Int>,
     useFixedBudgetPeriodEnd: Boolean,
     budgetPeriodEndDay: Int,
+    salaryDayAdjustment: DateRangeUtils.SalaryDayAdjustment = DateRangeUtils.SalaryDayAdjustment.EXACT,
 ): Pair<LocalDate, LocalDate> {
     val isMonthBased = period == TimePeriod.THIS_MONTH ||
         period == TimePeriod.CALENDAR_MONTH ||
@@ -1274,6 +1168,7 @@ internal fun previousPeriodRange(
             useFixedEndDay = useFixedBudgetPeriodEnd,
             fixedEndDayOfMonth = budgetPeriodEndDay,
             overrides = monthStartOverrides,
+            adjustment = salaryDayAdjustment,
         )
     } else {
         val previousStart = previousAnchor.withDayOfMonth(
@@ -1314,22 +1209,6 @@ internal fun equalLengthWindowBefore(dateRange: Pair<LocalDate, LocalDate>): Pai
  * Internal state for combining all filter parameters.
  * Used in reactive Flow to trigger data reload when any filter changes.
  */
-private data class SavingsNav(
-    val monthStartDay: Int,
-    val overrides: Map<String, Int>,
-    val fixedPeriodEnd: Boolean,
-    val periodEndDay: Int,
-)
-
-private data class SavingsInputs(
-    val window: Int,
-    val currency: String,
-    val unified: Boolean,
-    val nav: SavingsNav,
-    val useFinancialMonth: Boolean,
-    val customRange: SavingsCustomRange? = null,
-)
-
 private data class FilterState(
     val period: TimePeriod,
     val customRange: Pair<LocalDate, LocalDate>?,
@@ -1341,7 +1220,9 @@ private data class FilterState(
     val useFinancialMonth: Boolean = true,
     val monthStartOverrides: Map<String, Int> = emptyMap(),
     val useFixedBudgetPeriodEnd: Boolean = false,
-    val budgetPeriodEndDay: Int = 31
+    val budgetPeriodEndDay: Int = 31,
+    val salaryDayAdjustment: DateRangeUtils.SalaryDayAdjustment =
+        DateRangeUtils.SalaryDayAdjustment.EXACT
 )
 
 data class AnalyticsUiState(

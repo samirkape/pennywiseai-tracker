@@ -1,5 +1,6 @@
 package com.spendly.tracker.presentation.home
 
+import com.spendly.tracker.ui.theme.Dimensions
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -222,7 +223,7 @@ private fun GoalsPagerCard(
                             val isActive = pagerState.currentPage == i
                             val dotSize by animateDpAsState(
                                 targetValue = if (isActive) 6.dp else 4.dp,
-                                animationSpec = tween(200), label = "dot$i")
+                                animationSpec = tween(Dimensions.Animation.quick), label = "dot$i")
                             Box(modifier = Modifier.size(dotSize).background(
                                 if (isActive) greenColor else MaterialTheme.colorScheme.cardBorder,
                                 CircleShape))

@@ -133,6 +133,13 @@ fun CreditCardAnalyticsScreen(
         }
     }
 
+    // Drop the selection if the refreshed breakdown no longer contains that lent person.
+    LaunchedEffect(uiState.lentBreakdown) {
+        if (selectedLent != null && uiState.lentBreakdown.none { it.personName == selectedLent }) {
+            selectedLent = null
+        }
+    }
+
     val activeRange: Pair<LocalDate, LocalDate> = remember(
         uiState.view, uiState.payPeriodStart, uiState.payPeriodEnd,
         uiState.billingCycleStart, uiState.billingCycleEnd,
@@ -144,6 +151,38 @@ fun CreditCardAnalyticsScreen(
         } else {
             uiState.payPeriodStart to uiState.payPeriodEnd
         }
+    }
+
+    val selectedLentEntry = remember(uiState.lentBreakdown, selectedLent) {
+        uiState.lentBreakdown.firstOrNull { it.personName == selectedLent }
+    }
+
+    // The transaction list mirrors the selected breakdown slice; with no selection it
+    // shows the period's spend transactions.
+    val displayTransactions = when {
+        breakdownMode == BreakdownMode.CATEGORY && selectedCategory != null ->
+            uiState.transactions.filter { txn ->
+                txn.amount.signum() > 0 && txn.category.ifBlank { "Others" } == selectedCategory
+            }
+        breakdownMode == BreakdownMode.LENT && selectedLentEntry != null ->
+            uiState.lentTransactions.filter { txn ->
+                if (selectedLentEntry.loanId != null) {
+                    txn.loanId == selectedLentEntry.loanId
+                } else {
+                    txn.loanId == null &&
+                        txn.merchantName.ifBlank { "Lent" } == selectedLentEntry.personName
+                }
+            }
+        else -> uiState.transactions
+    }
+
+    val activeFilterLabel = when {
+        breakdownMode == BreakdownMode.CATEGORY && selectedCategory != null -> selectedCategory
+        breakdownMode == BreakdownMode.LENT && selectedLentEntry != null -> selectedLentEntry.personName
+        else -> null
+    }
+    val clearFilter: () -> Unit = {
+        if (breakdownMode == BreakdownMode.LENT) selectedLent = null else selectedCategory = null
     }
 
     Scaffold(
@@ -302,15 +341,28 @@ fun CreditCardAnalyticsScreen(
                 }
             }
 
-            if (uiState.transactions.isEmpty() && !uiState.isLoading) {
+            if (uiState.transactions.isEmpty() && uiState.lentTransactions.isEmpty() && !uiState.isLoading) {
                 item { EmptyCreditCardState() }
             } else {
-                items(uiState.transactions, key = { it.id }) { txn ->
-                    CreditCardTransactionItem(
-                        transaction = txn,
-                        currency = uiState.currency,
-                        onClick = { onNavigateToTransaction(txn.id) },
-                    )
+                if (activeFilterLabel != null) {
+                    item(key = "filter-banner") {
+                        FilteredTransactionsBanner(
+                            label = activeFilterLabel,
+                            count = displayTransactions.size,
+                            onClear = clearFilter,
+                        )
+                    }
+                }
+                if (displayTransactions.isEmpty()) {
+                    item { NoTransactionsForFilter(activeFilterLabel ?: "selected") }
+                } else {
+                    items(displayTransactions, key = { it.id }) { txn ->
+                        CreditCardTransactionItem(
+                            transaction = txn,
+                            currency = uiState.currency,
+                            onClick = { onNavigateToTransaction(txn.id) },
+                        )
+                    }
                 }
             }
         }
@@ -627,6 +679,58 @@ private fun BillingCycleSetupPrompt(forCard: String?, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun FilteredTransactionsBanner(label: String, count: Int, onClear: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "$count transaction${if (count != 1) "s" else ""} shown",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = onClear) { Text("Show all") }
+        }
+    }
+}
+
+@Composable
+private fun NoTransactionsForFilter(label: String) {
+    Box(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "No transactions",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "for $label",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            )
         }
     }
 }

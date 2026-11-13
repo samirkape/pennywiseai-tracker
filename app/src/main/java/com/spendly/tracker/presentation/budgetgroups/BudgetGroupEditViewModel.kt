@@ -6,10 +6,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.spendly.tracker.data.database.dao.TransactionSplitDao
 import com.spendly.tracker.data.database.entity.BudgetGroupType
-import com.spendly.tracker.data.database.entity.TransactionType
 import com.spendly.tracker.data.preferences.UserPreferencesRepository
 import com.spendly.tracker.data.repository.BudgetGroupRepository
 import com.spendly.tracker.data.repository.CategoryRepository
+import com.spendly.tracker.data.repository.countsTowardBudgetSpending
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,7 +78,7 @@ class BudgetGroupEditViewModel @Inject constructor(
             val transactions = transactionSplitDao.getTransactionsWithSplitsFiltered(startDate, endDate, currency).first()
             val categorySpending = mutableMapOf<String, BigDecimal>()
             transactions.forEach { txWithSplits ->
-                if (txWithSplits.transaction.transactionType != TransactionType.INCOME) {
+                if (txWithSplits.transaction.countsTowardBudgetSpending()) {
                     txWithSplits.getAmountByCategory().forEach { (category, amount) ->
                         val categoryName = category.ifEmpty { "Others" }
                         categorySpending[categoryName] = (categorySpending[categoryName] ?: BigDecimal.ZERO) + amount

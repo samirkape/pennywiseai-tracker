@@ -1,5 +1,6 @@
 package com.spendly.tracker.utils
 
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -17,6 +18,18 @@ object DateRangeUtils {
     const val LAST_DAY_SENTINEL: Int = 0
 
     /**
+     * How the nominal salary day is translated into the actual payday when it falls
+     * on a weekend. Payroll systems commonly prepone (or occasionally postpone) the
+     * credit to the closest working day; [EXACT] keeps the literal day-of-month
+     * boundary regardless of weekends.
+     */
+    enum class SalaryDayAdjustment {
+        EXACT,
+        PRECEDING_WEEKDAY,
+        FOLLOWING_WEEKDAY,
+    }
+
+    /**
      * Resolves [startDay] (which may be the [LAST_DAY_SENTINEL] or a number > the
      * month's length) into a valid day-of-month for [yearMonth].
      */
@@ -31,27 +44,52 @@ object DateRangeUtils {
     }
 
     /**
+     * The expected payday for [yearMonth]: the nominal [salaryDay] (1–31 or the
+     * [LAST_DAY_SENTINEL]) resolved inside the month, then shifted to the nearest
+     * weekend-adjusted weekday per [adjustment].
+     */
+    fun expectedPayday(
+        yearMonth: YearMonth,
+        salaryDay: Int,
+        adjustment: SalaryDayAdjustment = SalaryDayAdjustment.EXACT
+    ): LocalDate {
+        var date = yearMonth.atDay(resolveStartDay(yearMonth, salaryDay))
+        when (adjustment) {
+            SalaryDayAdjustment.EXACT -> Unit
+            SalaryDayAdjustment.PRECEDING_WEEKDAY -> {
+                while (date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY) {
+                    date = date.minusDays(1)
+                }
+            }
+            SalaryDayAdjustment.FOLLOWING_WEEKDAY -> {
+                while (date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY) {
+                    date = date.plusDays(1)
+                }
+            }
+        }
+        return date
+    }
+
+    /**
      * Returns the start and end of the current financial month given [today] and [startDay].
      * If today is on or after [startDay], the financial month started this calendar month.
      * Otherwise it started in the previous calendar month.
      *
      * Accepts [LAST_DAY_SENTINEL] for end-of-month salary days.
      */
-    fun calculateFinancialMonthRange(today: LocalDate, startDay: Int): Pair<LocalDate, LocalDate> {
+    fun calculateFinancialMonthRange(
+        today: LocalDate,
+        startDay: Int,
+        adjustment: SalaryDayAdjustment = SalaryDayAdjustment.EXACT
+    ): Pair<LocalDate, LocalDate> {
         val thisMonth = YearMonth.from(today)
-        val effectiveThisMonthDay = resolveStartDay(thisMonth, startDay)
-        return if (today.dayOfMonth >= effectiveThisMonthDay) {
-            val start = thisMonth.atDay(effectiveThisMonthDay)
-            val nextMonth = thisMonth.plusMonths(1)
-            val nextDay = resolveStartDay(nextMonth, startDay)
-            val end = nextMonth.atDay(nextDay).minusDays(1)
-            start to end
+        val thisStart = expectedPayday(thisMonth, startDay, adjustment)
+        return if (!today.isBefore(thisStart)) {
+            val nextStart = expectedPayday(thisMonth.plusMonths(1), startDay, adjustment)
+            thisStart to nextStart.minusDays(1)
         } else {
-            val prevMonth = thisMonth.minusMonths(1)
-            val prevDay = resolveStartDay(prevMonth, startDay)
-            val start = prevMonth.atDay(prevDay)
-            val end = thisMonth.atDay(effectiveThisMonthDay).minusDays(1)
-            start to end
+            val prevStart = expectedPayday(thisMonth.minusMonths(1), startDay, adjustment)
+            prevStart to thisStart.minusDays(1)
         }
     }
 
@@ -60,12 +98,17 @@ object DateRangeUtils {
      *
      * Uses [overrides] (a map of "YYYY-MM" → startDay) to let individual months have a
      * different salary arrival date than the global [defaultStartDay] — useful when the
-     * usual date falls on a weekend or holiday.
+     * usual date falls on a weekend or holiday. Overrides represent the *actual* arrival
+     * day, so they are used as-is; [adjustment] only applies to the nominal default day.
      *
      * Algorithm:
-     * 1. Use [defaultStartDay] to determine which calendar month the current financial
-     *    period nominally started in.
-     * 2. Look up that month in [overrides]; if an override exists, use its startDay instead.
+     * 1. Compute the effective period start for this calendar month (override, else
+     *    weekend-adjusted [defaultStartDay]).
+     * 2. Anchor the period on the month that actually *contains* [today]: this month when
+     *    today falls on/after its effective start, otherwise the previous month. (A manual
+     *    override may pull the start earlier or push it later than the default — deciding
+     *    the anchor from the default day alone could produce a "current" window that does
+     *    not contain today.)
      * 3. Compute the end as the day before the *next* financial month's start (also honouring
      *    overrides for the next month).
      *
@@ -74,55 +117,69 @@ object DateRangeUtils {
     fun calculateFinancialMonthRangeWithOverrides(
         today: LocalDate,
         defaultStartDay: Int,
-        overrides: Map<String, Int>
+        overrides: Map<String, Int>,
+        adjustment: SalaryDayAdjustment = SalaryDayAdjustment.EXACT
     ): Pair<LocalDate, LocalDate> {
         val thisCalendarMonth = YearMonth.from(today)
-        val defaultThisMonthDay = resolveStartDay(thisCalendarMonth, defaultStartDay)
-        val startYearMonth: YearMonth = if (today.dayOfMonth >= defaultThisMonthDay) {
+        val thisMonthStart = payPeriodStartFor(thisCalendarMonth, defaultStartDay, overrides, adjustment)
+        val startYearMonth: YearMonth = if (!today.isBefore(thisMonthStart)) {
             thisCalendarMonth
         } else {
             thisCalendarMonth.minusMonths(1)
         }
-
-        val effectiveStartDayRaw = overrides[startYearMonth.toString()] ?: defaultStartDay
-        val safeStartDay = resolveStartDay(startYearMonth, effectiveStartDayRaw)
-        val start = startYearMonth.atDay(safeStartDay)
+        val start = payPeriodStartFor(startYearMonth, defaultStartDay, overrides, adjustment)
 
         val nextYearMonth = startYearMonth.plusMonths(1)
-        val nextEffectiveStartDayRaw = overrides[nextYearMonth.toString()] ?: defaultStartDay
-        val safeNextStartDay = resolveStartDay(nextYearMonth, nextEffectiveStartDayRaw)
-        val end = nextYearMonth.atDay(safeNextStartDay).minusDays(1)
+        val end = payPeriodStartFor(nextYearMonth, defaultStartDay, overrides, adjustment).minusDays(1)
 
         return start to end
     }
 
     /**
+     * Effective period start date for [yearMonth]: an explicit per-month [overrides]
+     * entry wins (used as-is, it records an observed payday), otherwise the nominal
+     * [defaultStartDay] resolved with the weekend [adjustment].
+     */
+    private fun payPeriodStartFor(
+        yearMonth: YearMonth,
+        defaultStartDay: Int,
+        overrides: Map<String, Int>,
+        adjustment: SalaryDayAdjustment
+    ): LocalDate {
+        val override = overrides[yearMonth.toString()] ?: return expectedPayday(yearMonth, defaultStartDay, adjustment)
+        return yearMonth.atDay(resolveStartDay(yearMonth, override))
+    }
+
+    /**
      * Returns the [LocalDate] where the financial period that *contains* [yearMonth] starts,
-     * applying [overrides] and falling back to [defaultStartDay].
+     * applying [overrides] and falling back to the weekend-adjusted [defaultStartDay].
      *
      * For example, given monthly salary day 25 and [yearMonth] = 2026-11, returns 2026-11-25.
      */
     fun financialMonthStartFor(
         yearMonth: YearMonth,
         defaultStartDay: Int,
-        overrides: Map<String, Int> = emptyMap()
+        overrides: Map<String, Int> = emptyMap(),
+        adjustment: SalaryDayAdjustment = SalaryDayAdjustment.EXACT
     ): LocalDate {
-        val raw = overrides[yearMonth.toString()] ?: defaultStartDay
-        return yearMonth.atDay(resolveStartDay(yearMonth, raw))
+        val raw = overrides[yearMonth.toString()]
+        return raw?.let { yearMonth.atDay(resolveStartDay(yearMonth, it)) }
+            ?: expectedPayday(yearMonth, defaultStartDay, adjustment)
     }
 
     /**
      * Returns the closed financial period [start, end] whose nominal label is [yearMonth],
-     * applying [overrides] for both this and the following month.
+     * applying [overrides] and the weekend [adjustment] for both this and the following month.
      */
     fun financialMonthRangeFor(
         yearMonth: YearMonth,
         defaultStartDay: Int,
-        overrides: Map<String, Int> = emptyMap()
+        overrides: Map<String, Int> = emptyMap(),
+        adjustment: SalaryDayAdjustment = SalaryDayAdjustment.EXACT
     ): Pair<LocalDate, LocalDate> {
-        val start = financialMonthStartFor(yearMonth, defaultStartDay, overrides)
+        val start = financialMonthStartFor(yearMonth, defaultStartDay, overrides, adjustment)
         val next = yearMonth.plusMonths(1)
-        val end = financialMonthStartFor(next, defaultStartDay, overrides).minusDays(1)
+        val end = financialMonthStartFor(next, defaultStartDay, overrides, adjustment).minusDays(1)
         return start to end
     }
 
@@ -144,13 +201,14 @@ object DateRangeUtils {
         startDay: Int,
         useFixedEndDay: Boolean,
         fixedEndDayOfMonth: Int,
-        overrides: Map<String, Int> = emptyMap()
+        overrides: Map<String, Int> = emptyMap(),
+        adjustment: SalaryDayAdjustment = SalaryDayAdjustment.EXACT
     ): Pair<LocalDate, LocalDate> {
         if (!useFixedEndDay) {
             return if (overrides.isEmpty()) {
-                calculateFinancialMonthRange(today, startDay)
+                calculateFinancialMonthRange(today, startDay, adjustment)
             } else {
-                calculateFinancialMonthRangeWithOverrides(today, startDay, overrides)
+                calculateFinancialMonthRangeWithOverrides(today, startDay, overrides, adjustment)
             }
         }
         return findContainingCustomDomPeriod(today, startDay, fixedEndDayOfMonth)

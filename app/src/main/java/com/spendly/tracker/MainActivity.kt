@@ -20,6 +20,8 @@ class MainActivity : FragmentActivity() {
         const val EXTRA_OPEN_TRANSACTIONS = "com.spendly.tracker.OPEN_TRANSACTIONS"
         const val EXTRA_OPEN_SUBSCRIPTIONS = "com.spendly.tracker.OPEN_SUBSCRIPTIONS"
         const val EXTRA_OPEN_BUDGETS = "com.spendly.tracker.OPEN_BUDGETS"
+        const val EXTRA_OPEN_SAVINGS = "com.spendly.tracker.OPEN_SAVINGS"
+        const val EXTRA_EDIT_SAVINGS_GOAL = "com.spendly.tracker.EDIT_SAVINGS_GOAL"
     }
 
     // Transaction ID to edit when launched from notification
@@ -42,6 +44,14 @@ class MainActivity : FragmentActivity() {
     var openBudgets by mutableStateOf(false)
         private set
 
+    // Flag to navigate directly to the Savings page when launched from a goal reminder
+    var openSavings by mutableStateOf(false)
+        private set
+
+    // Flag to open the goal editor as soon as the Savings page is shown
+    var editSavingsGoal by mutableStateOf(false)
+        private set
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Install splash screen before super.onCreate()
         installSplashScreen()
@@ -59,11 +69,15 @@ class MainActivity : FragmentActivity() {
                 openTransactions = openTransactions,
                 openSubscriptions = openSubscriptions,
                 openBudgets = openBudgets,
+                openSavings = openSavings,
+                editSavingsGoal = editSavingsGoal,
                 onEditComplete = { editTransactionId = null },
                 onAddTransactionShortcutHandled = { openAddTransaction = false },
                 onOpenTransactionsHandled = { openTransactions = false },
                 onOpenSubscriptionsHandled = { openSubscriptions = false },
-                onOpenBudgetsHandled = { openBudgets = false }
+                onOpenBudgetsHandled = { openBudgets = false },
+                onOpenSavingsHandled = { openSavings = false },
+                onEditSavingsGoalHandled = { editSavingsGoal = false }
             )
         }
     }
@@ -92,6 +106,12 @@ class MainActivity : FragmentActivity() {
         }
         if (intent?.getBooleanExtra(EXTRA_OPEN_BUDGETS, false) == true) {
             openBudgets = true
+        }
+        if (intent?.getBooleanExtra(EXTRA_OPEN_SAVINGS, false) == true) {
+            openSavings = true
+        }
+        if (intent?.getBooleanExtra(EXTRA_EDIT_SAVINGS_GOAL, false) == true) {
+            editSavingsGoal = true
         }
     }
 }

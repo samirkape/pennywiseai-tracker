@@ -24,6 +24,9 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import com.spendly.tracker.ui.effects.overScrollVertical
 import com.spendly.tracker.ui.effects.rememberOverscrollFlingBehavior
+import com.spendly.tracker.ui.effects.rememberReducedMotion
+import com.spendly.tracker.ui.effects.staggeredIntro
+import com.spendly.tracker.ui.sharedElementIfAvailable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.sp
@@ -60,6 +63,8 @@ import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.components.cards.SectionLinkAction
 import com.spendly.tracker.ui.components.*
 import com.spendly.tracker.ui.icons.CategoryMapping
+import com.spendly.tracker.ui.screens.savings.SavingsRatePreviewCard
+import com.spendly.tracker.ui.screens.savings.SavingsViewModel
 import com.spendly.tracker.ui.theme.*
 import com.spendly.tracker.ui.utils.LocalWindowSizeInfo
 import com.spendly.tracker.utils.CurrencyFormatter
@@ -104,6 +109,7 @@ fun AnalyticsScreen(
     onNavigateToBreakdown: (tileKey: String) -> Unit = {},
     onNavigateToInsights: () -> Unit = {},
     onNavigateToCreditCardAnalytics: (startEpoch: Long, endEpoch: Long, currency: String) -> Unit = { _, _, _ -> },
+    onNavigateToSavings: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val selectedPeriod by viewModel.selectedPeriod.collectAsStateWithLifecycle()
@@ -116,13 +122,15 @@ fun AnalyticsScreen(
     val chartType by viewModel.selectedChartType.collectAsStateWithLifecycle()
     val categoryFilter by viewModel.categoryFilter.collectAsStateWithLifecycle()
     val compactAnalyticsCards by viewModel.compactAnalyticsCards.collectAsStateWithLifecycle()
-    val savingsRate by viewModel.savingsRate.collectAsStateWithLifecycle()
-    val savingsCustomMonths by viewModel.savingsCustomMonths.collectAsStateWithLifecycle()
+    // The full savings experience lives on its own page; this only feeds the compact preview.
+    val savingsViewModel: SavingsViewModel = hiltViewModel()
+    val savingsRate by savingsViewModel.savingsRate.collectAsStateWithLifecycle()
+    val savingsProjection by savingsViewModel.savingsProjection.collectAsStateWithLifecycle()
     // Use rememberSaveable to preserve UI state across navigation
     var showDateRangePicker by rememberSaveable { mutableStateOf(false) }
     var showChartTypeSelector by remember { mutableStateOf(false) }
-    var showCategoryPie by rememberSaveable { mutableStateOf(false) }
-    var selectedOverviewTab by rememberSaveable { mutableStateOf(AnalyticsOverviewTab.OUTFLOW) }
+    var showCategoryPie by rememberSaveable { mutableStateOf(true) }
+    var selectedOverviewTab by rememberSaveable { mutableStateOf(AnalyticsOverviewTab.SPENDING) }
 
     val tabs = AnalyticsOverviewTab.entries
     val pagerState = rememberPagerState(
@@ -193,16 +201,6 @@ fun AnalyticsScreen(
             paymentMode,
             bankName,
             accountLast4,
-        )
-    }
-
-    fun drillDownMultiCategory(encodedCategories: String) {
-        onNavigateToTransactionsMultiCategory(
-            encodedCategories,
-            TimePeriod.CUSTOM.name,
-            selectedCurrency,
-            drillDownPeriodEpochs.first,
-            drillDownPeriodEpochs.second,
         )
     }
 
@@ -431,21 +429,10 @@ fun AnalyticsScreen(
                     SectionHeaderV2(
                         title = "Spending by category",
                         action = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                CategoryViewToggle(
-                                    showPie = showCategoryPie,
-                                    onShowPieChange = { showCategoryPie = it },
-                                )
-                                SectionLinkAction(
-                                    text = "View all",
-                                    onClick = {
-                                        val categories = uiState.categoryBreakdown
-                                            .map { it.name }
-                                            .joinToString("|")
-                                        drillDownMultiCategory(categories)
-                                    },
-                                )
-                            }
+                            CategoryViewToggle(
+                                showPie = showCategoryPie,
+                                onShowPieChange = { showCategoryPie = it },
+                            )
                         },
                     )
                     if (showCategoryPie) {
@@ -514,16 +501,16 @@ fun AnalyticsScreen(
 
         item {
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                SectionHeaderV2(title = "Savings rate")
-                SavingsRateCard(
+                SectionHeaderV2(
+                    title = "Savings",
+                    action = {
+                        SectionLinkAction(text = "Open", onClick = onNavigateToSavings)
+                    },
+                )
+                SavingsRatePreviewCard(
                     summary = savingsRate,
-                    isAppliedToPage = selectedPeriod == TimePeriod.CUSTOM &&
-                        savingsRate.range != null &&
-                        savingsRate.range == uiState.dateRange,
-                    onWindowSelected = viewModel::applySavingsWindow,
-                    customMonths = savingsCustomMonths,
-                    onCustomMonthsChanged = viewModel::saveSavingsCustomMonths,
-                    onRangeSelected = viewModel::applySavingsRange,
+                    projection = savingsProjection,
+                    onClick = onNavigateToSavings,
                 )
             }
         }
@@ -708,6 +695,7 @@ private fun AnalyticsTopMerchantsCard(
     modifier: Modifier = Modifier,
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
+    val reducedMotion = rememberReducedMotion()
     val sorted = remember(merchants) { merchants.sortedByDescending { it.amount } }
     val visible = if (expanded) sorted else sorted.take(3)
     val hiddenCount = (sorted.size - visible.size).coerceAtLeast(0)
@@ -722,6 +710,7 @@ private fun AnalyticsTopMerchantsCard(
             visible.forEachIndexed { index, merchant ->
                 Row(
                     modifier = Modifier
+                        .staggeredIntro(index = index, enabled = !reducedMotion)
                         .fillMaxWidth()
                         .clickable { onMerchantClick(merchant) }
                         .padding(horizontal = Spacing.sm, vertical = Spacing.sm),
@@ -732,6 +721,9 @@ private fun AnalyticsTopMerchantsCard(
                         merchantName = merchant.name,
                         size = 38.dp,
                         showBackground = true,
+                        modifier = Modifier.sharedElementIfAvailable(
+                            key = "merchant_icon_${merchant.name}"
+                        ),
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(

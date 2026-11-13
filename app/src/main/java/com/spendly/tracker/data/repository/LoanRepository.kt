@@ -34,15 +34,16 @@ class LoanRepository @Inject constructor(
     fun getTransactionsForLoan(loanId: Long): Flow<List<TransactionEntity>> =
         loanDao.getTransactionsForLoan(loanId)
 
-    fun getRecentUnlinkedRepayments(direction: LoanDirection, limit: Int = 500): Flow<List<TransactionEntity>> {
+    /** Repayment candidates: money coming in (lent) / going out (borrowed). Linked ones can be moved here. */
+    fun getRecentRepaymentCandidates(direction: LoanDirection, limit: Int = 500): Flow<List<TransactionEntity>> {
         val repaymentType = if (direction == LoanDirection.LENT) "INCOME" else "EXPENSE"
-        return loanDao.getRecentUnlinkedTransactionsByType(repaymentType, limit)
+        return loanDao.getRecentTransactionsByType(repaymentType, limit)
     }
 
     /** Unlinked transactions that would increase the loan (money lent out / borrowed in). */
-    fun getRecentUnlinkedAdditions(direction: LoanDirection, limit: Int = 500): Flow<List<TransactionEntity>> {
+    fun getRecentAdditionCandidates(direction: LoanDirection, limit: Int = 500): Flow<List<TransactionEntity>> {
         val additionType = if (direction == LoanDirection.LENT) "EXPENSE" else "INCOME"
-        return loanDao.getRecentUnlinkedTransactionsByType(additionType, limit)
+        return loanDao.getRecentTransactionsByType(additionType, limit)
     }
 
     fun getUnlinkedLoanCategoryTransactions(): Flow<List<TransactionEntity>> =
@@ -118,7 +119,12 @@ class LoanRepository @Inject constructor(
         val first = txs.first()
         val direction = directionOverride ?: inferDirection(txs)
 
-        val loanId = loanDao.getActiveLoanByPersonAndDirection(personName, direction.name)?.id
+        // Reuse the person's loan for this direction — active first, then the most recent settled
+        // one. Recalculation below re-activates a settled loan when the import leaves a balance,
+        // instead of silently creating a duplicate loan for the same person.
+        val existingLoan = loanDao.getActiveLoanByPersonAndDirection(personName, direction.name)
+            ?: loanDao.getMostRecentLoanByPersonAndDirection(personName, direction.name)
+        val loanId = existingLoan?.id
             ?: loanDao.insertLoan(
                 LoanEntity(
                     personName = personName,
@@ -163,8 +169,13 @@ class LoanRepository @Inject constructor(
     private fun personKey(tx: TransactionEntity) = tx.merchantName.trim().lowercase()
 
     suspend fun recordRepayment(loanId: Long, transactionId: Long) {
+        val previousLoanId = transactionDao.getTransactionById(transactionId)?.loanId
         loanDao.linkTransaction(transactionId, loanId)
         recalculateRemaining(loanId)
+        // The transaction may have been moved from another loan — keep that loan consistent too.
+        if (previousLoanId != null && previousLoanId != loanId) {
+            recalculateRemaining(previousLoanId)
+        }
     }
 
     suspend fun recordManualRepayment(
@@ -249,10 +260,12 @@ class LoanRepository @Inject constructor(
         val loan = loanDao.getLoanById(loanId) ?: return
         val repaymentType = if (loan.direction == LoanDirection.LENT) "INCOME" else "EXPENSE"
         val totalRepaid = loanDao.getTotalRepaidByType(loanId, repaymentType)
-        val remaining = (loan.originalAmount - totalRepaid).coerceAtLeast(BigDecimal.ZERO)
+        val effectiveOriginalAmount = loan.originalAmount.coerceAtLeast(totalRepaid)
+        val remaining = (effectiveOriginalAmount - totalRepaid).coerceAtLeast(BigDecimal.ZERO)
         loanDao.updateLoan(
             loan.copy(
                 status = LoanStatus.ACTIVE,
+                originalAmount = effectiveOriginalAmount,
                 remainingAmount = remaining,
                 settledAt = null,
                 updatedAt = LocalDateTime.now()
@@ -292,7 +305,15 @@ class LoanRepository @Inject constructor(
             .filter { it.transactionType == repaymentType }
             .fold(BigDecimal.ZERO) { acc, transaction -> acc + transaction.amount }
 
-        val effectiveOriginalAmount = if (originalTotal > BigDecimal.ZERO) originalTotal else loan.originalAmount
+        // Principal comes from the linked "original" transactions; the stored amount is only a
+        // fallback (manual entry, or no principal transaction linked). It must never drop below
+        // what has already been repaid — otherwise a loan with only repayments linked collapses
+        // into the incoherent "Fully settled of ₹0" state.
+        val effectiveOriginalAmount = when {
+            originalTotal > BigDecimal.ZERO -> originalTotal
+            totalRepaid > loan.originalAmount -> totalRepaid
+            else -> loan.originalAmount
+        }
         val remaining = (effectiveOriginalAmount - totalRepaid).coerceAtLeast(BigDecimal.ZERO)
         val newStatus = if (remaining <= BigDecimal.ZERO) LoanStatus.SETTLED else LoanStatus.ACTIVE
 

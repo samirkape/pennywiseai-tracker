@@ -1,9 +1,11 @@
 package com.spendly.tracker.presentation.goals
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -27,6 +29,7 @@ import com.spendly.tracker.data.database.entity.GoalContributionEntity
 import com.spendly.tracker.data.database.entity.GoalStatus
 import com.spendly.tracker.domain.model.GoalProgress
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
+import com.spendly.tracker.ui.sharedElementIfAvailable
 import com.spendly.tracker.ui.theme.*
 import com.spendly.tracker.utils.CurrencyFormatter
 import dev.chrisbanes.haze.HazeState
@@ -212,26 +215,46 @@ private fun GoalProgressCard(progress: GoalProgress) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         Column(modifier = Modifier.padding(Dimensions.Padding.content)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = CurrencyFormatter.formatCurrency(goal.currentAmount, goal.currency),
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "Target",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Destination anchor of the shared element started by the
+                // goal card icon in the goals list.
+                Box(
+                    modifier = Modifier
+                        .sharedElementIfAvailable(key = "goal_icon_${goal.id}")
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(parseGoalColor(goal.color).copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = goal.goalType.icon(),
+                        contentDescription = null,
+                        modifier = Modifier.size(Dimensions.Icon.medium),
+                        tint = parseGoalColor(goal.color)
                     )
+                }
+                Spacer(modifier = Modifier.width(Spacing.md))
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
                     Text(
-                        text = CurrencyFormatter.formatCurrency(goal.targetAmount, goal.currency),
-                        style = MaterialTheme.typography.titleMedium,
+                        text = CurrencyFormatter.formatCurrency(goal.currentAmount, goal.currency),
+                        style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "Target",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = CurrencyFormatter.formatCurrency(goal.targetAmount, goal.currency),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(Spacing.sm))

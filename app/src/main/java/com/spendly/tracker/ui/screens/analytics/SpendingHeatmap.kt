@@ -1,5 +1,7 @@
 package com.spendly.tracker.ui.screens.analytics
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -14,9 +16,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.spendly.tracker.ui.components.BalancePoint
+import com.spendly.tracker.ui.effects.rememberReducedMotion
+import com.spendly.tracker.ui.theme.Dimensions
+import kotlinx.coroutines.delay
 import java.time.DayOfWeek
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -78,6 +84,9 @@ fun SpendingHeatmap(
 
     val scrollState = rememberScrollState()
 
+    // Reveal: week columns fade in left→right when data changes, capped so long
+    // ranges don't drag. Skipped entirely when system animations are disabled.
+    val reducedMotion = rememberReducedMotion()
     val dayLabels = listOf("M", "T", "W", "T", "F", "S", "S")
     val gapSize = 4.dp
     val dayLabelColumnWidth = 24.dp
@@ -137,7 +146,23 @@ fun SpendingHeatmap(
                         }
                     ) {
                         for (w in 0 until totalWeeks) {
-                            Column(verticalArrangement = Arrangement.spacedBy(gapSize)) {
+                            // Per-column intro: short stagger, capped beyond 12 columns.
+                            val columnIntro = remember(data) { Animatable(if (reducedMotion) 1f else 0f) }
+                            LaunchedEffect(data) {
+                                if (reducedMotion) return@LaunchedEffect
+                                delay(w.coerceAtMost(12) * 30L)
+                                columnIntro.animateTo(
+                                    1f,
+                                    tween(
+                                        durationMillis = Dimensions.Animation.standard,
+                                        easing = Dimensions.Easing.decelerate,
+                                    ),
+                                )
+                            }
+                            Column(
+                                modifier = Modifier.graphicsLayer { alpha = columnIntro.value },
+                                verticalArrangement = Arrangement.spacedBy(gapSize),
+                            ) {
                                 for (d in 0 until 7) {
                                     val date = startDate.plusWeeks(w.toLong()).plusDays(d.toLong())
                                     val amount = groupedData[date] ?: 0.0

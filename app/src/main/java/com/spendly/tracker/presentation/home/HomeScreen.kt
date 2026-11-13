@@ -1,12 +1,18 @@
 package com.spendly.tracker.presentation.home
 
+import com.spendly.tracker.ui.theme.Dimensions
 import android.view.HapticFeedbackConstants
 import androidx.activity.ComponentActivity
 import androidx.work.WorkInfo
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -86,9 +92,12 @@ import com.spendly.tracker.ui.components.profileFilterIcon
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
 import com.spendly.tracker.ui.effects.overScrollVertical
 import com.spendly.tracker.ui.effects.rememberOverscrollFlingBehavior
+import com.spendly.tracker.ui.effects.rememberReducedMotion
+import com.spendly.tracker.ui.effects.staggeredIntro
 import com.spendly.tracker.ui.theme.*
 import com.spendly.tracker.ui.utils.LocalWindowSizeInfo
 import com.spendly.tracker.utils.CurrencyFormatter
+import com.spendly.tracker.utils.DateRangeUtils
 import dev.chrisbanes.haze.HazeDefaults
 import dev.chrisbanes.haze.HazeEffectScope
 import dev.chrisbanes.haze.HazeState
@@ -238,6 +247,21 @@ fun HomeScreen(
         }
     }
     
+    // Confirm + undo snackbar after accepting a pay-period suggestion
+    LaunchedEffect(uiState.payPeriodUpdateInfo) {
+        val info = uiState.payPeriodUpdateInfo ?: return@LaunchedEffect
+        viewModel.consumePayPeriodUpdateInfo()
+        val rangeText = DateRangeUtils.formatDateRange(info.newRange.first, info.newRange.second)
+        val result = snackbarHostState.showSnackbar(
+            message = context.getString(R.string.pay_period_update_snackbar, rangeText),
+            actionLabel = context.getString(R.string.txn_bulk_undo_action),
+            duration = SnackbarDuration.Long
+        )
+        if (result == SnackbarResult.ActionPerformed) {
+            viewModel.undoPayPeriodOverride()
+        }
+    }
+
     // Clear snackbar when navigating away
     DisposableEffect(Unit) {
         onDispose {
@@ -334,9 +358,9 @@ fun HomeScreen(
                 }
                 AnimatedVisibility(
                     visible = visible.value,
-                    enter = fadeIn(tween(300)) + slideInVertically(
+                    enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                         initialOffsetY = { slideOffsetPx },
-                        animationSpec = tween(300)
+                        animationSpec = tween(Dimensions.Animation.standard)
                     )
                 ) {
                     Column(
@@ -436,9 +460,9 @@ fun HomeScreen(
                     }
                     AnimatedVisibility(
                         visible = visible.value,
-                        enter = fadeIn(tween(300)) + slideInVertically(
+                        enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                             initialOffsetY = { slideOffsetPx },
-                            animationSpec = tween(300)
+                            animationSpec = tween(Dimensions.Animation.standard)
                         )
                     ) {
                         SmartInsightsCard(
@@ -491,9 +515,9 @@ fun HomeScreen(
                 }
                 AnimatedVisibility(
                     visible = visible.value,
-                    enter = fadeIn(tween(300)) + slideInVertically(
+                    enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                         initialOffsetY = { slideOffsetPx },
-                        animationSpec = tween(300)
+                        animationSpec = tween(Dimensions.Animation.standard)
                     )
                 ) {
                     HomeFeedDateNavigator(
@@ -517,9 +541,9 @@ fun HomeScreen(
                     }
                     AnimatedVisibility(
                         visible = visible.value,
-                        enter = fadeIn(tween(300)) + slideInVertically(
+                        enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                             initialOffsetY = { slideOffsetPx },
-                            animationSpec = tween(300)
+                            animationSpec = tween(Dimensions.Animation.standard)
                         )
                     ) {
                         Column(
@@ -540,9 +564,9 @@ fun HomeScreen(
                     }
                     AnimatedVisibility(
                         visible = visible.value,
-                        enter = fadeIn(tween(300)) + slideInVertically(
+                        enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                             initialOffsetY = { slideOffsetPx },
-                            animationSpec = tween(300)
+                            animationSpec = tween(Dimensions.Animation.standard)
                         )
                     ) {
                         SpendlyEmptyState(
@@ -572,52 +596,60 @@ fun HomeScreen(
                     }
                     AnimatedVisibility(
                         visible = visible.value,
-                        enter = fadeIn(tween(300)) + slideInVertically(
+                        enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                             initialOffsetY = { slideOffsetPx },
-                            animationSpec = tween(300)
+                            animationSpec = tween(Dimensions.Animation.standard)
                         )
                     ) {
                         val profileAccountKeys = remember(uiState.accountBalances) {
                             buildProfileAccountKeys(uiState.accountBalances)
                         }
+                        val reducedMotion = rememberReducedMotion()
                         // Grouped feed card — all transactions in a single card with dividers
                         com.spendly.tracker.ui.components.cards.SpendlyCardV2(
                             modifier = Modifier.padding(horizontal = Dimensions.Padding.content),
                             contentPadding = 0.dp
                         ) {
                             uiState.recentItems.forEachIndexed { index, item ->
-                                when (item) {
-                                    is HomeRecentItem.SingleTransaction -> TransactionItem(
-                                        transaction = item.transaction,
-                                        convertedAmount = item.convertedAmount,
-                                        displayCurrency = if (uiState.isUnifiedMode) {
-                                            uiState.selectedCurrency
-                                        } else {
-                                            null
-                                        },
-                                        profileAccountKeys = profileAccountKeys,
-                                        flat = true,
-                                        categoryForIconFallback = item.transaction.category,
-                                        categoryIconKey = item.categoryIconKey,
-                                        onClick = { onTransactionClick(item.transaction.id) },
-                                        onExcludeToggle = {
-                                            viewModel.toggleExcludedFromTracking(item.transaction)
-                                        },
-                                        onDelete = { viewModel.deleteTransaction(item.transaction) },
+                                Box(
+                                    modifier = Modifier.staggeredIntro(
+                                        index = index,
+                                        enabled = !reducedMotion,
                                     )
-                                    is HomeRecentItem.GroupItem -> GroupCard(
-                                        group = item.group,
-                                        transactions = item.transactions,
-                                        convertedAmounts = item.convertedAmounts,
-                                        displayCurrency = if (uiState.isUnifiedMode) {
-                                            uiState.selectedCurrency
-                                        } else {
-                                            null
-                                        },
-                                        flat = true,
-                                        useCategoryIconFallback = true,
-                                        onClick = { onGroupClick(item.group.id) },
-                                    )
+                                ) {
+                                    when (item) {
+                                        is HomeRecentItem.SingleTransaction -> TransactionItem(
+                                            transaction = item.transaction,
+                                            convertedAmount = item.convertedAmount,
+                                            displayCurrency = if (uiState.isUnifiedMode) {
+                                                uiState.selectedCurrency
+                                            } else {
+                                                null
+                                            },
+                                            profileAccountKeys = profileAccountKeys,
+                                            flat = true,
+                                            categoryForIconFallback = item.transaction.category,
+                                            categoryIconKey = item.categoryIconKey,
+                                            onClick = { onTransactionClick(item.transaction.id) },
+                                            onExcludeToggle = {
+                                                viewModel.toggleExcludedFromTracking(item.transaction)
+                                            },
+                                            onDelete = { viewModel.deleteTransaction(item.transaction) },
+                                        )
+                                        is HomeRecentItem.GroupItem -> GroupCard(
+                                            group = item.group,
+                                            transactions = item.transactions,
+                                            convertedAmounts = item.convertedAmounts,
+                                            displayCurrency = if (uiState.isUnifiedMode) {
+                                                uiState.selectedCurrency
+                                            } else {
+                                                null
+                                            },
+                                            flat = true,
+                                            useCategoryIconFallback = true,
+                                            onClick = { onGroupClick(item.group.id) },
+                                        )
+                                    }
                                 }
                                 if (index < uiState.recentItems.size - 1) {
                                     HorizontalDivider(
@@ -641,6 +673,18 @@ fun HomeScreen(
 
 
 
+        // FAB press feedback: scale down while pressed (design.md § Motion & Animation).
+        val fabInteractionSource = remember { MutableInteractionSource() }
+        val fabPressed by fabInteractionSource.collectIsPressedAsState()
+        val fabScale by animateFloatAsState(
+            targetValue = if (fabPressed) 0.92f else 1f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessMedium,
+            ),
+            label = "fabScale",
+        )
+
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -650,9 +694,13 @@ fun HomeScreen(
                     // (bottom bar and/or ad banner, or nothing when the rail is shown).
                     bottom = bottomInset + Dimensions.Padding.content,
                 )
+                .graphicsLayer {
+                    scaleX = fabScale
+                    scaleY = fabScale
+                }
                 .combinedClickable(
                     role = Role.Button,
-                    interactionSource = remember { MutableInteractionSource() },
+                    interactionSource = fabInteractionSource,
                     indication = null,
                     onClick = {
                         view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
@@ -1312,6 +1360,7 @@ private fun HomeFeedDateNavigator(
         var net = BigDecimal.ZERO
         fun apply(tx: com.spendly.tracker.data.database.entity.TransactionEntity, amount: BigDecimal) {
             if (tx.isExcludedFromTracking) return
+            if (tx.loanId != null) return // Loan rows are not real income/expense
             when (tx.transactionType) {
                 TransactionType.EXPENSE,
                 TransactionType.CREDIT -> net += amount

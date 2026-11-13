@@ -7,6 +7,7 @@ import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.database.entity.TransactionType
 import com.spendly.tracker.data.preferences.UserPreferencesRepository
 import com.spendly.tracker.data.repository.SalaryMonthOverrideRepository
+import com.spendly.tracker.utils.DateRangeUtils
 import com.spendly.tracker.data.repository.TransactionRepository
 import com.spendly.tracker.presentation.common.TimePeriod
 import com.spendly.tracker.presentation.common.defaultTimePeriod
@@ -161,8 +162,16 @@ class BehavioralStatsViewModel @Inject constructor(
             userPreferencesRepository.useFixedBudgetPeriodEnd,
             userPreferencesRepository.budgetPeriodEndDay,
             salaryMonthOverrideRepository.overridesMap,
-        ) { monthStartDay, useFinancialMonth, useFixedEnd, endDom, overrides ->
-            listOf(monthStartDay, useFinancialMonth, useFixedEnd, endDom, overrides)
+            userPreferencesRepository.salaryDayAdjustment,
+        ) { args ->
+            listOf(
+                args[0],
+                args[1],
+                args[2],
+                args[3],
+                args[4],
+                args[5] as DateRangeUtils.SalaryDayAdjustment
+            )
         },
     ) { periodPack, prefsPack ->
         val period = periodPack.first
@@ -176,6 +185,7 @@ class BehavioralStatsViewModel @Inject constructor(
             prefs[2],
             prefs[3],
             prefs[4],
+            prefs[5],
         )
     }
         .flatMapLatest { args ->
@@ -186,6 +196,7 @@ class BehavioralStatsViewModel @Inject constructor(
             val endDom = args[5] as Int
             @Suppress("UNCHECKED_CAST")
             val overrides = args[6] as Map<String, Int>
+            val adjustment = args[7] as DateRangeUtils.SalaryDayAdjustment
             val dateRange = resolveDateRange(
                 period = period,
                 monthStartDay = monthStartDay,
@@ -193,6 +204,7 @@ class BehavioralStatsViewModel @Inject constructor(
                 monthStartOverrides = overrides,
                 useFixedEnd = useFixedEnd,
                 endDom = endDom,
+                salaryDayAdjustment = adjustment,
             )
                 ?: getDateRangeForPeriod(
                     defaultTimePeriod(useFinancialMonth),
@@ -201,6 +213,7 @@ class BehavioralStatsViewModel @Inject constructor(
                     overrides,
                     useFixedEnd,
                     endDom,
+                    adjustment,
                 )!!
 
             val forecastPeriodEnd = resolveForecastPeriodEnd(
@@ -212,6 +225,7 @@ class BehavioralStatsViewModel @Inject constructor(
                 monthStartOverrides = overrides,
                 useFixedEnd = useFixedEnd,
                 endDom = endDom,
+                salaryDayAdjustment = adjustment,
             )
 
             transactionRepository.getNetTransactionsBetweenDates(
@@ -291,6 +305,8 @@ class BehavioralStatsViewModel @Inject constructor(
         monthStartOverrides: Map<String, Int>,
         useFixedEnd: Boolean,
         endDom: Int,
+        salaryDayAdjustment: DateRangeUtils.SalaryDayAdjustment =
+            DateRangeUtils.SalaryDayAdjustment.EXACT,
     ): Pair<LocalDate, LocalDate>? {
         val anchorMonth = _periodAnchorMonthKey.value?.let { YearMonth.parse(it) }
         val usesCalendar = resolveUsesCalendarMonthNavigation()
@@ -306,6 +322,7 @@ class BehavioralStatsViewModel @Inject constructor(
                 monthStartOverrides = monthStartOverrides,
                 useFixedBudgetPeriodEnd = useFixedEnd,
                 budgetPeriodEndDay = endDom,
+                salaryDayAdjustment = salaryDayAdjustment,
             )
         }
 
@@ -316,6 +333,7 @@ class BehavioralStatsViewModel @Inject constructor(
             monthStartOverrides,
             useFixedEnd,
             endDom,
+            salaryDayAdjustment,
         )
     }
 
@@ -332,6 +350,8 @@ class BehavioralStatsViewModel @Inject constructor(
         monthStartOverrides: Map<String, Int>,
         useFixedEnd: Boolean,
         endDom: Int,
+        salaryDayAdjustment: DateRangeUtils.SalaryDayAdjustment =
+            DateRangeUtils.SalaryDayAdjustment.EXACT,
     ): LocalDate {
         val anchorMonth = _periodAnchorMonthKey.value?.let { YearMonth.parse(it) }
         return when (period) {
@@ -349,6 +369,7 @@ class BehavioralStatsViewModel @Inject constructor(
                             monthStartOverrides = monthStartOverrides,
                             useFixedBudgetPeriodEnd = useFixedEnd,
                             budgetPeriodEndDay = endDom,
+                            salaryDayAdjustment = salaryDayAdjustment,
                         ).second
                     } else {
                         getDateRangeForPeriod(
@@ -358,6 +379,7 @@ class BehavioralStatsViewModel @Inject constructor(
                             monthStartOverrides,
                             useFixedEnd,
                             endDom,
+                            salaryDayAdjustment,
                         )!!.second
                     }
                 } else {

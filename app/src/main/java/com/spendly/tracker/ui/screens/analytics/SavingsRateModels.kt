@@ -7,6 +7,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.temporal.ChronoUnit
 
 /** Month windows offered by the savings-rate card. */
 val SAVINGS_RATE_WINDOW_OPTIONS = listOf(3, 6, 12)
@@ -14,6 +15,11 @@ const val SAVINGS_RATE_DEFAULT_WINDOW = 6
 
 /** Upper bound on a date-picked window so the chart stays readable. */
 const val SAVINGS_RATE_MAX_RANGE_MONTHS = 60
+
+/** Horizons offered by the forward-looking projection. */
+val SAVINGS_PROJECTION_HORIZON_OPTIONS = listOf(3, 6, 12)
+const val SAVINGS_PROJECTION_DEFAULT_HORIZON = 3
+const val SAVINGS_PROJECTION_MAX_HORIZON = 24
 
 /**
  * A custom window picked by dates. [endMonth] null means "Now", so the window keeps growing
@@ -113,4 +119,144 @@ suspend fun computeMonthlySavingsRates(
             isCurrent = month == currentMonth,
         )
     }
+}
+
+/** One estimated month in the forward-looking projection. */
+data class ProjectedSavingsMonth(
+    val month: YearMonth,
+    val income: BigDecimal,
+    val spent: BigDecimal,
+    val isCurrent: Boolean,
+) {
+    val saved: BigDecimal get() = income - spent
+
+    /** Percent of income kept; null when the month has no projected income. */
+    val ratePercent: Float?
+        get() = if (income.signum() > 0) {
+            saved.divide(income, 4, RoundingMode.HALF_UP).toFloat() * 100f
+        } else {
+            null
+        }
+}
+
+/**
+ * Estimate of how much of the next [horizonMonths] months' income will be kept.
+ *
+ * The current month is paced: actual spend so far plus the historical daily rate for the
+ * remaining days. Future months use the average of completed months. The aggregate rate is
+ * total projected saved / total projected income, mirroring [SavingsRateSummary.averagePercent].
+ */
+data class SavingsProjection(
+    val months: List<ProjectedSavingsMonth> = emptyList(),
+    val horizonMonths: Int = SAVINGS_PROJECTION_DEFAULT_HORIZON,
+    val projectedIncome: BigDecimal = BigDecimal.ZERO,
+    val projectedSpent: BigDecimal = BigDecimal.ZERO,
+    val projectedSaved: BigDecimal = BigDecimal.ZERO,
+    val projectedPercent: Float? = null,
+    /** Completed months that supplied the baseline; 0 means the estimate leans on this month. */
+    val basisMonths: Int = 0,
+    val usesCurrentMonthPace: Boolean = false,
+) {
+    val hasData: Boolean get() = projectedPercent != null
+
+    /** First and last projected month, used for the "Oct – Dec" caption. */
+    val range: Pair<YearMonth, YearMonth>?
+        get() = if (months.isEmpty()) null else months.first().month to months.last().month
+}
+
+/**
+ * Projects the next [horizonMonths] months from [summary], including the current in-progress
+ * month when the window covers today.
+ *
+ * Returns null when there is no income to anchor the estimate or too little data to pace the
+ * current month. [today] is injectable so the math stays deterministic in tests.
+ */
+fun computeSavingsProjection(
+    summary: SavingsRateSummary,
+    horizonMonths: Int,
+    today: LocalDate = LocalDate.now(),
+): SavingsProjection? {
+    if (!summary.hasData) return null
+
+    val horizon = horizonMonths.coerceIn(1, SAVINGS_PROJECTION_MAX_HORIZON)
+    val currentBucket = summary.months.firstOrNull {
+        !today.isBefore(it.start) && !today.isAfter(it.end)
+    }
+    val completed = summary.months.filter { it.end.isBefore(today) && it.income.signum() > 0 }
+
+    val baselineIncome = if (completed.isNotEmpty()) {
+        completed.fold(BigDecimal.ZERO) { acc, m -> acc + m.income }
+            .divide(BigDecimal(completed.size), 4, RoundingMode.HALF_UP)
+    } else {
+        currentBucket?.income?.takeIf { it.signum() > 0 } ?: return null
+    }
+
+    var spendBaseline: BigDecimal? = if (completed.isNotEmpty()) {
+        completed.fold(BigDecimal.ZERO) { acc, m -> acc + m.spent }
+            .divide(BigDecimal(completed.size), 4, RoundingMode.HALF_UP)
+    } else {
+        null
+    }
+
+    val projected = mutableListOf<ProjectedSavingsMonth>()
+    var usesCurrentMonthPace = false
+
+    if (currentBucket != null) {
+        val totalDays = ChronoUnit.DAYS.between(currentBucket.start, currentBucket.end).toInt() + 1
+        val elapsedDays = (ChronoUnit.DAYS.between(currentBucket.start, today).toInt() + 1)
+            .coerceIn(1, totalDays)
+        val remainingDays = (totalDays - elapsedDays).coerceAtLeast(0)
+
+        if (spendBaseline == null) {
+            // No completed month to learn from: pace this month only once it has some signal.
+            if (elapsedDays < 3 || currentBucket.spent.signum() <= 0) return null
+            spendBaseline = currentBucket.spent
+                .divide(BigDecimal(elapsedDays), 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal(totalDays))
+        }
+
+        val baselineSpent = spendBaseline!!
+        val dailyBaseline = baselineSpent.divide(BigDecimal(totalDays), 4, RoundingMode.HALF_UP)
+        val projectedSpend = currentBucket.spent + dailyBaseline.multiply(BigDecimal(remainingDays))
+        val projectedIncome = currentBucket.income.takeIf { it.signum() > 0 } ?: baselineIncome
+
+        projected += ProjectedSavingsMonth(
+            month = YearMonth.from(today),
+            income = projectedIncome.setScale(2, RoundingMode.HALF_UP),
+            spent = projectedSpend.setScale(2, RoundingMode.HALF_UP),
+            isCurrent = true,
+        )
+        usesCurrentMonthPace = true
+    }
+
+    val firstFutureOffset = if (currentBucket != null) 1 else 0
+    val thisMonth = YearMonth.from(today)
+    for (offset in firstFutureOffset until horizon) {
+        projected += ProjectedSavingsMonth(
+            month = thisMonth.plusMonths(offset.toLong()),
+            income = baselineIncome.setScale(2, RoundingMode.HALF_UP),
+            spent = spendBaseline!!.setScale(2, RoundingMode.HALF_UP),
+            isCurrent = false,
+        )
+    }
+
+    val totalIncome = projected.fold(BigDecimal.ZERO) { acc, m -> acc + m.income }
+    val totalSpent = projected.fold(BigDecimal.ZERO) { acc, m -> acc + m.spent }
+    val totalSaved = totalIncome - totalSpent
+    val percent = if (totalIncome.signum() > 0) {
+        totalSaved.divide(totalIncome, 4, RoundingMode.HALF_UP).toFloat() * 100f
+    } else {
+        null
+    }
+
+    return SavingsProjection(
+        months = projected,
+        horizonMonths = horizon,
+        projectedIncome = totalIncome,
+        projectedSpent = totalSpent,
+        projectedSaved = totalSaved,
+        projectedPercent = percent,
+        basisMonths = completed.size,
+        usesCurrentMonthPace = usesCurrentMonthPace,
+    )
 }

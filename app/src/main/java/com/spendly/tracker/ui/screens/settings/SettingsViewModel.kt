@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import com.spendly.tracker.core.Constants.Links
+import com.spendly.tracker.data.contacts.ContactsResolver
 import com.spendly.tracker.data.repository.ModelRepository
 import com.spendly.tracker.data.repository.ModelState
 import com.spendly.tracker.data.repository.UnrecognizedSmsRepository
@@ -58,7 +59,8 @@ class SettingsViewModel @Inject constructor(
     private val autoBackupManager: AutoBackupManager,
     private val salaryMonthOverrideRepository: SalaryMonthOverrideRepository,
     private val smsScanManager: SmsScanManager,
-    private val premiumManager: PremiumManager
+    private val premiumManager: PremiumManager,
+    private val contactsResolver: ContactsResolver
 ) : ViewModel() {
     
     private val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
@@ -106,6 +108,9 @@ class SettingsViewModel @Inject constructor(
     val compactAnalyticsCardsEnabled = userPreferencesRepository.compactAnalyticsCardsEnabled
     val autoLinkRefundsEnabled = userPreferencesRepository.autoLinkRefundsEnabled
 
+    // Replace UPI VPAs with contact names (gated by READ_CONTACTS).
+    val useContactsForVpa = userPreferencesRepository.useContactsForVpa
+
     val availableCurrencies: StateFlow<List<String>> = transactionRepository.getAllCurrencies()
         .map { transactionCurrencies ->
             val supportedCurrencies = CurrencyUtils.getAllSupportedCurrencies()
@@ -152,6 +157,15 @@ class SettingsViewModel @Inject constructor(
     fun updateBudgetPeriodEndDay(day: Int) {
         viewModelScope.launch {
             userPreferencesRepository.updateBudgetPeriodEndDay(day)
+        }
+    }
+
+    // Weekend payday convention (prepone/postpone/exact) for the salary day
+    val salaryDayAdjustment = userPreferencesRepository.salaryDayAdjustment
+
+    fun setSalaryDayAdjustment(adjustment: DateRangeUtils.SalaryDayAdjustment) {
+        viewModelScope.launch {
+            userPreferencesRepository.updateSalaryDayAdjustment(adjustment)
         }
     }
 
@@ -529,6 +543,20 @@ class SettingsViewModel @Inject constructor(
     fun setAutoLinkRefundsEnabled(enabled: Boolean) {
         viewModelScope.launch {
             userPreferencesRepository.setAutoLinkRefundsEnabled(enabled)
+        }
+    }
+
+    /**
+     * Flip the UPI-contact-resolution preference. The screen is responsible
+     * for ensuring READ_CONTACTS is granted before passing `true` — this
+     * just persists. Toggling either direction wipes the resolver cache so
+     * stale results don't leak across the flag flip (and so a re-enable
+     * after permission grant picks up the user's contacts immediately).
+     */
+    fun setUseContactsForVpa(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setUseContactsForVpa(enabled)
+            contactsResolver.clearCache()
         }
     }
 

@@ -16,6 +16,7 @@ import com.spendly.tracker.data.database.entity.TransactionType
 import com.spendly.tracker.data.database.entity.TransactionWithSplits
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -715,12 +716,28 @@ class TransactionRepository @Inject constructor(
     ): List<TransactionEntity> =
         transactionDao.getTransactionsBetweenDatesList(startDate, endDate)
 
-    suspend fun getUncategorizedTransactions(): List<TransactionEntity> {
-        // Get all transactions without a category or with "Others" category
-        return getAllTransactionsList().filter { transaction ->
-            transaction.category.isNullOrBlank() || transaction.category == "Others"
+    suspend fun getUncategorizedTransactions(
+        from: LocalDate? = null,
+        untilExclusive: LocalDate? = null,
+    ): List<TransactionEntity> {
+        val transactions = if (from == null && untilExclusive == null) {
+            getAllTransactionsList()
+        } else {
+            val start = (from ?: LocalDate.of(1970, 1, 1)).atStartOfDay()
+            val end = (untilExclusive ?: LocalDate.now().plusYears(10))
+                .atStartOfDay()
+                .minusSeconds(1)
+            transactionDao.getTransactionsBetweenDatesList(start, end)
+        }
+        // "Others" is the parser's default bucket, so treat it as uncategorized.
+        return transactions.filter { transaction ->
+            transaction.category.isBlank() ||
+                transaction.category.equals("Others", ignoreCase = true)
         }
     }
+
+    suspend fun getUncategorizedTransactionCount(): Int =
+        transactionDao.getUncategorizedTransactionCount().first()
 
     fun getUncategorizedTransactionSummary(): Flow<UncategorizedTransactionSummary> =
         combine(

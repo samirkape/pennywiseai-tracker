@@ -116,9 +116,9 @@ fun UnrecognizedSmsScreen(
                 }
                 AnimatedVisibility(
                     visible = visible.value,
-                    enter = fadeIn(tween(300)) + slideInVertically(
+                    enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                         initialOffsetY = { slideOffsetPx },
-                        animationSpec = tween(300)
+                        animationSpec = tween(Dimensions.Animation.standard)
                     )
                 ) {
                     SpendlyCardV2(
@@ -220,9 +220,9 @@ fun UnrecognizedSmsScreen(
                     }
                     AnimatedVisibility(
                         visible = visible.value,
-                        enter = fadeIn(tween(300)) + slideInVertically(
+                        enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                             initialOffsetY = { slideOffsetPx },
-                            animationSpec = tween(300)
+                            animationSpec = tween(Dimensions.Animation.standard)
                         )
                     ) {
                         UnrecognizedSmsItem(

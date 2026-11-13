@@ -1,5 +1,6 @@
 package com.spendly.tracker.presentation.transactions
 
+import com.spendly.tracker.ui.theme.Dimensions
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -42,19 +43,19 @@ fun TransactionTotalsCard(
 ) {
     val incomeAlpha by animateFloatAsState(
         targetValue = if (isLoading) 0.5f else 1f,
-        animationSpec = tween(300),
+        animationSpec = tween(Dimensions.Animation.standard),
         label = "income_alpha"
     )
 
     val expenseAlpha by animateFloatAsState(
         targetValue = if (isLoading) 0.5f else 1f,
-        animationSpec = tween(300),
+        animationSpec = tween(Dimensions.Animation.standard),
         label = "expense_alpha"
     )
 
     val netAlpha by animateFloatAsState(
         targetValue = if (isLoading) 0.5f else 1f,
-        animationSpec = tween(300),
+        animationSpec = tween(Dimensions.Animation.standard),
         label = "net_alpha"
     )
 

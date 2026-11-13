@@ -39,6 +39,7 @@ import com.spendly.tracker.domain.usecase.UpdateTransactionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import com.spendly.tracker.utils.MerchantAliasAuditor
 import com.spendly.tracker.utils.MerchantNameMatcher
+import com.spendly.tracker.utils.MerchantNameNormalizer
 import com.spendly.tracker.utils.SmsMerchantAliasHints
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -1462,7 +1463,7 @@ class TransactionDetailViewModel @Inject constructor(
         return normalizeMerchantName(raw)
     }
 
-    private fun normalizeMerchantName(name: String): String = name.trim()
+    private fun normalizeMerchantName(name: String): String = MerchantNameNormalizer.normalize(name)
     
     fun getReportUrl(): String {
         val txn = _transaction.value ?: return ""

@@ -55,16 +55,20 @@ class LoanDetailViewModel @Inject constructor(
         }
     }
 
+    private var recordPaymentJob: kotlinx.coroutines.Job? = null
+
     fun showRecordPayment() {
         val loan = _uiState.value.loan ?: return
-        viewModelScope.launch {
+        recordPaymentJob?.cancel()
+        recordPaymentJob = viewModelScope.launch {
             combine(
-                loanRepository.getRecentUnlinkedRepayments(loan.direction),
-                loanRepository.getRecentUnlinkedAdditions(loan.direction)
+                loanRepository.getRecentRepaymentCandidates(loan.direction),
+                loanRepository.getRecentAdditionCandidates(loan.direction)
             ) { repayments, additions -> repayments to additions }.collect { (repayments, additions) ->
                 _uiState.value = _uiState.value.copy(
-                    recentUnlinkedTransactions = repayments,
-                    recentUnlinkedAdditions = additions,
+                    // Transactions already in this loan are shown in History, not as candidates.
+                    recentUnlinkedTransactions = repayments.filter { it.loanId != loanId },
+                    recentUnlinkedAdditions = additions.filter { it.loanId != loanId },
                     showRecordPaymentSheet = true
                 )
             }
@@ -72,6 +76,8 @@ class LoanDetailViewModel @Inject constructor(
     }
 
     fun hideRecordPayment() {
+        recordPaymentJob?.cancel()
+        recordPaymentJob = null
         _uiState.value = _uiState.value.copy(showRecordPaymentSheet = false)
     }
 

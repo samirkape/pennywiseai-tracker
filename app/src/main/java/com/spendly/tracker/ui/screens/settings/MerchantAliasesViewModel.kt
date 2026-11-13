@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.spendly.tracker.data.repository.MerchantAliasRepository
 import com.spendly.tracker.data.repository.MerchantAliasSaveResult
+import com.spendly.tracker.data.repository.MerchantAliasSortMode
 import com.spendly.tracker.utils.MerchantAliasAuditor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +18,8 @@ data class MerchantAliasesUiState(
     val items: List<MerchantAliasAuditor.AuditResult> = emptyList(),
     val suspiciousCount: Int = 0,
     val message: String? = null,
+    val query: String = "",
+    val sortMode: MerchantAliasSortMode = MerchantAliasSortMode.LAST_USED,
 )
 
 @HiltViewModel
@@ -27,6 +30,8 @@ class MerchantAliasesViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(MerchantAliasesUiState())
     val uiState: StateFlow<MerchantAliasesUiState> = _uiState.asStateFlow()
 
+    private var backfillAttempted = false
+
     init {
         refresh()
     }
@@ -34,6 +39,10 @@ class MerchantAliasesViewModel @Inject constructor(
     fun refresh() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
+            if (!backfillAttempted) {
+                backfillAttempted = true
+                runCatching { merchantAliasRepository.backfillAliasLastUsed() }
+            }
             val items = merchantAliasRepository.auditAllAliases()
             _uiState.value = MerchantAliasesUiState(
                 isLoading = false,
@@ -52,6 +61,14 @@ class MerchantAliasesViewModel @Inject constructor(
 
     fun clearMessage() {
         _uiState.value = _uiState.value.copy(message = null)
+    }
+
+    fun setQuery(query: String) {
+        _uiState.value = _uiState.value.copy(query = query)
+    }
+
+    fun setSortMode(sortMode: MerchantAliasSortMode) {
+        _uiState.value = _uiState.value.copy(sortMode = sortMode)
     }
 
     fun addAlias(sourceMerchant: String, displayName: String) {

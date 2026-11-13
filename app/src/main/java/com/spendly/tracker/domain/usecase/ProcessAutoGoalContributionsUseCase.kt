@@ -10,6 +10,8 @@ class ProcessAutoGoalContributionsUseCase @Inject constructor(
 ) {
     suspend fun execute(transaction: TransactionEntity) {
         if (transaction.transactionType != TransactionType.INCOME) return
+        // Loan repayments are money coming back, not new income to allocate
+        if (transaction.loanId != null) return
         if (transaction.isDeleted) return
         if (transaction.category.isBlank()) return
 

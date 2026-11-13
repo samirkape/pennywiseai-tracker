@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -25,15 +26,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.spendly.tracker.ui.components.BrandIcon
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
 import com.spendly.tracker.ui.components.SpendingBarChart
 import com.spendly.tracker.ui.components.cards.SpendlyCardV2
+import com.spendly.tracker.ui.sharedElementIfAvailable
 import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.ui.theme.spendGreen
 import com.spendly.tracker.ui.theme.spendGreenBg
@@ -126,11 +130,26 @@ fun MerchantDetailScreen(
 @Composable
 private fun MerchantHeaderCard(state: MerchantDetailUiState.Loaded) {
     SpendlyCardV2 {
-        Text(
-            text = state.merchantName,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            // Destination anchor of the shared element started by the
+            // merchant list rows.
+            BrandIcon(
+                merchantName = state.merchantName,
+                size = 56.dp,
+                showBackground = true,
+                modifier = Modifier.sharedElementIfAvailable(
+                    key = "merchant_icon_${state.merchantName}"
+                ),
+            )
+            Text(
+                text = state.merchantName,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
         Spacer(modifier = Modifier.height(Spacing.xs))
         Text(
             text = "All-time spend: ${CurrencyFormatter.formatCurrency(state.allTimeTotal, state.currency)}",

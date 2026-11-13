@@ -14,13 +14,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Slider
 import androidx.compose.material3.TextButton
@@ -44,12 +43,14 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.spendly.tracker.R
+import com.spendly.tracker.ui.components.cards.SpendlyCardV2
+import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.utils.CurrencyFormatter
 import kotlinx.coroutines.delay
 import java.math.BigDecimal
@@ -75,14 +76,16 @@ private const val MAX_BARS_WITH_VALUE_LABELS = 8
 @Composable
 fun SavingsRateCard(
     summary: SavingsRateSummary,
-    /** True when the page below is showing exactly this card's window. */
-    isAppliedToPage: Boolean,
     onWindowSelected: (Int) -> Unit,
     /** Persisted month count for the Custom slider. */
     customMonths: Int,
     onCustomMonthsChanged: (Int) -> Unit,
     /** Date-picked window; an end month of null means "Now". */
     onRangeSelected: (start: YearMonth, end: YearMonth?) -> Unit,
+    /** Forward-looking estimate for the next [projectionHorizon] months. */
+    projection: SavingsProjection?,
+    projectionHorizon: Int,
+    onProjectionHorizonSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var customMode by rememberSaveable { mutableStateOf(summary.windowMonths !in SAVINGS_RATE_WINDOW_OPTIONS) }
@@ -98,13 +101,6 @@ fun SavingsRateCard(
 
     // A new window invalidates any tapped bar.
     LaunchedEffect(summary.windowMonths) { selectedIndex = null }
-    // Picking another period elsewhere on the page hands control back to that selector.
-    // Only a true -> false change counts; the page may not have caught up with a restored window yet.
-    var wasApplied by remember { mutableStateOf(isAppliedToPage) }
-    LaunchedEffect(isAppliedToPage) {
-        if (wasApplied && !isAppliedToPage) { customMode = false; sliderVisible = false }
-        wasApplied = isAppliedToPage
-    }
     // A window restored from storage that isn't a preset belongs to Custom.
     LaunchedEffect(summary.windowMonths) {
         if (summary.windowMonths !in SAVINGS_RATE_WINDOW_OPTIONS) {
@@ -122,17 +118,11 @@ fun SavingsRateCard(
         }
     }
 
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-    ) {
+    SpendlyCardV2(modifier = modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                 SAVINGS_RATE_WINDOW_OPTIONS.forEach { months ->
                     SavingsChip(
                         label = "${months}M",
@@ -145,7 +135,14 @@ fun SavingsRateCard(
                     )
                 }
                 SavingsChip(
-                    label = if (customMode) "Custom · ${customRangeLabel(summary)}" else "Custom",
+                    label = if (customMode) {
+                        stringResource(
+                            R.string.savings_rate_custom_with_range,
+                            customRangeLabel(summary),
+                        )
+                    } else {
+                        stringResource(R.string.savings_rate_custom)
+                    },
                     selected = customMode,
                     onClick = {
                         // Tapping an already-active Custom chip toggles the slider.
@@ -158,9 +155,12 @@ fun SavingsRateCard(
             }
 
             AnimatedVisibility(visible = customMode && sliderVisible) {
-                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                Column {
                     Text(
-                        text = "Last ${sliderValue.roundToInt()} months",
+                        text = stringResource(
+                            R.string.savings_preview_last_months,
+                            sliderValue.roundToInt(),
+                        ),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -182,16 +182,24 @@ fun SavingsRateCard(
                     val range = summary.customRange
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         SavingsChip(
-                            label = "From · ${range?.startMonth?.let(::formatMonthYear) ?: "Pick date"}",
+                            label = stringResource(
+                                R.string.savings_rate_from,
+                                range?.startMonth?.let(::formatMonthYear)
+                                    ?: stringResource(R.string.savings_rate_pick_date),
+                            ),
                             selected = range != null,
                             onClick = { pickingEdge = RangeEdge.START; interactionTick++ },
                         )
                         SavingsChip(
-                            label = "To · ${range?.endMonth?.let(::formatMonthYear) ?: "Now"}",
+                            label = stringResource(
+                                R.string.savings_rate_to,
+                                range?.endMonth?.let(::formatMonthYear)
+                                    ?: stringResource(R.string.savings_rate_now),
+                            ),
                             selected = false,
                             onClick = { pickingEdge = RangeEdge.END; interactionTick++ },
                         )
@@ -238,7 +246,7 @@ fun SavingsRateCard(
 
             if (!summary.hasData) {
                 Text(
-                    text = "Add income transactions to see how much of your income you save each month.",
+                    text = stringResource(R.string.savings_rate_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -258,7 +266,7 @@ fun SavingsRateCard(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
                 val averageColor = MaterialTheme.colorScheme.tertiary
                 Canvas(Modifier.size(width = 16.dp, height = 2.dp)) {
@@ -271,18 +279,138 @@ fun SavingsRateCard(
                     )
                 }
                 Text(
-                    text = "Overall",
+                    text = stringResource(R.string.savings_rate_overall),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    text = if (summary.months.any { it.isCurrent }) "· * in progress · tap a bar for details" else "· tap a bar for details",
+                    text = stringResource(
+                        if (summary.months.any { it.isCurrent }) {
+                            R.string.savings_rate_tap_bar_current
+                        } else {
+                            R.string.savings_rate_tap_bar
+                        }
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                 )
             }
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+            )
+
+            SavingsProjectionFooter(
+                projection = projection,
+                horizon = projectionHorizon,
+                currency = summary.currency,
+                onHorizonSelected = onProjectionHorizonSelected,
+            )
         }
     }
+}
+
+/**
+ * Compact forward-looking strip: estimated savings rate for the next [horizon] months,
+ * with an independent horizon selector. Updates with every new transaction.
+ */
+@Composable
+private fun SavingsProjectionFooter(
+    projection: SavingsProjection?,
+    horizon: Int,
+    currency: String,
+    onHorizonSelected: (Int) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = projection?.range?.let { (start, end) ->
+                    stringResource(
+                        R.string.savings_rate_projected_range,
+                        projectionRangeLabel(start, end),
+                    )
+                } ?: stringResource(R.string.savings_rate_projected),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                SAVINGS_PROJECTION_HORIZON_OPTIONS.forEach { months ->
+                    SavingsChip(
+                        label = "${months}M",
+                        selected = horizon == months,
+                        onClick = { onHorizonSelected(months) },
+                    )
+                }
+            }
+        }
+
+        if (projection == null || !projection.hasData) {
+            Text(
+                text = stringResource(R.string.savings_rate_projection_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            return@Column
+        }
+
+        val percent = projection.projectedPercent
+        Text(
+            text = when {
+                percent == null -> stringResource(R.string.savings_rate_no_estimate)
+                percent < 0f -> stringResource(
+                    R.string.savings_preview_overspent,
+                    abs(percent.roundToInt()),
+                )
+                else -> stringResource(
+                    R.string.savings_preview_saved,
+                    percent.roundToInt(),
+                )
+            },
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = rateColor(percent),
+        )
+        val projectedSaved = CurrencyFormatter.formatCurrencyWhole(
+            projection.projectedSaved.abs(),
+            currency,
+        )
+        Text(
+            text = when {
+                projection.projectedSaved.signum() >= 0 && projection.basisMonths > 0 ->
+                    stringResource(
+                        R.string.savings_rate_projection_months,
+                        projectedSaved,
+                        projection.basisMonths,
+                    )
+                projection.projectedSaved.signum() >= 0 ->
+                    stringResource(R.string.savings_rate_projection_current, projectedSaved)
+                projection.basisMonths > 0 ->
+                    stringResource(
+                        R.string.savings_rate_projection_overspent_months,
+                        projectedSaved,
+                        projection.basisMonths,
+                    )
+                else ->
+                    stringResource(
+                        R.string.savings_rate_projection_overspent_current,
+                        projectedSaved,
+                    )
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** "Oct – Dec", or "Dec 26 – Feb 27" when the horizon crosses a year. */
+private fun projectionRangeLabel(start: YearMonth, end: YearMonth): String {
+    val pattern = if (start.year == end.year) "MMM" else "MMM yy"
+    val fmt = java.time.format.DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
+    return "${start.format(fmt)} – ${end.format(fmt)}"
 }
 
 private enum class RangeEdge { START, END }
@@ -314,12 +442,18 @@ private fun SavingsDatePickerDialog(
             TextButton(
                 enabled = state.selectedDateMillis != null,
                 onClick = { state.selectedDateMillis?.let { onConfirm(LocalDate.ofEpochDay(it / 86_400_000L)) } },
-            ) { Text("OK") }
+            ) { Text(stringResource(R.string.common_ok)) }
         },
         dismissButton = {
             Row {
-                if (edge == RangeEdge.END) TextButton(onClick = onNow) { Text("Now") }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                if (edge == RangeEdge.END) {
+                    TextButton(onClick = onNow) {
+                        Text(stringResource(R.string.savings_rate_now))
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.common_cancel))
+                }
             }
         },
     ) {
@@ -327,8 +461,18 @@ private fun SavingsDatePickerDialog(
             state = state,
             title = {
                 Text(
-                    text = if (edge == RangeEdge.START) "Start date" else "End date",
-                    modifier = Modifier.padding(start = 24.dp, end = 12.dp, top = 16.dp),
+                    text = stringResource(
+                        if (edge == RangeEdge.START) {
+                            R.string.savings_rate_start_date
+                        } else {
+                            R.string.savings_rate_end_date
+                        }
+                    ),
+                    modifier = Modifier.padding(
+                        start = Spacing.lg,
+                        end = Spacing.sm,
+                        top = Spacing.md,
+                    ),
                 )
             },
         )
@@ -340,7 +484,7 @@ private fun SavingsDatePickerDialog(
 private fun SavingsChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(50),
+        shape = CircleShape,
         border = BorderStroke(
             width = if (selected) 1.5.dp else 0.5.dp,
             color = if (selected) MaterialTheme.colorScheme.primary
@@ -351,11 +495,11 @@ private fun SavingsChip(label: String, selected: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             text = label,
-            fontSize = 13.sp,
+            style = MaterialTheme.typography.labelMedium,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
             else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
         )
     }
 }
@@ -374,10 +518,15 @@ private fun SavingsHeadline(summary: SavingsRateSummary, month: MonthlySavingsRa
     }
     val saved = income - spent
 
-    val caption = if (month != null) {
-        month.month.month.getDisplayName(DateTextStyle.FULL, Locale.getDefault()) + " " + month.month.year
-    } else {
-        "OVERALL · LAST ${summary.windowMonths} MONTHS"
+    val caption = when {
+        month != null ->
+            month.month.month.getDisplayName(DateTextStyle.FULL, Locale.getDefault()) +
+                " " + month.month.year
+        summary.customRange != null -> stringResource(
+            R.string.savings_rate_headline_custom,
+            customRangeLabel(summary),
+        )
+        else -> stringResource(R.string.savings_rate_headline_overall, summary.windowMonths)
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -388,11 +537,17 @@ private fun SavingsHeadline(summary: SavingsRateSummary, month: MonthlySavingsRa
         )
         Text(
             text = when {
-                percent == null -> "No income"
-                percent < 0f -> "${abs(percent.roundToInt())}% overspent"
-                else -> "${percent.roundToInt()}% saved"
+                percent == null -> stringResource(R.string.savings_history_no_income)
+                percent < 0f -> stringResource(
+                    R.string.savings_history_overspent,
+                    abs(percent.roundToInt()),
+                )
+                else -> stringResource(
+                    R.string.savings_history_rate,
+                    percent.roundToInt(),
+                )
             },
-            fontSize = 30.sp,
+            style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = rateColor(percent),
         )
@@ -401,15 +556,29 @@ private fun SavingsHeadline(summary: SavingsRateSummary, month: MonthlySavingsRa
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(MaterialTheme.shapes.medium)
             .background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
-        StatCell("Income", CurrencyFormatter.formatCurrencyWhole(income, summary.currency), Modifier.weight(1f))
-        StatCell("Spent", CurrencyFormatter.formatCurrencyWhole(spent, summary.currency), Modifier.weight(1f))
         StatCell(
-            if (saved.signum() >= 0) "Saved" else "Overspent",
+            stringResource(R.string.savings_rate_stat_income),
+            CurrencyFormatter.formatCurrencyWhole(income, summary.currency),
+            Modifier.weight(1f),
+        )
+        StatCell(
+            stringResource(R.string.savings_rate_stat_spent),
+            CurrencyFormatter.formatCurrencyWhole(spent, summary.currency),
+            Modifier.weight(1f),
+        )
+        StatCell(
+            stringResource(
+                if (saved.signum() >= 0) {
+                    R.string.savings_rate_stat_saved
+                } else {
+                    R.string.savings_rate_stat_overspent
+                }
+            ),
             CurrencyFormatter.formatCurrencyWhole(saved.abs(), summary.currency),
             Modifier.weight(1f),
         )
@@ -426,7 +595,7 @@ private fun StatCell(label: String, value: String, modifier: Modifier = Modifier
         )
         Text(
             text = value,
-            fontSize = 13.sp,
+            style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
@@ -448,8 +617,8 @@ private fun SavingsRateChart(
     val gridColor = colors.onSurface.copy(alpha = 0.1f)
     val baselineColor = colors.onSurface.copy(alpha = 0.35f)
     val averageColor = colors.tertiary
-    val labelStyle = TextStyle(fontSize = 10.sp, color = colors.onSurface.copy(alpha = 0.7f))
-    val valueStyle = TextStyle(fontSize = 10.sp, color = colors.onSurface.copy(alpha = 0.85f))
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(color = colors.onSurface.copy(alpha = 0.7f))
+    val valueStyle = MaterialTheme.typography.labelSmall.copy(color = colors.onSurface.copy(alpha = 0.85f))
 
     val axis = remember(months) { rateAxis(months) }
     val progress = remember { Animatable(0f) }

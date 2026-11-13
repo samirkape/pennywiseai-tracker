@@ -1,5 +1,6 @@
 package com.spendly.tracker.ui.theme
 
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -72,9 +73,23 @@ object Dimensions {
     }
     
     // Animation durations (in milliseconds)
+    // Naming matches design.md § Motion & Animation:
+    // - quick   ~200ms: exits, micro feedback
+    // - standard ~300ms: screen transitions, reveals
+    // - slow ~500ms: accent moments (use sparingly)
     object Animation {
         const val short = 120
         const val medium = 250
         const val long = 400
+        const val quick = 200
+        const val standard = 300
+        const val slow = 500
+    }
+
+    // Easing curves from design.md § Motion & Animation
+    object Easing {
+        val standard = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)
+        val decelerate = CubicBezierEasing(0.0f, 0.0f, 0.2f, 1.0f)
+        val accelerate = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)
     }
 }

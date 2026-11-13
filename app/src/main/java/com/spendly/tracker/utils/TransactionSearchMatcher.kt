@@ -5,11 +5,23 @@ import com.spendly.tracker.data.database.entity.TransactionType
 
 /**
  * In-memory transaction search used by the transactions list filter bar.
+ *
+ * Free-text matching across every searchable field (merchant, description,
+ * SMS body, tags, category, reference, bank, amount, type keyword). Field-
+ * and operator-aware queries (Kibana-style) are handled by [TransactionQuery];
+ * its free-text leaves delegate to [matchesText].
  */
 object TransactionSearchMatcher {
 
-    fun matches(transaction: TransactionEntity, rawQuery: String): Boolean {
-        val query = rawQuery.trim()
+    fun matches(transaction: TransactionEntity, rawQuery: String): Boolean =
+        matchesText(transaction, rawQuery.trim())
+
+    /**
+     * Broad (unscoped) matching of a single term/phrase against every
+     * searchable field. Also used as the fallback for plain-text searches and
+     * for parse-error recovery by [TransactionQuery.matches].
+     */
+    fun matchesText(transaction: TransactionEntity, query: String): Boolean {
         if (query.isEmpty()) return true
 
         if (transaction.merchantName.contains(query, ignoreCase = true)) return true

@@ -155,6 +155,7 @@ fun GroupCard(
 
     val total = remember(transactions, convertedAmounts) {
         transactions.fold(BigDecimal.ZERO) { acc, tx ->
+            if (tx.loanId != null) return@fold acc // Loan rows are not real income/expense
             val amount = convertedAmounts[tx.id] ?: tx.amount
             when (tx.transactionType) {
                 TransactionType.EXPENSE, TransactionType.CREDIT -> acc - amount
@@ -166,13 +167,14 @@ fun GroupCard(
 
     val totalIncome = remember(transactions, convertedAmounts) {
         transactions.fold(BigDecimal.ZERO) { acc, tx ->
-            if (tx.transactionType != TransactionType.INCOME) return@fold acc
+            if (tx.transactionType != TransactionType.INCOME || tx.loanId != null) return@fold acc
             acc + (convertedAmounts[tx.id] ?: tx.amount)
         }
     }
     val totalExpenseCredit = remember(transactions, convertedAmounts) {
         transactions.fold(BigDecimal.ZERO) { acc, tx ->
-            if (tx.transactionType != TransactionType.EXPENSE && tx.transactionType != TransactionType.CREDIT) {
+            if (tx.transactionType != TransactionType.EXPENSE && tx.transactionType != TransactionType.CREDIT ||
+                tx.loanId != null) {
                 return@fold acc
             }
             acc + (convertedAmounts[tx.id] ?: tx.amount)

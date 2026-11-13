@@ -108,6 +108,15 @@ fun SettingsScreen(
     val unifiedCurrencyMode by settingsViewModel.unifiedCurrencyMode.collectAsStateWithLifecycle(initialValue = false)
 val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifecycle(initialValue = "")
     val availableCurrencies by settingsViewModel.availableCurrencies.collectAsStateWithLifecycle()
+    val useContactsForVpa by settingsViewModel.useContactsForVpa.collectAsStateWithLifecycle(initialValue = false)
+    // Launches the runtime permission request. If granted, we flip the
+    // preference on; if denied, leave the switch off so the user can try
+    // again without us silently turning the feature on later.
+    val readContactsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) settingsViewModel.setUseContactsForVpa(true)
+    }
     var showSmsScanDialog by remember { mutableStateOf(false) }
     var showImportStrategyDialog by remember { mutableStateOf(false) }
     var showRestoreOptionsDialog by remember { mutableStateOf(false) }
@@ -323,6 +332,36 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                     subtitle = "Match incoming refunds to the original expense and net them out of spending and budgets",
                     checked = autoLinkRefunds,
                     onCheckedChange = { settingsViewModel.setAutoLinkRefundsEnabled(it) },
+                    position = ItemPosition.SINGLE
+                )
+            }
+
+            // ── Contacts ──
+            SectionHeaderV2(title = "Contacts")
+            SettingsGroup {
+                SettingsSwitchRow(
+                    icon = Icons.Default.Contacts,
+                    iconBgColor = teal_light,
+                    iconTint = teal_dark,
+                    title = "Replace UPI VPAs with contact names",
+                    subtitle = "Show 'John Doe' instead of '9876543210@paytm'. Needs contacts permission.",
+                    checked = useContactsForVpa,
+                    onCheckedChange = { wantsOn ->
+                        if (wantsOn) {
+                            val alreadyGranted = androidx.core.content.ContextCompat
+                                .checkSelfPermission(
+                                    context,
+                                    android.Manifest.permission.READ_CONTACTS
+                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                            if (alreadyGranted) {
+                                settingsViewModel.setUseContactsForVpa(true)
+                            } else {
+                                readContactsLauncher.launch(android.Manifest.permission.READ_CONTACTS)
+                            }
+                        } else {
+                            settingsViewModel.setUseContactsForVpa(false)
+                        }
+                    },
                     position = ItemPosition.SINGLE
                 )
             }

@@ -10,8 +10,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import com.spendly.tracker.ui.effects.rememberReducedMotion
 import com.spendly.tracker.ui.theme.Dimensions
 
 @Composable
@@ -22,7 +24,34 @@ fun AnimatedCurrencyText(
     color: Color = Color.Unspecified,
     fontWeight: FontWeight? = null,
     brush: Brush? = null,
+) = AnimatedCurrencyText(
+    text = AnnotatedString(text),
+    style = style,
+    modifier = modifier,
+    color = color,
+    fontWeight = fontWeight,
+    brush = brush,
+)
+
+@Composable
+fun AnimatedCurrencyText(
+    text: AnnotatedString,
+    style: TextStyle,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    fontWeight: FontWeight? = null,
+    brush: Brush? = null,
 ) {
+    // Respect system "remove animations": render the value directly.
+    if (rememberReducedMotion()) {
+        Text(
+            text = text,
+            style = style.copy(brush = brush),
+            color = color,
+            fontWeight = fontWeight,
+        )
+        return
+    }
     AnimatedContent(
         targetState = text,
         transitionSpec = {

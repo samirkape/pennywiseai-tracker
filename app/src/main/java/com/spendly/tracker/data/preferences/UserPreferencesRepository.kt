@@ -9,6 +9,13 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.spendly.tracker.ui.screens.savings.SavingsGoalDefinition
+import com.spendly.tracker.ui.screens.savings.SavingsGoals
+import com.spendly.tracker.ui.screens.savings.decodeSavingsGoals
+import com.spendly.tracker.ui.screens.savings.defaultSavingsGoal
+import com.spendly.tracker.ui.screens.savings.encodeSavingsGoals
+import com.spendly.tracker.ui.screens.savings.normalizeSavingsGoals
+import com.spendly.tracker.utils.DateRangeUtils
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -82,6 +89,9 @@ class UserPreferencesRepository @Inject constructor(
         // What's New feature
         val LAST_SEEN_APP_VERSION = stringPreferencesKey("last_seen_app_version")
 
+        // End-of-day review prompt (once per calendar day)
+        val LAST_DAILY_REVIEW_PROMPT_DATE = stringPreferencesKey("last_daily_review_prompt_date")
+
         // Monthly Budget
         val MONTHLY_BUDGET_LIMIT = stringPreferencesKey("monthly_budget_limit")
 
@@ -110,12 +120,29 @@ class UserPreferencesRepository @Inject constructor(
         val SAVINGS_RATE_WINDOW_MONTHS = intPreferencesKey("savings_rate_window_months")
         val SAVINGS_RATE_RANGE_START = stringPreferencesKey("savings_rate_range_start")
         val SAVINGS_RATE_RANGE_END = stringPreferencesKey("savings_rate_range_end")
+        val SAVINGS_RATE_PROJECTION_HORIZON = intPreferencesKey("savings_rate_projection_horizon")
+        val SAVINGS_GOAL_PERCENT = intPreferencesKey("savings_goal_percent")
+        val SAVINGS_GOAL_END_MONTH = stringPreferencesKey("savings_goal_end_month")
+        val SAVINGS_GOALS = stringPreferencesKey("savings_goals")
+        val SAVINGS_ACTIVE_GOAL_ID = stringPreferencesKey("savings_active_goal_id")
+        val SAVINGS_GOAL_LAST_CELEBRATED = intPreferencesKey("savings_goal_last_celebrated")
+        val SAVINGS_NOTIFICATION_SNOOZE_UNTIL = longPreferencesKey("savings_notification_snooze_until")
+        val SAVINGS_GOAL_REMINDER_ENABLED = booleanPreferencesKey("savings_goal_reminder_enabled")
+        val SAVINGS_GOAL_REMINDER_DAY = intPreferencesKey("savings_goal_reminder_day")
+        val SAVINGS_GOAL_REMINDER_DAYS = stringPreferencesKey("savings_goal_reminder_days")
+        val SAVINGS_GOAL_REMINDER_HOUR = intPreferencesKey("savings_goal_reminder_hour")
+        val SAVINGS_PACE_LAST_ALERT_AT = longPreferencesKey("savings_pace_last_alert_at")
+        val SAVINGS_PACE_LAST_MILESTONE = intPreferencesKey("savings_pace_last_milestone")
+        val SAVINGS_PACE_DEADLINE_NOTIFIED_MONTH = stringPreferencesKey("savings_pace_deadline_notified_month")
 
         // Analytics card density
         val COMPACT_ANALYTICS_CARDS = booleanPreferencesKey("compact_analytics_cards")
 
         // Refunds
         val AUTO_LINK_REFUNDS = booleanPreferencesKey("auto_link_refunds")
+
+        // UPI VPA → contact name lookup (opt-in; gated by READ_CONTACTS).
+        val USE_CONTACTS_FOR_VPA = booleanPreferencesKey("use_contacts_for_vpa")
 
         // Cover Style
         val COVER_STYLE = stringPreferencesKey("cover_style")
@@ -132,6 +159,9 @@ class UserPreferencesRepository @Inject constructor(
         val USE_FINANCIAL_MONTH = booleanPreferencesKey("use_financial_month")
         val USE_FIXED_BUDGET_PERIOD_END = booleanPreferencesKey("use_fixed_budget_period_end")
         val BUDGET_PERIOD_END_DAY = intPreferencesKey("budget_period_end_day")
+
+        // Weekend payday convention: how salary day shifts when it lands on Sat/Sun
+        val SALARY_DAY_ADJUSTMENT = stringPreferencesKey("salary_day_adjustment")
 
         // Pay-period suggestion dismissals: set of "YYYY-MM:dayOfMonth"
         val DISMISSED_SALARY_SUGGESTIONS = stringPreferencesKey("dismissed_salary_suggestions")
@@ -598,6 +628,19 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
+    // End-of-day review prompt
+    suspend fun getLastDailyReviewPromptDate(): String? {
+        return context.dataStore.data
+            .map { preferences -> preferences[PreferencesKeys.LAST_DAILY_REVIEW_PROMPT_DATE] }
+            .first()
+    }
+
+    suspend fun setLastDailyReviewPromptDate(date: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.LAST_DAILY_REVIEW_PROMPT_DATE] = date
+        }
+    }
+
     // Unified Currency Mode
     suspend fun setUnifiedCurrencyMode(enabled: Boolean) {
         context.dataStore.edit { preferences ->
@@ -737,6 +780,159 @@ class UserPreferencesRepository @Inject constructor(
     fun getSavingsRateWindowMonths(): Flow<Int?> = context.dataStore.data
         .map { preferences -> preferences[PreferencesKeys.SAVINGS_RATE_WINDOW_MONTHS] }
 
+    suspend fun saveSavingsProjectionHorizon(months: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SAVINGS_RATE_PROJECTION_HORIZON] = months
+        }
+    }
+
+    fun getSavingsProjectionHorizon(): Flow<Int?> = context.dataStore.data
+        .map { preferences -> preferences[PreferencesKeys.SAVINGS_RATE_PROJECTION_HORIZON] }
+
+    /** Target share of income the user wants to keep, as a whole percent. */
+    suspend fun saveSavingsGoalPercent(percent: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SAVINGS_GOAL_PERCENT] = percent
+        }
+    }
+
+    fun getSavingsGoalPercent(): Flow<Int?> = context.dataStore.data
+        .map { preferences -> preferences[PreferencesKeys.SAVINGS_GOAL_PERCENT] }
+
+    /** Last month of the goal period, stored as an ISO year-month. */
+    suspend fun saveSavingsGoalEndMonth(month: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SAVINGS_GOAL_END_MONTH] = month
+        }
+    }
+
+    fun getSavingsGoalEndMonth(): Flow<String?> = context.dataStore.data
+        .map { preferences -> preferences[PreferencesKeys.SAVINGS_GOAL_END_MONTH] }
+
+    /**
+     * Every savings goal plus the active one. Older installs have only the single
+     * percent goal, so it becomes the default entry until the user adds more.
+     */
+    fun getSavingsGoals(): Flow<SavingsGoals> = context.dataStore.data
+        .map { preferences ->
+            val fallback = defaultSavingsGoal(
+                percent = (preferences[PreferencesKeys.SAVINGS_GOAL_PERCENT] ?: 70)
+                    .coerceIn(0, 100),
+                endMonth = preferences[PreferencesKeys.SAVINGS_GOAL_END_MONTH]
+                    ?.let { runCatching { java.time.YearMonth.parse(it) }.getOrNull() }
+                    ?: com.spendly.tracker.ui.screens.savings.defaultSavingsGoalEndMonth(),
+            )
+            normalizeSavingsGoals(
+                goals = decodeSavingsGoals(preferences[PreferencesKeys.SAVINGS_GOALS]),
+                activeGoalId = preferences[PreferencesKeys.SAVINGS_ACTIVE_GOAL_ID],
+                fallback = fallback,
+            )
+        }
+
+    suspend fun saveSavingsGoals(goals: SavingsGoals) {
+        val normalized = normalizeSavingsGoals(goals.goals, goals.activeGoalId)
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SAVINGS_GOALS] = encodeSavingsGoals(normalized.goals)
+            normalized.activeGoalId?.let {
+                preferences[PreferencesKeys.SAVINGS_ACTIVE_GOAL_ID] = it
+            }
+            normalized.activeGoal?.let { active ->
+                preferences[PreferencesKeys.SAVINGS_GOAL_PERCENT] = active.normalizedPercent
+                preferences[PreferencesKeys.SAVINGS_GOAL_END_MONTH] = active.endMonth.toString()
+            }
+        }
+    }
+
+    /** Highest milestone already celebrated in the app; avoids repeat dialogs. */
+    fun getSavingsGoalLastCelebrated(): Flow<Int> = context.dataStore.data
+        .map { preferences -> preferences[PreferencesKeys.SAVINGS_GOAL_LAST_CELEBRATED] ?: 0 }
+
+    suspend fun saveSavingsGoalLastCelebrated(milestone: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SAVINGS_GOAL_LAST_CELEBRATED] = milestone
+        }
+    }
+
+    /** Until this timestamp, pace alerts stay quiet after the user taps "Snooze". */
+    fun getSavingsNotificationSnoozeUntil(): Flow<Long> = context.dataStore.data
+        .map { preferences -> preferences[PreferencesKeys.SAVINGS_NOTIFICATION_SNOOZE_UNTIL] ?: 0L }
+
+    suspend fun saveSavingsNotificationSnoozeUntil(timestampMillis: Long) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SAVINGS_NOTIFICATION_SNOOZE_UNTIL] = timestampMillis
+        }
+    }
+
+    /** Whether the savings-goal reminder notification is enabled. */
+    suspend fun saveSavingsGoalReminderEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SAVINGS_GOAL_REMINDER_ENABLED] = enabled
+        }
+    }
+
+    fun getSavingsGoalReminderEnabled(): Flow<Boolean> = context.dataStore.data
+        .map { preferences -> preferences[PreferencesKeys.SAVINGS_GOAL_REMINDER_ENABLED] ?: false }
+
+    /** Preferred ISO days-of-week (Monday = 1) for the savings-goal reminder; never empty. */
+    suspend fun saveSavingsGoalReminderDays(daysOfWeek: Set<Int>) {
+        val normalized = daysOfWeek
+            .filter { it in 1..7 }
+            .toSortedSet()
+            .ifEmpty { sortedSetOf(1) }
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SAVINGS_GOAL_REMINDER_DAYS] = normalized.joinToString(",")
+        }
+    }
+
+    fun getSavingsGoalReminderDays(): Flow<Set<Int>> = context.dataStore.data
+        .map { preferences -> preferences.savingsGoalReminderDays() }
+
+    /** Reads the multi-day preference, migrating the older single-day value when needed. */
+    private fun Preferences.savingsGoalReminderDays(): Set<Int> {
+        val stored = this[PreferencesKeys.SAVINGS_GOAL_REMINDER_DAYS]
+            ?.split(',')
+            ?.mapNotNull { it.trim().toIntOrNull() }
+            ?.filter { it in 1..7 }
+            ?.toSet()
+            .orEmpty()
+        if (stored.isNotEmpty()) return stored
+        val legacyDay = (this[PreferencesKeys.SAVINGS_GOAL_REMINDER_DAY] ?: 1).coerceIn(1, 7)
+        return setOf(legacyDay)
+    }
+
+    /** Preferred hour (0–23) for the savings-goal reminder. */
+    suspend fun saveSavingsGoalReminderHour(hour: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SAVINGS_GOAL_REMINDER_HOUR] = hour.coerceIn(0, 23)
+        }
+    }
+
+    fun getSavingsGoalReminderHour(): Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            (preferences[PreferencesKeys.SAVINGS_GOAL_REMINDER_HOUR] ?: 9).coerceIn(0, 23)
+        }
+
+    /** Cooldown and de-duplication state for pace, milestone and deadline alerts. */
+    suspend fun getSavingsPaceAlertState(): SavingsPaceAlertState {
+        val preferences = context.dataStore.data.first()
+        return SavingsPaceAlertState(
+            lastAlertAtMillis = preferences[PreferencesKeys.SAVINGS_PACE_LAST_ALERT_AT] ?: 0L,
+            lastMilestone = preferences[PreferencesKeys.SAVINGS_PACE_LAST_MILESTONE] ?: 0,
+            deadlineNotifiedMonth = preferences[PreferencesKeys.SAVINGS_PACE_DEADLINE_NOTIFIED_MONTH],
+        )
+    }
+
+    suspend fun saveSavingsPaceAlertState(state: SavingsPaceAlertState) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SAVINGS_PACE_LAST_ALERT_AT] = state.lastAlertAtMillis
+            preferences[PreferencesKeys.SAVINGS_PACE_LAST_MILESTONE] = state.lastMilestone
+            if (state.deadlineNotifiedMonth != null) {
+                preferences[PreferencesKeys.SAVINGS_PACE_DEADLINE_NOTIFIED_MONTH] =
+                    state.deadlineNotifiedMonth
+            }
+        }
+    }
+
     val compactAnalyticsCardsEnabled: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[PreferencesKeys.COMPACT_ANALYTICS_CARDS] ?: true
@@ -756,6 +952,19 @@ class UserPreferencesRepository @Inject constructor(
     suspend fun setAutoLinkRefundsEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.AUTO_LINK_REFUNDS] = enabled
+        }
+    }
+
+    // Replace UPI VPAs with matching contact names at display time.
+    // Off by default — turning on prompts for READ_CONTACTS.
+    val useContactsForVpa: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.USE_CONTACTS_FOR_VPA] ?: false
+        }
+
+    suspend fun setUseContactsForVpa(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.USE_CONTACTS_FOR_VPA] = enabled
         }
     }
 
@@ -861,6 +1070,28 @@ class UserPreferencesRepository @Inject constructor(
     }
 
     /**
+     * How the salary day behaves when it lands on a weekend:
+     * prepone to the nearest preceding weekday, postpone to the next, or keep the
+     * literal day. Defaults to [DateRangeUtils.SalaryDayAdjustment.EXACT] so existing
+     * installations keep their current boundaries until they opt in.
+     */
+    val salaryDayAdjustment: Flow<DateRangeUtils.SalaryDayAdjustment> = context.dataStore.data
+        .map { preferences ->
+            runCatching {
+                DateRangeUtils.SalaryDayAdjustment.valueOf(
+                    preferences[PreferencesKeys.SALARY_DAY_ADJUSTMENT]
+                        ?: DateRangeUtils.SalaryDayAdjustment.EXACT.name
+                )
+            }.getOrDefault(DateRangeUtils.SalaryDayAdjustment.EXACT)
+        }
+
+    suspend fun updateSalaryDayAdjustment(adjustment: DateRangeUtils.SalaryDayAdjustment) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SALARY_DAY_ADJUSTMENT] = adjustment.name
+        }
+    }
+
+    /**
      * Atomically applies recurring pay-month DOM anchors and enables fixed end + financial month.
      * Avoids multiple [edit] calls racing each other and the UI.
      */
@@ -939,6 +1170,19 @@ class UserPreferencesRepository @Inject constructor(
     }
 
 }
+
+/**
+ * Persisted alert bookkeeping for the savings pace worker.
+ *
+ * [lastAlertAtMillis] drives the behind-pace cooldown, [lastMilestone] stops the same
+ * milestone from being celebrated twice, and [deadlineNotifiedMonth] makes the
+ * "deadline approaching" nudge fire once per goal period.
+ */
+data class SavingsPaceAlertState(
+    val lastAlertAtMillis: Long = 0L,
+    val lastMilestone: Int = 0,
+    val deadlineNotifiedMonth: String? = null,
+)
 
 data class UserPreferences(
     val isDarkThemeEnabled: Boolean? = null, // null means follow system

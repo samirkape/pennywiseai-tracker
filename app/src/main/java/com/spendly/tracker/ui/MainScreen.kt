@@ -24,6 +24,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -31,9 +33,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.spendly.tracker.data.contacts.LocalMerchantDisplay
+import com.spendly.tracker.data.contacts.displayMerchantName
 import com.spendly.tracker.presentation.home.HomeScreen
 import com.spendly.tracker.presentation.subscriptions.SubscriptionsScreen
 import com.spendly.tracker.presentation.transactions.TransactionsScreen
+import com.spendly.tracker.navigation.QuickCategorize
+import com.spendly.tracker.ui.components.DailyReviewDialog
 import com.spendly.tracker.ui.components.SpendlyBottomNavigation
 import com.spendly.tracker.ui.components.SpendlyNavigationRail
 import com.spendly.tracker.ui.components.SpotlightTutorial
@@ -46,6 +52,7 @@ import com.spendly.tracker.ui.utils.rememberWindowSizeInfo
 import com.spendly.tracker.ui.viewmodel.MainViewModel
 import com.spendly.tracker.ui.viewmodel.ThemeViewModel
 import com.spendly.tracker.ui.viewmodel.SpotlightViewModel
+import com.spendly.tracker.ui.viewmodel.DailyReviewViewModel
 import com.spendly.tracker.navigation.safePopBackStack
 import com.spendly.tracker.core.Constants
 import com.spendly.tracker.ui.utils.adaptiveMaxWidth
@@ -59,6 +66,7 @@ fun MainScreen(
     themeViewModel: ThemeViewModel = hiltViewModel(),
     spotlightViewModel: SpotlightViewModel = hiltViewModel(),
     mainViewModel: MainViewModel = hiltViewModel(),
+    dailyReviewViewModel: DailyReviewViewModel = hiltViewModel(),
     initialCategory: String? = null,
     initialMerchant: String? = null,
     initialPeriod: String? = null,
@@ -69,6 +77,10 @@ fun MainScreen(
     initialPaymentMode: String? = null,
     initialBankName: String? = null,
     initialAccountLast4: String? = null,
+    openSavings: Boolean = false,
+    editSavingsGoal: Boolean = false,
+    onOpenSavingsHandled: () -> Unit = {},
+    onEditSavingsGoalHandled: () -> Unit = {},
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -79,6 +91,33 @@ fun MainScreen(
     // What's New dialog state
     val whatsNewVersion by mainViewModel.whatsNewVersion.collectAsState()
     val isPremium by mainViewModel.isPremium.collectAsState()
+
+    // End-of-day review prompt (shown once per evening when today needs categories)
+    val dailyReviewPrompt by dailyReviewViewModel.prompt.collectAsState()
+    LaunchedEffect(Unit) {
+        dailyReviewViewModel.checkForPrompt()
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        dailyReviewViewModel.checkForPrompt()
+    }
+
+    // Open the Savings page when launched from a savings-goal reminder.
+    LaunchedEffect(openSavings) {
+        if (openSavings) {
+            navController.navigate(Constants.Routes.SAVINGS) { launchSingleTop = true }
+            onOpenSavingsHandled()
+        }
+    }
+
+    // UPI VPA → contact name. Read the toggle as state; the lambda closes
+    // over the current value + the singleton resolver, and is provided
+    // through a CompositionLocal so every transaction-rendering composable
+    // (TransactionItem, TransactionDetailScreen header, etc.) can apply the
+    // same rule without prop-drilling the resolver everywhere.
+    val useContactsForVpa by mainViewModel.useContactsForVpa.collectAsState()
+    val merchantDisplay = remember(useContactsForVpa) {
+        { raw: String? -> displayMerchantName(raw, useContactsForVpa, mainViewModel.contactsResolver) }
+    }
 
     // Haze state for blur effects
     val hazeState = remember { HazeState() }
@@ -156,7 +195,10 @@ fun MainScreen(
     val windowSizeInfo = rememberWindowSizeInfo()
     val useNavigationRail = windowSizeInfo.useNavigationRail
 
-    CompositionLocalProvider(LocalWindowSizeInfo provides windowSizeInfo) {
+    CompositionLocalProvider(
+        LocalWindowSizeInfo provides windowSizeInfo,
+        LocalMerchantDisplay provides merchantDisplay
+    ) {
     Row(modifier = Modifier
         .fillMaxSize()
         .background(MaterialTheme.colorScheme.background)
@@ -179,6 +221,28 @@ fun MainScreen(
                 version = version,
                 onDismiss = { mainViewModel.dismissWhatsNew() }
             )
+        }
+
+        // End-of-day review prompt. Suppressed while the What's New dialog is open.
+        if (whatsNewVersion == null) {
+            dailyReviewPrompt?.let { prompt ->
+                DailyReviewDialog(
+                    prompt = prompt,
+                    onReviewToday = {
+                        dailyReviewViewModel.dismiss()
+                        rootNavController?.navigate(QuickCategorize(scope = "today")) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onReviewOlder = {
+                        dailyReviewViewModel.dismiss()
+                        rootNavController?.navigate(QuickCategorize(scope = "historical")) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onDismiss = { dailyReviewViewModel.dismiss() }
+                )
+            }
         }
 
         // NavHost — no padding. Capped at maxContentWidth and centered so content
@@ -596,6 +660,19 @@ fun MainScreen(
                             launchSingleTop = true
                         }
                     },
+                    onNavigateToSavings = {
+                        navController.navigate(Constants.Routes.SAVINGS) {
+                            launchSingleTop = true
+                        }
+                    },
+                )
+            }
+
+            composable(Constants.Routes.SAVINGS) {
+                com.spendly.tracker.ui.screens.savings.SavingsScreen(
+                    onNavigateBack = { navController.safePopBackStack() },
+                    openGoalEditor = editSavingsGoal,
+                    onGoalEditorOpened = onEditSavingsGoalHandled,
                 )
             }
 

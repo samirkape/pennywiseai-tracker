@@ -1,5 +1,6 @@
 package com.spendly.tracker.presentation.groups
 
+import com.spendly.tracker.ui.theme.Dimensions
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
@@ -191,8 +192,8 @@ private fun GroupPie(
                 color = slice.color,
                 selectedColor = slice.color,
                 selected = slice.key == selected?.key,
-                scaleAnimEnterSpec = tween(300),
-                colorAnimEnterSpec = tween(300)
+                scaleAnimEnterSpec = tween(Dimensions.Animation.standard),
+                colorAnimEnterSpec = tween(Dimensions.Animation.standard)
             )
         }
     }
@@ -205,8 +206,8 @@ private fun GroupPie(
             data = pies,
             onPieClick = { pie -> pie.label?.let(onSelect) },
             selectedScale = 1.08f,
-            scaleAnimEnterSpec = tween(300),
-            colorAnimEnterSpec = tween(300),
+            scaleAnimEnterSpec = tween(Dimensions.Animation.standard),
+            colorAnimEnterSpec = tween(Dimensions.Animation.standard),
             style = Pie.Style.Stroke(width = 28.dp)
         )
         Column(

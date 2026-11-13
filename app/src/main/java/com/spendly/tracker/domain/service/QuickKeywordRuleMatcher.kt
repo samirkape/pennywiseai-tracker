@@ -14,6 +14,7 @@ import com.spendly.tracker.domain.model.QuickKeywordTextMatchMode
 import com.spendly.tracker.domain.model.rule.ConditionOperator
 import com.spendly.tracker.data.database.entity.TransferKind
 import com.spendly.tracker.domain.service.QuickKeywordRuleCompiler.QuickKeywordRuleInput
+import com.spendly.tracker.utils.MerchantNameNormalizer
 
 /**
  * Case-insensitive substring keyword matching (logcat tag: [QuickKeywordRule]).
@@ -389,7 +390,13 @@ object QuickKeywordRuleMatcher {
         if (input.overwriteMerchant &&
             !shouldPreserveParsedMerchant(transaction.smsBody, transaction.merchantName)
         ) {
-            updated = updated.copy(merchantName = input.merchantLabel.trim())
+            // Keep the rule's label in the same normalized form as SMS-ingested names
+            // (the label would otherwise replace an already-normalized merchant with
+            // whatever casing the user typed when creating the rule).
+            val normalizedLabel = MerchantNameNormalizer.normalize(input.merchantLabel)
+            if (normalizedLabel.isNotBlank()) {
+                updated = updated.copy(merchantName = normalizedLabel)
+            }
         }
         if (input.overwriteCategory) {
             updated = updated.copy(category = input.categoryLabel.trim())

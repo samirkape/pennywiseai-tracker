@@ -12,6 +12,7 @@ import com.spendly.tracker.data.repository.TransactionRepository
 import com.spendly.tracker.domain.repository.RuleRepository
 import com.spendly.tracker.domain.service.RuleEngine
 import com.spendly.tracker.utils.UnrecognizedSmsPrefillParser
+import com.spendly.tracker.utils.MerchantNameNormalizer
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.math.BigDecimal
 import java.security.MessageDigest
@@ -66,7 +67,7 @@ class AddTransactionUseCase @Inject constructor(
         // Create the transaction entity
         val transaction = TransactionEntity(
             amount = amount,
-            merchantName = merchant,
+            merchantName = MerchantNameNormalizer.normalize(merchant),
             category = category,
             transactionType = type,
             dateTime = date,
@@ -167,6 +168,9 @@ class AddTransactionUseCase @Inject constructor(
                 amount = amount,
                 currency = currency
             )
+            // Re-evaluate savings pace/milestones after the new transaction lands.
+            com.spendly.tracker.worker.SavingsPaceCheckWorker.enqueueOneShot(appContext)
+            com.spendly.tracker.widget.SavingsWidgetUpdateWorker.enqueueOneShot(appContext)
         }
 
         return transactionId

@@ -13,6 +13,7 @@ import com.spendly.tracker.data.repository.BudgetGroupRepository
 import com.spendly.tracker.data.repository.BudgetGroupSpending
 import com.spendly.tracker.data.repository.BudgetGroupSpendingRaw
 import com.spendly.tracker.data.repository.BudgetOverallSummary
+import com.spendly.tracker.data.repository.countsTowardBudgetSpending
 import com.spendly.tracker.data.repository.SalaryMonthOverrideRepository
 import com.spendly.tracker.utils.DateRangeUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -38,17 +39,12 @@ import javax.inject.Inject
 data class BudgetTrendPoint(
     val periodStart: LocalDate,
     val periodEnd: LocalDate,
-    // Budget-tracked spend excluding investment transactions.
+    // Spending against budgets for the period.
     val spent: BigDecimal,
-    // Investment transactions counted against budgets; spent + invested == hero total.
-    val invested: BigDecimal,
     val budget: BigDecimal
 ) {
-    val total: BigDecimal
-        get() = spent + invested
-
     val isOverBudget: Boolean
-        get() = budget > BigDecimal.ZERO && total > budget
+        get() = budget > BigDecimal.ZERO && spent > budget
 }
 
 data class BudgetGroupsUiState(
@@ -89,7 +85,9 @@ class BudgetGroupsViewModel @Inject constructor(
         val useFinancial: Boolean,
         val useFixedEnd: Boolean,
         val endDom: Int,
-        val overrides: Map<String, Int>
+        val overrides: Map<String, Int>,
+        val adjustment: DateRangeUtils.SalaryDayAdjustment =
+            DateRangeUtils.SalaryDayAdjustment.EXACT
     )
 
     companion object {
@@ -121,7 +119,8 @@ class BudgetGroupsViewModel @Inject constructor(
                 userPreferencesRepository.monthStartDay,
                 userPreferencesRepository.useFixedBudgetPeriodEnd,
                 userPreferencesRepository.budgetPeriodEndDay,
-                salaryMonthOverrideRepository.overridesMap
+                salaryMonthOverrideRepository.overridesMap,
+                userPreferencesRepository.salaryDayAdjustment
             ) { args ->
                 val baseCurrency = args[0] as String
                 val unifiedMode = args[1] as Boolean
@@ -133,6 +132,7 @@ class BudgetGroupsViewModel @Inject constructor(
                 val endDom = args[7] as Int
                 @Suppress("UNCHECKED_CAST")
                 val overrides = args[8] as Map<String, Int>
+                val adjustment = args[9] as DateRangeUtils.SalaryDayAdjustment
                 data class Params(
                     val baseCurrency: String,
                     val unifiedMode: Boolean,
@@ -142,7 +142,8 @@ class BudgetGroupsViewModel @Inject constructor(
                     val monthStartDay: Int,
                     val useFixedEnd: Boolean,
                     val endDom: Int,
-                    val overrides: Map<String, Int>
+                    val overrides: Map<String, Int>,
+                    val adjustment: DateRangeUtils.SalaryDayAdjustment
                 )
                 Params(
                     baseCurrency,
@@ -153,7 +154,8 @@ class BudgetGroupsViewModel @Inject constructor(
                     monthStartDay,
                     useFixedEnd,
                     endDom,
-                    overrides
+                    overrides,
+                    adjustment
                 )
             }.collect { params ->
                 val currency = if (params.unifiedMode) params.displayCurrency else params.baseCurrency
@@ -165,12 +167,13 @@ class BudgetGroupsViewModel @Inject constructor(
                             params.monthStartDay,
                             params.useFixedEnd,
                             params.endDom,
-                            params.overrides
+                            params.overrides,
+                            params.adjustment
                         )
                     } else if (params.useFixedEnd) {
                         DateRangeUtils.customDomPeriodStartingInMonth(params.yearMonth, params.monthStartDay, params.endDom)
                     } else {
-                        DateRangeUtils.financialMonthRangeFor(params.yearMonth, params.monthStartDay, params.overrides)
+                        DateRangeUtils.financialMonthRangeFor(params.yearMonth, params.monthStartDay, params.overrides, params.adjustment)
                     }
                     DateRangeUtils.formatDateRange(start, end)
                 } else {
@@ -198,7 +201,8 @@ class BudgetGroupsViewModel @Inject constructor(
                 userPreferencesRepository.useFinancialMonth,
                 userPreferencesRepository.useFixedBudgetPeriodEnd,
                 userPreferencesRepository.budgetPeriodEndDay,
-                salaryMonthOverrideRepository.overridesMap
+                salaryMonthOverrideRepository.overridesMap,
+                userPreferencesRepository.salaryDayAdjustment
             ) { args ->
                 val baseCurrency = args[0] as String
                 val unifiedMode = args[1] as Boolean
@@ -210,6 +214,7 @@ class BudgetGroupsViewModel @Inject constructor(
                 val endDom = args[7] as Int
                 @Suppress("UNCHECKED_CAST")
                 val overrides = args[8] as Map<String, Int>
+                val adjustment = args[9] as DateRangeUtils.SalaryDayAdjustment
                 SpendingParams(
                     if (unifiedMode) displayCurrency else baseCurrency,
                     baseCurrency,
@@ -219,7 +224,8 @@ class BudgetGroupsViewModel @Inject constructor(
                     useFinancial,
                     useFixedEnd,
                     endDom,
-                    overrides
+                    overrides,
+                    adjustment
                 )
             }.flatMapLatest { params ->
                 val isCurrentMonth = params.yearMonth == YearMonth.now()
@@ -250,8 +256,7 @@ class BudgetGroupsViewModel @Inject constructor(
                     val trend = buildPastTrend(params) + BudgetTrendPoint(
                         periodStart = currentStart,
                         periodEnd = currentEnd,
-                        spent = summary.totalLimitSpent - summary.totalInvested,
-                        invested = summary.totalInvested,
+                        spent = summary.totalLimitSpent,
                         budget = summary.totalLimitBudget
                     )
                     summary to trend
@@ -277,13 +282,14 @@ class BudgetGroupsViewModel @Inject constructor(
                     params.monthStartDay,
                     params.useFixedEnd,
                     params.endDom,
-                    params.overrides
+                    params.overrides,
+                    params.adjustment
                 )
                 params.useFixedEnd -> DateRangeUtils.customDomPeriodStartingInMonth(
                     yearMonth, params.monthStartDay, params.endDom
                 )
                 else -> DateRangeUtils.financialMonthRangeFor(
-                    yearMonth, params.monthStartDay, params.overrides
+                    yearMonth, params.monthStartDay, params.overrides, params.adjustment
                 )
             }
         } else {
@@ -307,7 +313,8 @@ class BudgetGroupsViewModel @Inject constructor(
                         params.monthStartDay,
                         params.useFixedEnd,
                         params.endDom,
-                        params.overrides
+                        params.overrides,
+                        params.adjustment
                     )
                     pastRanges.add(0, range)
                     cursor = range.first.minusDays(1)
@@ -333,8 +340,7 @@ class BudgetGroupsViewModel @Inject constructor(
                 BudgetTrendPoint(
                     periodStart = start,
                     periodEnd = end,
-                    spent = summary.totalLimitSpent - summary.totalInvested,
-                    invested = summary.totalInvested,
+                    spent = summary.totalLimitSpent,
                     budget = summary.totalLimitBudget
                 )
             }
@@ -358,7 +364,9 @@ class BudgetGroupsViewModel @Inject constructor(
         baseCurrency: String
     ): BudgetOverallSummary {
         val incomeTransactions = raw.allTransactions.filter {
-            it.transaction.transactionType == TransactionType.INCOME
+            // Loan-linked rows (lent money / repayments) are not real income
+            it.transaction.transactionType == TransactionType.INCOME &&
+                it.transaction.loanId == null
         }
         var totalIncome = BigDecimal.ZERO
         for (tx in incomeTransactions) {
@@ -368,21 +376,17 @@ class BudgetGroupsViewModel @Inject constructor(
         }
 
         // Primary category or split lines only; junction tags do not contribute amounts.
+        // Spending only: investments are savings, not spending, so they never count
+        // against budget limits.
         val categoryAmounts = mutableMapOf<String, BigDecimal>()
-        val investedCategoryAmounts = mutableMapOf<String, BigDecimal>()
         raw.allTransactions.forEach { txWithSplits ->
             val tx = txWithSplits.transaction
-            if (tx.transactionType != TransactionType.INCOME) {
-                val fromCurrency = tx.currency
-                val isInvestment = tx.transactionType == TransactionType.INVESTMENT
+            if (tx.countsTowardBudgetSpending()) {
                 txWithSplits.getAmountByCategory().forEach { (category, amount) ->
-                    val converted = currencyConversionService.convertAmount(amount, fromCurrency, displayCurrency)
+                    val converted = currencyConversionService.convertAmount(amount, tx.currency, displayCurrency)
                     val categoryName = category.ifEmpty { "Others" }
-                    categoryAmounts[categoryName] = (categoryAmounts[categoryName] ?: BigDecimal.ZERO) + converted
-                    if (isInvestment) {
-                        investedCategoryAmounts[categoryName] =
-                            (investedCategoryAmounts[categoryName] ?: BigDecimal.ZERO) + converted
-                    }
+                    categoryAmounts[categoryName] =
+                        (categoryAmounts[categoryName] ?: BigDecimal.ZERO) + converted
                 }
             }
         }
@@ -496,16 +500,6 @@ class BudgetGroupsViewModel @Inject constructor(
 
         val totalLimitBudget = limitGroups.fold(BigDecimal.ZERO) { acc, g -> acc + g.totalBudget }
         val totalLimitSpent = limitGroups.fold(BigDecimal.ZERO) { acc, g -> acc + g.totalActual }
-        // Mirror totalLimitSpent's per-group scoping so spent - invested splits cleanly.
-        val totalInvested = limitGroups.fold(BigDecimal.ZERO) { acc, g ->
-            acc + if (g.isTrackingAllExpenses) {
-                investedCategoryAmounts.values.fold(BigDecimal.ZERO) { a, v -> a + v }
-            } else {
-                g.group.categories.fold(BigDecimal.ZERO) { a, c ->
-                    a + (investedCategoryAmounts[c.categoryName] ?: BigDecimal.ZERO)
-                }
-            }
-        }
         val totalTargetGoal = targetGroups.fold(BigDecimal.ZERO) { acc, g -> acc + g.totalBudget }
         val totalTargetActual = targetGroups.fold(BigDecimal.ZERO) { acc, g -> acc + g.totalActual }
         val totalExpectedBudget = expectedGroups.fold(BigDecimal.ZERO) { acc, g -> acc + g.totalBudget }
@@ -526,7 +520,6 @@ class BudgetGroupsViewModel @Inject constructor(
             totalIncome = totalIncome,
             totalLimitBudget = totalLimitBudget,
             totalLimitSpent = totalLimitSpent,
-            totalInvested = totalInvested,
             totalTargetGoal = totalTargetGoal,
             totalTargetActual = totalTargetActual,
             totalExpectedBudget = totalExpectedBudget,

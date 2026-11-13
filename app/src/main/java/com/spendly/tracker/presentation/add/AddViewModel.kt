@@ -529,6 +529,7 @@ class AddViewModel @Inject constructor(
                 }
 
                 com.spendly.tracker.widget.RecentTransactionsWidgetUpdateWorker.enqueueOneShot(appContext)
+                com.spendly.tracker.widget.SavingsWidgetUpdateWorker.enqueueOneShot(appContext)
 
                 onSuccess()
             } catch (e: Exception) {

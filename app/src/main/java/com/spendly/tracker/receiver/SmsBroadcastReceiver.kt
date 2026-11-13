@@ -13,6 +13,7 @@ import com.spendly.tracker.MainActivity
 import com.spendly.tracker.SpendlyApplication
 import com.spendly.tracker.R
 import com.spendly.tracker.data.manager.SmsTransactionProcessor
+import com.spendly.tracker.utils.MerchantNameNormalizer
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -123,7 +124,13 @@ class SmsBroadcastReceiver : BroadcastReceiver() {
                             context = context,
                             transactionId = result.transactionId,
                             amount = parsedTransaction.amount.toString(),
-                            merchant = parsedTransaction.merchant ?: "Unknown",
+                            // Use the SAVED row's merchant (already case-normalized and
+                            // alias-/rule-resolved) — not a re-parse of the raw SMS text.
+                            merchant = savedTransaction?.merchantName
+                                ?: parsedTransaction.merchant?.let {
+                                    MerchantNameNormalizer.normalize(it)
+                                }
+                                ?: "Unknown",
                             type = parsedTransaction.type.name,
                             bankName = parsedTransaction.bankName ?: "Bank",
                             category = savedTransaction?.category ?: "Others",

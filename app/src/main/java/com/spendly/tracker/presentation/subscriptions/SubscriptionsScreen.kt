@@ -1,4 +1,5 @@
 package com.spendly.tracker.presentation.subscriptions
+import com.spendly.tracker.ui.theme.Dimensions
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -176,9 +177,9 @@ fun SubscriptionsScreen(
                     }
                     AnimatedVisibility(
                         visible = visible.value,
-                        enter = fadeIn(tween(300)) + slideInVertically(
+                        enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                             initialOffsetY = { slideOffsetPx },
-                            animationSpec = tween(300)
+                            animationSpec = tween(Dimensions.Animation.standard)
                         )
                     ) {
                         SubscriptionHeroCard(
@@ -219,9 +220,9 @@ fun SubscriptionsScreen(
                         }
                         AnimatedVisibility(
                             visible = visible.value,
-                            enter = fadeIn(tween(300)) + slideInVertically(
+                            enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                                 initialOffsetY = { slideOffsetPx },
-                                animationSpec = tween(300)
+                                animationSpec = tween(Dimensions.Animation.standard)
                             )
                         ) {
                             SubscriptionListItem(
@@ -245,9 +246,9 @@ fun SubscriptionsScreen(
                         }
                         AnimatedVisibility(
                             visible = visible.value,
-                            enter = fadeIn(tween(300)) + slideInVertically(
+                            enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                                 initialOffsetY = { slideOffsetPx },
-                                animationSpec = tween(300)
+                                animationSpec = tween(Dimensions.Animation.standard)
                             )
                         ) {
                             PrepaidExpiringItem(plan = plan, today = today)
@@ -270,9 +271,9 @@ fun SubscriptionsScreen(
                         }
                         AnimatedVisibility(
                             visible = visible.value,
-                            enter = fadeIn(tween(300)) + slideInVertically(
+                            enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                                 initialOffsetY = { slideOffsetPx },
-                                animationSpec = tween(300)
+                                animationSpec = tween(Dimensions.Animation.standard)
                             )
                         ) {
                             SubscriptionListItem(
@@ -302,9 +303,9 @@ fun SubscriptionsScreen(
                         }
                         AnimatedVisibility(
                             visible = visible.value,
-                            enter = fadeIn(tween(300)) + slideInVertically(
+                            enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                                 initialOffsetY = { slideOffsetPx },
-                                animationSpec = tween(300)
+                                animationSpec = tween(Dimensions.Animation.standard)
                             )
                         ) {
                             PrepaidExpiringItem(plan = plan, today = today)

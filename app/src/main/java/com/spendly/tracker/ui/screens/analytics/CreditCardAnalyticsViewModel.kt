@@ -57,6 +57,7 @@ class CreditCardAnalyticsViewModel @Inject constructor(
 
     /** Money lent to people, kept out of spending totals. */
     data class LentSpend(
+        val loanId: Long?,
         val personName: String,
         val cardLabel: String?,
         val amount: BigDecimal,
@@ -79,6 +80,7 @@ class CreditCardAnalyticsViewModel @Inject constructor(
         val categoryBreakdown: List<CategoryData> = emptyList(),
         val cardBreakdown: List<CardSpend> = emptyList(),
         val lentBreakdown: List<LentSpend> = emptyList(),
+        val lentTransactions: List<TransactionEntity> = emptyList(),
         val totalLent: BigDecimal = BigDecimal.ZERO,
         val isLoading: Boolean = true,
     ) {
@@ -220,11 +222,12 @@ class CreditCardAnalyticsViewModel @Inject constructor(
                     .sortedByDescending { it.amount }
 
                 val loansById = result.params.loans.associateBy { it.id }
-                val lentBreakdown = lentTransactions
-                    .filter { it.amount.signum() > 0 }
+                val lentSpendTransactions = lentTransactions.filter { it.amount.signum() > 0 }
+                val lentBreakdown = lentSpendTransactions
                     .groupBy { it.loanId }
                     .map { (loanId, txns) ->
                         LentSpend(
+                            loanId = loanId,
                             personName = loanId?.let { loansById[it]?.personName }
                                 ?: txns.first().merchantName.ifBlank { "Lent" },
                             cardLabel = txns.first().cardDisplayName().takeIf { it.isNotBlank() },
@@ -254,6 +257,7 @@ class CreditCardAnalyticsViewModel @Inject constructor(
                         categoryBreakdown = categoryBreakdown,
                         cardBreakdown = cardBreakdown,
                         lentBreakdown = lentBreakdown,
+                        lentTransactions = lentSpendTransactions,
                         totalLent = totalLent,
                         globalBillingCycleDay = result.params.globalDay,
                         perCardBillingCycleDays = result.params.perCardDays,

@@ -49,11 +49,15 @@ fun SpendlyApp(
     openTransactions: Boolean = false,
     openSubscriptions: Boolean = false,
     openBudgets: Boolean = false,
+    openSavings: Boolean = false,
+    editSavingsGoal: Boolean = false,
     onEditComplete: () -> Unit = {},
     onAddTransactionShortcutHandled: () -> Unit = {},
     onOpenTransactionsHandled: () -> Unit = {},
     onOpenSubscriptionsHandled: () -> Unit = {},
-    onOpenBudgetsHandled: () -> Unit = {}
+    onOpenBudgetsHandled: () -> Unit = {},
+    onOpenSavingsHandled: () -> Unit = {},
+    onEditSavingsGoalHandled: () -> Unit = {}
 ) {
     val themeUiState by themeViewModel.themeUiState.collectAsStateWithLifecycle()
     val appLockUiState by appLockViewModel.uiState.collectAsStateWithLifecycle()
@@ -166,6 +170,15 @@ fun SpendlyApp(
         }
     }
 
+    // Bring the user to Home so MainScreen can open the Savings page for a goal reminder.
+    LaunchedEffect(openSavings) {
+        if (openSavings) {
+            navController.navigate(com.spendly.tracker.navigation.Home()) {
+                launchSingleTop = true
+            }
+        }
+    }
+
     // Check for auto-backup after onboarding is complete and DB might be empty
     LaunchedEffect(themeUiState.hasCompletedOnboarding) {
         if (themeUiState.hasCompletedOnboarding) {
@@ -187,6 +200,7 @@ fun SpendlyApp(
     // Keep widgets and insights current when app launches
     LaunchedEffect(Unit) {
         RecentTransactionsWidgetUpdateWorker.enqueueOneShot(context.applicationContext)
+        com.spendly.tracker.widget.SavingsWidgetUpdateWorker.enqueueOneShot(context.applicationContext)
         InsightsWorker.enqueueOneShot(context.applicationContext)
         InsightsWorker.enqueuePeriodic(context.applicationContext)
     }
@@ -208,7 +222,11 @@ fun SpendlyApp(
                 navController = navController,
                 themeViewModel = themeViewModel,
                 startDestination = startDestination,
-                onEditComplete = onEditComplete
+                onEditComplete = onEditComplete,
+                openSavings = openSavings,
+                editSavingsGoal = editSavingsGoal,
+                onOpenSavingsHandled = onOpenSavingsHandled,
+                onEditSavingsGoalHandled = onEditSavingsGoalHandled
             )
         }
 

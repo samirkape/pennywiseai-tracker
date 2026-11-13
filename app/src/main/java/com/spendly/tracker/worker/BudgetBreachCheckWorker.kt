@@ -21,10 +21,10 @@ import com.spendly.tracker.MainActivity
 import com.spendly.tracker.R
 import com.spendly.tracker.core.Constants
 import com.spendly.tracker.data.currency.CurrencyConversionService
-import com.spendly.tracker.data.database.entity.TransactionType
 import com.spendly.tracker.data.preferences.UserPreferencesRepository
 import com.spendly.tracker.data.repository.BudgetGroupRepository
 import com.spendly.tracker.data.repository.SalaryMonthOverrideRepository
+import com.spendly.tracker.data.repository.countsTowardBudgetSpending
 import com.spendly.tracker.utils.CurrencyFormatter
 import com.spendly.tracker.utils.DateRangeUtils
 import dagger.assisted.Assisted
@@ -115,6 +115,7 @@ class BudgetBreachCheckWorker @AssistedInject constructor(
             val useFixedEnd = userPreferencesRepository.useFixedBudgetPeriodEnd.first()
             val budgetPeriodEndDay = userPreferencesRepository.budgetPeriodEndDay.first()
             val overrides = salaryMonthOverrideRepository.overridesMap.first()
+            val adjustment = userPreferencesRepository.salaryDayAdjustment.first()
             val isUnifiedMode = userPreferencesRepository.unifiedCurrencyMode.first()
             val baseCurrency = userPreferencesRepository.baseCurrency.first()
             val currency = if (isUnifiedMode) {
@@ -129,7 +130,8 @@ class BudgetBreachCheckWorker @AssistedInject constructor(
                     monthStartDay,
                     useFixedEnd,
                     budgetPeriodEndDay,
-                    overrides
+                    overrides,
+                    adjustment
                 )
             } else {
                 val yearMonth = YearMonth.from(today)
@@ -183,7 +185,9 @@ class BudgetBreachCheckWorker @AssistedInject constructor(
 
         val categoryAmounts = mutableMapOf<String, BigDecimal>()
         raw.allTransactions.forEach { txWithSplits ->
-            if (txWithSplits.transaction.transactionType != TransactionType.INCOME) {
+            // Spending only: investments are savings, not spending, so SIPs/outflows into
+            // investment categories never push a budget into breach.
+            if (txWithSplits.transaction.countsTowardBudgetSpending()) {
                 txWithSplits.getAmountByCategory().forEach { (category, amount) ->
                     val converted = currencyConversionService.convertAmount(
                         amount, txWithSplits.transaction.currency, displayCurrency

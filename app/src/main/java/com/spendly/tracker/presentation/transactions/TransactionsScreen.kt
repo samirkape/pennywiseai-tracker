@@ -16,10 +16,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.verticalScroll
 import com.spendly.tracker.ui.effects.overScrollVertical
 import com.spendly.tracker.ui.effects.rememberOverscrollFlingBehavior
+import com.spendly.tracker.ui.effects.rememberReducedMotion
+import com.spendly.tracker.ui.effects.staggeredIntro
+import com.spendly.tracker.ui.theme.Dimensions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
@@ -49,6 +53,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.spendly.tracker.data.database.entity.AccountBalanceEntity
 import com.spendly.tracker.data.database.entity.CategoryEntity
@@ -65,6 +70,10 @@ import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
 import com.spendly.tracker.ui.theme.*
 import com.spendly.tracker.utils.DateRangeUtils
+import com.spendly.tracker.utils.TransactionQueryParser
+import com.spendly.tracker.utils.parseFlatAndChain
+import com.spendly.tracker.utils.parseInProgressClause
+import com.spendly.tracker.utils.replaceInProgressClause
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 
@@ -102,6 +111,10 @@ fun TransactionsScreen(
         buildRefundNotes(uiState.transactions, refundedByOriginal)
     }
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val searchQueryError by viewModel.searchQueryError.collectAsState()
+    val merchantSuggestions by viewModel.merchantSuggestions.collectAsState()
+    val usedTags by viewModel.usedTags.collectAsState()
+    var showSearchAssistant by rememberSaveable { mutableStateOf(false) }
     val selectedPeriod by viewModel.selectedPeriod.collectAsState()
     val useFinancialMonth by viewModel.useFinancialMonth.collectAsState()
     val categoryFilter by viewModel.categoryFilter.collectAsState()
@@ -115,6 +128,10 @@ fun TransactionsScreen(
     val selectedCurrency by viewModel.selectedCurrency.collectAsState()
     val sortOption by viewModel.sortOption.collectAsState()
     val availableCategories by viewModel.availableCategories.collectAsState()
+    // Dataset-wide values for the search wizard: a value list scoped to the
+    // current period would silently prevent widening the date window.
+    val allCategories by viewModel.allCategories.collectAsState()
+    val allAccountKeys by viewModel.allAccountKeys.collectAsState()
     val smsScanMonths by viewModel.smsScanMonths.collectAsState()
     val showSmsDataLimitBanner by viewModel.showSmsDataLimitBanner.collectAsState()
     val customDateRange by viewModel.customDateRange.collectAsState()
@@ -150,8 +167,13 @@ fun TransactionsScreen(
     val defaultPeriod = defaultTimePeriod(useFinancialMonth)
 
     // Active filter count for all filters (period, type, account, category, include-excluded).
+    // The period doesn't count while a `date:…` clause is active in the search
+    // query — the clause then IS the time window and supersedes the period.
+    val queryHasDateClause = remember(searchQuery) {
+        searchQuery.isNotBlank() && TransactionQueryParser.parse(searchQuery).hasDateClause()
+    }
     val activeFilterCount = listOf(
-        selectedPeriod != defaultPeriod,
+        selectedPeriod != defaultPeriod && !queryHasDateClause,
         transactionTypeFilter != TransactionTypeFilter.ALL,
         selectedAccountKey != null,
         amountRange != null,
@@ -163,6 +185,19 @@ fun TransactionsScreen(
     // Remember scroll position across navigation
     val listState = rememberSaveable(saver = LazyListState.Saver) {
         LazyListState()
+    }
+
+    // Staggered row intro plays once per visit; after it completes rows render
+    // statically so scrolling never re-triggers the animation. Skipped entirely
+    // when the user has disabled system animations.
+    val reducedMotion = rememberReducedMotion()
+    var staggerDone by remember { mutableStateOf(reducedMotion) }
+    val staggerEnabled = !staggerDone
+    LaunchedEffect(Unit) {
+        if (!staggerDone) {
+            delay(6 * 60L + Dimensions.Animation.standard)
+            staggerDone = true
+        }
     }
 
     // Cache expensive operations
@@ -364,11 +399,53 @@ fun TransactionsScreen(
             onQueryChange = viewModel::updateSearchQuery,
             categoryFilter = categoryFilter,
             focusRequester = searchFocusRequester,
+            parseError = searchQueryError,
+            advancedSearchEnabled = showSearchAssistant,
+            onAdvancedSearchToggle = { showSearchAssistant = !showSearchAssistant },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = Dimensions.Padding.content)
                 .padding(top = Dimensions.Padding.content)
         )
+
+        // Type-ahead: completing the trailing field clause (e.g. `merchant:ne`)
+        val inProgress = remember(searchQuery) { parseInProgressClause(searchQuery) }
+        if (inProgress != null) {
+            TransactionSearchSuggestionsRow(
+                inProgress = inProgress,
+                merchants = merchantSuggestions,
+                categories = allCategories,
+                tags = usedTags,
+                onApply = { clause ->
+                    viewModel.updateSearchQuery(replaceInProgressClause(searchQuery, clause))
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Dimensions.Padding.content)
+                    .padding(top = Spacing.xs)
+            )
+        }
+
+        // Guided advanced-search row (unfolded via the tune icon): removable
+        // clause chips + "+ field" launchers
+        AnimatedVisibility(
+            visible = showSearchAssistant,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut(),
+        ) {
+            TransactionSearchAssistant(
+                query = searchQuery,
+                merchants = merchantSuggestions,
+                categories = allCategories,
+                tags = usedTags,
+                accountKeys = allAccountKeys,
+                onQueryChange = viewModel::updateSearchQuery,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Dimensions.Padding.content)
+                    .padding(top = Spacing.xs, bottom = Spacing.xs)
+            )
+        }
 
         // Filter + Sort row - use FlowRow for adaptive wrapping on small screens
         FlowRow(
@@ -716,7 +793,9 @@ fun TransactionsScreen(
                         start = Dimensions.Padding.content,
                         end = Dimensions.Padding.content,
                         top = Spacing.md,
-                        bottom = paddingValues.calculateBottomPadding()
+                        // Clearance so the stacked export/add FABs don't cover
+                        // the trailing row's overflow menu.
+                        bottom = paddingValues.calculateBottomPadding() + 96.dp
                     ),
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
@@ -740,7 +819,9 @@ fun TransactionsScreen(
                         start = Dimensions.Padding.content,
                         end = Dimensions.Padding.content,
                         top = Spacing.md,
-                        bottom = paddingValues.calculateBottomPadding()
+                        // Clearance so the stacked export/add FABs don't cover
+                        // the trailing row's overflow menu.
+                        bottom = paddingValues.calculateBottomPadding() + 96.dp
                     ),
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs),
                     flingBehavior = rememberOverscrollFlingBehavior { listState }
@@ -764,10 +845,16 @@ fun TransactionsScreen(
                                 }
 
                                 // Transactions in this group
-                                items(
+                                itemsIndexed(
                                     items = transactions,
-                                    key = { it.id }
-                                ) { transaction ->
+                                    key = { _, txn -> txn.id }
+                                ) { rowIndex, transaction ->
+                                    Box(
+                                        modifier = Modifier.staggeredIntro(
+                                            index = rowIndex,
+                                            enabled = staggerEnabled,
+                                        )
+                                    ) {
                                     com.spendly.tracker.ui.components.cards.TransactionItem(
                                         transaction = transaction,
                                         showDate = dateGroup == DateGroup.EARLIER,
@@ -782,6 +869,7 @@ fun TransactionsScreen(
                                         onExcludeToggle = { viewModel.toggleExcludedFromTracking(transaction) },
                                         onDelete = { viewModel.deleteTransaction(transaction) }
                                     )
+                                    }
                                     if (transaction != transactions.last()) {
                                         HorizontalDivider(
                                             modifier = Modifier.padding(horizontal = Spacing.md),
@@ -793,10 +881,16 @@ fun TransactionsScreen(
                         }
                     } else {
                         // Flat list without date headers for non-date sorts
-                        items(
+                        itemsIndexed(
                             items = uiState.transactions,
-                            key = { it.id }
-                        ) { transaction ->
+                            key = { _, txn -> txn.id }
+                        ) { rowIndex, transaction ->
+                            Box(
+                                modifier = Modifier.staggeredIntro(
+                                    index = rowIndex,
+                                    enabled = staggerEnabled,
+                                )
+                            ) {
                             com.spendly.tracker.ui.components.cards.TransactionItem(
                                 transaction = transaction,
                                 showDate = true,
@@ -811,6 +905,7 @@ fun TransactionsScreen(
                                 onExcludeToggle = { viewModel.toggleExcludedFromTracking(transaction) },
                                 onDelete = { viewModel.deleteTransaction(transaction) }
                             )
+                            }
                             if (transaction != uiState.transactions.last()) {
                                 HorizontalDivider(
                                     modifier = Modifier.padding(horizontal = Spacing.md),
@@ -1136,18 +1231,21 @@ private fun TransactionSearchBar(
     onQueryChange: (String) -> Unit,
     categoryFilter: String? = null,
     focusRequester: FocusRequester? = null,
+    parseError: String? = null,
+    advancedSearchEnabled: Boolean = false,
+    onAdvancedSearchToggle: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     TextField(
         value = query,
         onValueChange = onQueryChange,
-        placeholder = { 
+        placeholder = {
             Text(
                 text = if (categoryFilter != null) "Search in $categoryFilter…"
                 else "Search merchant, description, tags…",
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
-            ) 
+            )
         },
         leadingIcon = {
             Icon(
@@ -1156,16 +1254,49 @@ private fun TransactionSearchBar(
             )
         },
         trailingIcon = {
-            if (query.isNotEmpty()) {
-                IconButton(onClick = { onQueryChange("") }) {
-                    Icon(
-                        imageVector = Icons.Default.Clear,
-                        contentDescription = "Clear search"
-                    )
+            // The two icon buttons must live in an explicit Row — the
+            // trailingIcon slot stacks sequential children otherwise.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Guided advanced-search toggle: unfolds the wizard chips row.
+                // Badged with the number of active query clauses.
+                val clauseCount = remember(query) { parseFlatAndChain(query)?.size ?: 0 }
+                BadgedBox(
+                    badge = {
+                        if (clauseCount > 0) {
+                            Badge { Text(clauseCount.toString()) }
+                        }
+                    },
+                ) {
+                    IconButton(onClick = onAdvancedSearchToggle) {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = if (advancedSearchEnabled) "Hide filters" else "Advanced search filters",
+                            tint = if (advancedSearchEnabled) MaterialTheme.colorScheme.primary
+                            else LocalContentColor.current,
+                        )
+                    }
+                }
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { onQueryChange("") }) {
+                        Icon(
+                            imageVector = Icons.Default.Clear,
+                            contentDescription = "Clear search"
+                        )
+                    }
                 }
             }
         },
         singleLine = true,
+        isError = parseError != null,
+        supportingText = {
+            if (parseError != null) {
+                Text(
+                    text = "Invalid query: $parseError — matching as plain text",
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        },
         colors = TextFieldDefaults.colors(
             focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
             unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,

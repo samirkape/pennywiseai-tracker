@@ -14,6 +14,7 @@ import com.spendly.tracker.data.repository.AppLockRepository
 import com.spendly.tracker.domain.usecase.CreditCardPaymentLinker
 import com.spendly.tracker.worker.DailyReminderWorker
 import com.spendly.tracker.worker.PrepaidRenewalReminderWorker
+import com.spendly.tracker.worker.SavingsGoalReminderWorker
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -72,9 +73,27 @@ class SpendlyApplication : Application(), Configuration.Provider {
         scheduleHistoricalCcLinkerBackfill()
         DailyReminderWorker.enqueuePeriodic(this)
         PrepaidRenewalReminderWorker.enqueuePeriodic(this)
+        scheduleSavingsGoalReminder()
+        com.spendly.tracker.widget.SavingsWidgetUpdateWorker.enqueueOneShot(this)
         adManager.initialize()
         premiumManager.connect()
         scheduleAutoBackup()
+    }
+
+    /** Keep the weekly savings-goal reminder in sync with the user's toggle and schedule. */
+    private fun scheduleSavingsGoalReminder() {
+        applicationScope.launch {
+            val enabled = userPreferencesRepository.getSavingsGoalReminderEnabled().first()
+            if (enabled) {
+                val schedule = com.spendly.tracker.ui.screens.savings.SavingsReminderSchedule.from(
+                    isoDays = userPreferencesRepository.getSavingsGoalReminderDays().first(),
+                    hour = userPreferencesRepository.getSavingsGoalReminderHour().first(),
+                )
+                SavingsGoalReminderWorker.enqueuePeriodic(this@SpendlyApplication, schedule)
+            } else {
+                SavingsGoalReminderWorker.cancelPeriodic(this@SpendlyApplication)
+            }
+        }
     }
 
     private fun scheduleAutoBackup() {

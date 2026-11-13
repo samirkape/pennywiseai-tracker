@@ -64,6 +64,8 @@ class AiContextRepository @Inject constructor(
         
         // Process in a single pass
         transactions.forEach { transaction ->
+            // Loan-linked rows (lent money / repayments) are not real income or expense
+            if (transaction.loanId != null) return@forEach
             when (transaction.transactionType) {
                 TransactionType.INCOME -> totalIncome = totalIncome.add(transaction.amount)
                 TransactionType.EXPENSE -> totalExpense = totalExpense.add(transaction.amount)
@@ -143,7 +145,7 @@ class AiContextRepository @Inject constructor(
         var totalExpense = BigDecimal.ZERO
         
         transactions
-            .filter { it.transactionType == TransactionType.EXPENSE }
+            .filter { it.transactionType == TransactionType.EXPENSE && it.loanId == null }
             .forEach { transaction ->
                 val category = transaction.category ?: "Others"
                 categoryMap.getOrPut(category) { mutableListOf() }.add(transaction.amount)
@@ -179,7 +181,7 @@ class AiContextRepository @Inject constructor(
             endOfMonth.atTime(23, 59, 59)
         )
         
-        val expenses = transactions.filter { it.transactionType == TransactionType.EXPENSE }
+        val expenses = transactions.filter { it.transactionType == TransactionType.EXPENSE && it.loanId == null }
         
         // Calculate average daily spending
         val totalExpense = expenses.sumOf { it.amount.toDouble() }.toBigDecimal()

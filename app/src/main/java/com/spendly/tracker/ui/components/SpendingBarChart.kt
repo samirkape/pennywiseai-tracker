@@ -1,5 +1,7 @@
 package com.spendly.tracker.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -18,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +38,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.spendly.tracker.ui.effects.rememberReducedMotion
+import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.utils.CurrencyFormatter
 import java.math.BigDecimal
 
@@ -75,6 +80,22 @@ fun SpendingBarChart(
             val tooltipH = 26.dp
             val chartTopDp = tooltipH + 4.dp
 
+            // Grow-in reveal: bars scale from 0 on first draw and re-reveal
+            // when the data window changes (e.g. switching period).
+            val reducedMotion = rememberReducedMotion()
+            val barIntro = remember(data) { Animatable(if (reducedMotion) 1f else 0f) }
+            LaunchedEffect(data) {
+                if (!reducedMotion) {
+                    barIntro.animateTo(
+                        1f,
+                        tween(
+                            durationMillis = Dimensions.Animation.standard,
+                            easing = Dimensions.Easing.decelerate,
+                        ),
+                    )
+                }
+            }
+
             // Bars drawn on Canvas
             Canvas(
                 modifier = Modifier
@@ -112,8 +133,8 @@ fun SpendingBarChart(
                 }
 
                 data.forEachIndexed { i, (_, amount) ->
-                    val amt = amount.toFloat()
-                    val isAbove = amt > avgAmount
+                    val amt = amount.toFloat() * barIntro.value
+                    val isAbove = amount.toFloat() > avgAmount
                     val barH = if (maxAmt > 0f) chartH * (amt / maxAmt) else 0f
                     val x = i * slotWidth + barGap
                     val barColor = if (isAbove) redColor else greenColor

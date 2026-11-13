@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.spendly.tracker.ui.components.AnimatedCurrencyText
 import com.spendly.tracker.ui.components.SpendlyCard
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing
@@ -91,7 +92,7 @@ fun CardAndBankMetricTile(
                 }
             }
             Spacer(modifier = Modifier.height(2.dp))
-            Text(
+            AnimatedCurrencyText(
                 text = formattedTotal,
                 style = if (isLongTotal) {
                     MaterialTheme.typography.headlineMedium
@@ -100,8 +101,6 @@ fun CardAndBankMetricTile(
                 },
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
 
             Spacer(modifier = Modifier.height(Spacing.md))

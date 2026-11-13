@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import android.view.HapticFeedbackConstants
+import com.spendly.tracker.data.contacts.LocalMerchantDisplay
 import com.spendly.tracker.data.database.entity.ProfileEntity
 import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.database.entity.TransactionType
@@ -136,11 +137,12 @@ fun TransactionItem(
 
     val sharedTransitionScope = LocalSharedTransitionScope.current
     val animatedVisibilityScope = LocalNavAnimatedVisibilityScope.current
+    val merchantDisplay = LocalMerchantDisplay.current
 
     @Composable
     fun RowContent(cardModifier: Modifier) {
         ListItemCardV2(
-        title = transaction.merchantName,
+        title = merchantDisplay(transaction.merchantName) ?: transaction.merchantName,
         subtitle = subtitle,
         amount = "$amountPrefix$formattedAmount",
         amountColor = amountColor,

@@ -4,7 +4,6 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,6 +18,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.spendly.tracker.ui.components.cards.SpendlyCardV2
+import com.spendly.tracker.ui.effects.AnimatedCheckmark
 import com.spendly.tracker.ui.theme.Dimensions
 import com.spendly.tracker.ui.theme.Spacing
 import com.spendly.tracker.worker.OptimizedSmsReaderWorker
@@ -233,11 +233,9 @@ private fun ProgressDetails(workInfo: WorkInfo) {
                     horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.Default.CheckCircle,
-                        contentDescription = null,
+                    AnimatedCheckmark(
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(Dimensions.Icon.medium)
+                        size = Dimensions.Icon.medium
                     )
                     Text(
                         text = "Scan completed successfully!",

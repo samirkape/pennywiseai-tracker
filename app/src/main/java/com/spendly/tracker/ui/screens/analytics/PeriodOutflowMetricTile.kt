@@ -2,45 +2,56 @@ package com.spendly.tracker.ui.screens.analytics
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.spendly.tracker.presentation.common.TransactionTypeFilter
-import com.spendly.tracker.ui.theme.expense_dark
-import com.spendly.tracker.ui.theme.expense_light
-import com.spendly.tracker.ui.theme.income_dark
-import com.spendly.tracker.ui.theme.income_light
+import com.spendly.tracker.ui.components.AnimatedCurrencyText
+import com.spendly.tracker.ui.components.currencyAnnotated
+import com.spendly.tracker.ui.components.headlineMoneySize
+import com.spendly.tracker.ui.components.inlineMoneySize
+import com.spendly.tracker.ui.theme.expense
+import com.spendly.tracker.ui.theme.success
 import com.spendly.tracker.utils.CurrencyFormatter
 import java.math.BigDecimal
 import java.math.RoundingMode
+import kotlin.math.roundToInt
 
 @Composable
 fun PeriodOutflowMetricTile(
@@ -64,9 +75,13 @@ fun PeriodOutflowMetricTile(
         }
     }
 
+    val segmentTotal = metricRows.fold(BigDecimal.ZERO) { acc, row -> acc + row.amount }
     val formattedTotal = CurrencyFormatter.formatCurrency(outflow.total, currency)
-    val isLongTotal = formattedTotal.length > 14
-    val delta = outflow.deltaPercent
+    val headlineSp = headlineMoneySize(formattedTotal.length)
+    val roundedDelta = outflow.deltaPercent?.roundToInt()
+    val average = if (outflow.transactionCount > 0) {
+        outflow.total.divide(BigDecimal(outflow.transactionCount), 2, RoundingMode.HALF_UP)
+    } else BigDecimal.ZERO
 
     val cardClick: (() -> Unit)? = onClick?.let { handler ->
         {
@@ -81,92 +96,119 @@ fun PeriodOutflowMetricTile(
     } ?: onDetailNavigate
 
     Card(
-        modifier = modifier.fillMaxWidth().then(
-            if (cardClick != null) Modifier.clickable(onClick = cardClick) else Modifier
-        ),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
 
-            // .card-label
-            Text(
-                text = "TOTAL OUTFLOW",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // .amount-row : amount + delta-badge
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom,
+            // ── Header: the card's single tap target. The breakdown row below owns its own targets,
+            // so the two zones never overlap or double-fire.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .then(if (cardClick != null) Modifier.clickable(onClick = cardClick) else Modifier),
             ) {
-                Text(
-                    text = formattedTotal,
-                    style = if (isLongTotal) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                if (delta != null) {
-                    val isUp = delta >= 0f
-                    val isDark = isSystemInDarkTheme()
-                    // outflow up = bad (red), outflow down = good (green)
-                    val fg = if (!isUp) {
-                        if (isDark) income_dark else income_light
-                    } else {
-                        if (isDark) expense_dark else expense_light
-                    }
-                    val bg = fg.copy(alpha = 0.15f)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Row(
-                        modifier = Modifier.background(bg, RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
-                    ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "TOTAL OUTFLOW",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (cardClick != null) {
+                        // Disclosure affordance so the tappable zone is legible at a glance.
                         Icon(
-                            imageVector = if (isUp) Icons.AutoMirrored.Filled.TrendingUp else Icons.AutoMirrored.Filled.TrendingDown,
+                            imageVector = Icons.Default.KeyboardArrowRight,
                             contentDescription = null,
-                            modifier = Modifier.size(13.dp),
-                            tint = fg,
-                        )
-                        Text(
-                            text = "${if (isUp) "+" else ""}${delta.toInt()}% vs last",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = fg,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Stepped size + tabular figures: long totals shrink instead of being ellipsized,
+                // and digits don't jitter when the value tweens between periods.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    AnimatedCurrencyText(
+                        text = currencyAnnotated(formattedTotal, headlineSp),
+                        style = MaterialTheme.typography.displaySmall.copy(
+                            fontSize = headlineSp.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFeatureSettings = "tnum",
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (roundedDelta != null) {
+                        OutflowDeltaBadge(roundedDelta)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                val insight = buildString {
+                    append("${outflow.transactionCount} transaction${if (outflow.transactionCount != 1) "s" else ""}")
+                    if (outflow.transactionCount > 0) {
+                        append(" · ${CurrencyFormatter.formatCurrency(average, currency)} average")
+                    }
+                }
+                Text(
+                    text = insight,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                )
             }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // .txn-count
-            Text(
-                text = "${outflow.transactionCount} transaction${if (outflow.transactionCount != 1) "s" else ""}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // .divider
             HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // .breakdown-row 3-col
+            // ── Composition bar: proportions at a glance; the columns below carry exact values.
+            if (segmentTotal > BigDecimal.ZERO) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(CircleShape),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    metricRows.forEach { row ->
+                        val share = row.amount
+                            .divide(segmentTotal, 4, RoundingMode.HALF_UP)
+                            .toFloat()
+                            .coerceAtLeast(0.001f)
+                        Box(
+                            modifier = Modifier
+                                .weight(share)
+                                .fillMaxHeight()
+                                .background(row.option.accentColor()),
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+
+            // ── Breakdown row: exact amounts + share + counts, each column a drill-down target.
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 metricRows.forEachIndexed { index, row ->
-                    val percent = if (outflow.total > BigDecimal.ZERO)
+                    val percent = if (segmentTotal > BigDecimal.ZERO)
                         row.amount.multiply(BigDecimal(100))
-                            .divide(outflow.total, 0, RoundingMode.HALF_UP)
+                            .divide(segmentTotal, 0, RoundingMode.HALF_UP)
                             .toInt()
                     else 0
                     BreakdownItem(
@@ -196,6 +238,43 @@ fun PeriodOutflowMetricTile(
     }
 }
 
+/**
+ * Delta badge for the aggregate outflow figure. Deliberately neutral: an increase can mean healthy
+ * investing, so the card's headline number never gets a good/bad judgement colour.
+ */
+@Composable
+private fun OutflowDeltaBadge(roundedDelta: Int) {
+    val flat = roundedDelta == 0
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Icon(
+                imageVector = when {
+                    flat -> Icons.Default.Remove
+                    roundedDelta > 0 -> Icons.AutoMirrored.Filled.TrendingUp
+                    else -> Icons.AutoMirrored.Filled.TrendingDown
+                },
+                contentDescription = null,
+                modifier = Modifier.size(13.dp),
+                tint = color,
+            )
+            Text(
+                text = "${if (roundedDelta > 0) "+" else ""}$roundedDelta% vs last",
+                style = MaterialTheme.typography.labelSmall,
+                color = color,
+            )
+        }
+    }
+}
+
 @Composable
 private fun BreakdownItem(
     row: OutflowMetricRow,
@@ -204,17 +283,53 @@ private fun BreakdownItem(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
 ) {
+    val amount = CurrencyFormatter.formatCurrency(row.amount, currency)
+    val amountSp = inlineMoneySize(amount.length)
     Column(
-        modifier = modifier.then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        modifier = modifier
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .heightIn(min = 48.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            Icon(imageVector = row.option.icon, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(text = row.option.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Icon(
+                imageVector = row.option.icon,
+                contentDescription = null,
+                modifier = Modifier.size(12.dp),
+                tint = row.option.accentColor(),
+            )
+            Text(
+                text = row.option.label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
-        Text(text = CurrencyFormatter.formatCurrency(row.amount, currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(text = "$percentOfTotal%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // Size ladder instead of ellipsis — money is never truncated.
+        Text(
+            text = currencyAnnotated(amount, amountSp),
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = amountSp.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFeatureSettings = "tnum",
+            ),
+            maxLines = 1,
+        )
+        Text(
+            text = "$percentOfTotal% · ${row.transactionCount} txn${if (row.transactionCount != 1) "s" else ""}",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
     }
+}
+
+@Composable
+private fun OutflowMetricOption.accentColor(): Color = when (this) {
+    OutflowMetricOption.SPENDING -> MaterialTheme.colorScheme.expense
+    OutflowMetricOption.INVESTED -> MaterialTheme.colorScheme.success
+    OutflowMetricOption.CC_PAYMENT -> MaterialTheme.colorScheme.primary
 }
 
 private enum class OutflowMetricOption(val label: String, val icon: ImageVector) {

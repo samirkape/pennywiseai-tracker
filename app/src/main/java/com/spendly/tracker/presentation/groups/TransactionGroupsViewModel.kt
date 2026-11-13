@@ -68,10 +68,11 @@ class TransactionGroupsViewModel @Inject constructor(
 
     private fun buildSummary(group: TransactionGroupEntity, transactions: List<TransactionEntity>): GroupSummary {
         val expense = transactions
-            .filter { !it.isExcludedFromTracking && (it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT) }
+            .filter { !it.isExcludedFromTracking && it.loanId == null &&
+                (it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT) }
             .fold(BigDecimal.ZERO) { acc, t -> acc + t.amount }
         val income = transactions
-            .filter { !it.isExcludedFromTracking && it.transactionType == TransactionType.INCOME }
+            .filter { !it.isExcludedFromTracking && it.loanId == null && it.transactionType == TransactionType.INCOME }
             .fold(BigDecimal.ZERO) { acc, t -> acc + t.amount }
         return GroupSummary(group, transactions.size, expense, income)
     }

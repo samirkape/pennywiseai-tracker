@@ -32,10 +32,9 @@ data class BudgetOverallSummary(
     val groups: List<BudgetGroupSpending>,
     val totalIncome: BigDecimal,
     val totalLimitBudget: BigDecimal,
+    // Spending only: investment outflows (saving, not spending) never count toward
+    // budget limits or their derived totals.
     val totalLimitSpent: BigDecimal,
-    // Portion of totalLimitSpent contributed by investment transactions, so UIs can
-    // show spending and investments separately while both still sum to totalLimitSpent.
-    val totalInvested: BigDecimal = BigDecimal.ZERO,
     val totalTargetGoal: BigDecimal,
     val totalTargetActual: BigDecimal,
     val totalExpectedBudget: BigDecimal,

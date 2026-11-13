@@ -77,7 +77,7 @@ import com.spendly.tracker.data.database.dao.PrepaidExpenseDao
  */
 @Database(
     entities = [TransactionEntity::class, SubscriptionEntity::class, ChatMessage::class, MerchantMappingEntity::class, MerchantAliasEntity::class, CategoryEntity::class, AccountBalanceEntity::class, UnrecognizedSmsEntity::class, CardEntity::class, RuleEntity::class, RuleApplicationEntity::class, ExchangeRateEntity::class, BudgetEntity::class, BudgetCategoryEntity::class, BudgetMonthSnapshotEntity::class, BudgetCategoryMonthSnapshotEntity::class, TransactionSplitEntity::class, BankNotificationEntity::class, LoanEntity::class, TransactionGroupEntity::class, ProfileEntity::class, SalaryMonthOverrideEntity::class, TransactionReceiptEntity::class, InsightsCacheEntity::class, GoalEntity::class, GoalContributionEntity::class, PrepaidExpenseEntity::class, PrepaidAllocationEntity::class],
-    version = 66,
+    version = 67,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -137,6 +137,7 @@ import com.spendly.tracker.data.database.dao.PrepaidExpenseDao
         AutoMigration(from = 61, to = 62),
         // 62→63 is a manual migration registered in DatabaseModule (add merchant_manually_edited + category_manually_edited columns)
         // 65→66 is a manual migration registered in DatabaseModule (add amount_manually_edited column)
+        // 66→67 is a manual migration registered in DatabaseModule (add last_used_at column to merchant_aliases)
     ]
 )
 @TypeConverters(Converters::class)
@@ -210,7 +211,8 @@ abstract class SpendlyDatabase : RoomDatabase() {
                         MIGRATION_62_63,
                         MIGRATION_63_64,
                         MIGRATION_64_65,
-                        MIGRATION_65_66
+                        MIGRATION_65_66,
+                        MIGRATION_66_67
                     )
                     .build()
                 INSTANCE = instance
@@ -839,6 +841,13 @@ abstract class SpendlyDatabase : RoomDatabase() {
         val MIGRATION_65_66 = object : Migration(65, 66) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `transactions` ADD COLUMN `amount_manually_edited` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRATION_66_67 = object : Migration(66, 67) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Track when a merchant alias was last applied to an SMS/transaction
+                db.execSQL("ALTER TABLE `merchant_aliases` ADD COLUMN `last_used_at` TEXT DEFAULT NULL")
             }
         }
 

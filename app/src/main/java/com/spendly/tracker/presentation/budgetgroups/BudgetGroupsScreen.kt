@@ -1,5 +1,6 @@
 package com.spendly.tracker.presentation.budgetgroups
 
+import com.spendly.tracker.ui.theme.Dimensions
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
@@ -11,6 +12,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -30,10 +32,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -259,9 +266,9 @@ private fun BudgetGroupsContent(
             }
             AnimatedVisibility(
                 visible = visible.value,
-                enter = fadeIn(tween(300)) + slideInVertically(
+                enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                     initialOffsetY = { slideOffsetPx },
-                    animationSpec = tween(300)
+                    animationSpec = tween(Dimensions.Animation.standard)
                 )
             ) {
                 MonthSelector(
@@ -283,9 +290,9 @@ private fun BudgetGroupsContent(
             }
             AnimatedVisibility(
                 visible = visible.value,
-                enter = fadeIn(tween(300)) + slideInVertically(
+                enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                     initialOffsetY = { slideOffsetPx },
-                    animationSpec = tween(300)
+                    animationSpec = tween(Dimensions.Animation.standard)
                 )
             ) {
                 BudgetHeroTile(summary = summary, currency = uiState.currency)
@@ -300,9 +307,9 @@ private fun BudgetGroupsContent(
             }
             AnimatedVisibility(
                 visible = visible.value,
-                enter = fadeIn(tween(300)) + slideInVertically(
+                enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                     initialOffsetY = { slideOffsetPx },
-                    animationSpec = tween(300)
+                    animationSpec = tween(Dimensions.Animation.standard)
                 )
             ) {
                 BudgetTrendCard(trend = uiState.trend, currency = uiState.currency)
@@ -331,9 +338,9 @@ private fun BudgetGroupsContent(
             }
             AnimatedVisibility(
                 visible = visible.value,
-                enter = fadeIn(tween(300)) + slideInVertically(
+                enter = fadeIn(tween(Dimensions.Animation.standard)) + slideInVertically(
                     initialOffsetY = { slideOffsetPx },
-                    animationSpec = tween(300)
+                    animationSpec = tween(Dimensions.Animation.standard)
                 )
             ) {
                 BudgetCard(
@@ -393,69 +400,104 @@ private fun MonthSelector(
     onNext: () -> Unit,
     onToggleMode: () -> Unit
 ) {
-    Column(
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+        FilledTonalIconButton(
+            onClick = onPrevious,
+            modifier = Modifier.size(36.dp)
         ) {
-            FilledTonalIconButton(
-                onClick = onPrevious,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    Icons.Default.ChevronLeft,
-                    contentDescription = "Previous month",
-                    modifier = Modifier.size(Dimensions.Icon.medium)
-                )
-            }
+            Icon(
+                Icons.Default.ChevronLeft,
+                contentDescription = "Previous month",
+                modifier = Modifier.size(Dimensions.Icon.medium)
+            )
+        }
 
-            Spacer(modifier = Modifier.width(Spacing.md))
+        Spacer(modifier = Modifier.width(Spacing.md))
 
+        // Period label doubles as the mode switcher: tapping it opens a small
+        // menu to flip between pay-period and calendar-month ranges.
+        Box {
+            var modeMenuExpanded by remember { mutableStateOf(false) }
+            val pillShape = RoundedCornerShape(50)
             Surface(
-                shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.secondaryContainer
+                shape = pillShape,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                modifier = Modifier
+                    .clip(pillShape)
+                    .clickable { modeMenuExpanded = true }
             ) {
-                Text(
-                    text = periodLabel,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm)
-                )
+                Row(
+                    modifier = Modifier.padding(
+                        PaddingValues(
+                            start = Spacing.md,
+                            end = Spacing.xs,
+                            top = Spacing.sm,
+                            bottom = Spacing.sm
+                        )
+                    ),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = periodLabel,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    Icon(
+                        Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Change period mode",
+                        modifier = Modifier.size(Dimensions.Icon.small),
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.width(Spacing.md))
-
-            FilledTonalIconButton(
-                onClick = onNext,
-                enabled = !isCurrentMonth,
-                modifier = Modifier.size(36.dp)
+            DropdownMenu(
+                expanded = modeMenuExpanded,
+                onDismissRequest = { modeMenuExpanded = false }
             ) {
-                Icon(
-                    Icons.Default.ChevronRight,
-                    contentDescription = "Next month",
-                    modifier = Modifier.size(Dimensions.Icon.medium)
+                DropdownMenuItem(
+                    text = { Text("Pay Period") },
+                    trailingIcon = {
+                        if (useFinancialMonth) {
+                            Icon(Icons.Default.Check, contentDescription = "Selected")
+                        }
+                    },
+                    onClick = {
+                        modeMenuExpanded = false
+                        if (!useFinancialMonth) onToggleMode()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Calendar") },
+                    trailingIcon = {
+                        if (!useFinancialMonth) {
+                            Icon(Icons.Default.Check, contentDescription = "Selected")
+                        }
+                    },
+                    onClick = {
+                        modeMenuExpanded = false
+                        if (useFinancialMonth) onToggleMode()
+                    }
                 )
             }
         }
 
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.height(32.dp)) {
-            SegmentedButton(
-                selected = useFinancialMonth,
-                onClick = { if (!useFinancialMonth) onToggleMode() },
-                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                label = { Text("Pay Period", style = MaterialTheme.typography.labelSmall) }
-            )
-            SegmentedButton(
-                selected = !useFinancialMonth,
-                onClick = { if (useFinancialMonth) onToggleMode() },
-                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                label = { Text("Calendar", style = MaterialTheme.typography.labelSmall) }
+        Spacer(modifier = Modifier.width(Spacing.md))
+
+        FilledTonalIconButton(
+            onClick = onNext,
+            enabled = !isCurrentMonth,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = "Next month",
+                modifier = Modifier.size(Dimensions.Icon.medium)
             )
         }
     }
@@ -1034,11 +1076,78 @@ private fun HeroStat(
 }
 
 /**
- * Compact multi-period trend: spending (excluding investments) and investments against
- * the budget line across the most recent periods, mirroring the Actual/Pace convention
- * of the per-budget chart. The spending line tints to the breach color when the latest
- * period's spending alone exceeds the budget, while the caption counts total breaches
- * (spending + investments) so it always agrees with the hero figure.
+ * Y-axis labels for a trend chart, pre-measured so they can be drawn exactly on
+ * their data positions.
+ *
+ * compose-charts lays its own indicators out with [Arrangement.SpaceBetween], which
+ * tiles whole text boxes across the chart height: the first and last label end up
+ * half a text height away from the value they name (₹0 reads slightly above the
+ * true zero, ₹5.0L slightly below the true maximum) while the middle label is
+ * perfect. Drawing the labels ourselves centers every label on its value.
+ *
+ * The library's default `IndicatorCount.CountBased(5)` splits are evenly spaced
+ * (max … 0), so label positions stay uniformly spaced as well.
+ */
+private class TrendYAxisLabels(
+    val layouts: List<TextLayoutResult>,
+    val gutterWidth: Dp,
+)
+
+/** Same gap compose-charts reserves after its indicator column (its default padding). */
+private val Y_AXIS_GUTTER_PADDING = 12.dp
+
+@Composable
+private fun rememberTrendYAxisLabels(
+    maxValue: Double,
+    currency: String,
+    textStyle: TextStyle,
+    count: Int = 5,
+): TrendYAxisLabels? {
+    if (maxValue <= 0.0 || count < 2) return null
+    val textMeasurer = rememberTextMeasurer()
+    val step = maxValue / (count - 1)
+    val layouts = (0 until count).map { index ->
+        textMeasurer.measure(
+            text = CurrencyFormatter.formatAbbreviated(maxValue - index * step, currency),
+            style = textStyle
+        )
+    }
+    val gutterWidth = with(LocalDensity.current) {
+        layouts.maxOf { it.size.width }.toDp() + Y_AXIS_GUTTER_PADDING
+    }
+    return TrendYAxisLabels(layouts = layouts, gutterWidth = gutterWidth)
+}
+
+/**
+ * Draws the pre-measured labels over the chart's left gutter. The label at index 0
+ * sits centered on the chart maximum (top edge of the plot), the last one centered
+ * on zero (bottom edge), matching where the data itself is drawn.
+ */
+@Composable
+private fun TrendYAxisLabelsOverlay(
+    labels: TrendYAxisLabels,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(modifier = modifier) {
+        labels.layouts.forEachIndexed { index, layout ->
+            val y = if (labels.layouts.lastIndex == 0) {
+                size.height / 2f
+            } else {
+                size.height * index / labels.layouts.lastIndex
+            }
+            drawText(
+                textLayoutResult = layout,
+                topLeft = Offset(x = 0f, y = y - layout.size.height / 2f)
+            )
+        }
+    }
+}
+
+/**
+ * Compact multi-period trend: spending against the budget line across the most recent
+ * periods, mirroring the Actual/Pace convention of the per-budget chart. The spending
+ * line tints to the breach color when the latest period's spending alone exceeds the
+ * budget, and the caption counts the same, so it always agrees with the hero figure.
  */
 @Composable
 private fun BudgetTrendCard(
@@ -1051,7 +1160,6 @@ private fun BudgetTrendCard(
     val themeColors = MaterialTheme.colorScheme
     val spendingOverBudget = trend.last().let { it.budget > BigDecimal.ZERO && it.spent > it.budget }
     val spentColor = if (spendingOverBudget) themeColors.error else themeColors.primary
-    val investedColor = themeColors.spendPurple
     val budgetLineColor = themeColors.onSurfaceVariant.copy(alpha = 0.45f)
     val overCount = trend.count { it.isOverBudget }
     val shortDate = java.time.format.DateTimeFormatter.ofPattern("MMM d")
@@ -1080,68 +1188,83 @@ private fun BudgetTrendCard(
 
         Spacer(modifier = Modifier.height(Spacing.sm))
 
-        LineChart(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(130.dp),
-            data = listOf(
-                Line(
-                    label = "Spending",
-                    values = trend.map { it.spent.toDouble() },
-                    color = SolidColor(spentColor),
-                    firstGradientFillColor = spentColor.copy(alpha = 0.18f),
-                    secondGradientFillColor = Color.Transparent,
-                    strokeAnimationSpec = tween(1000),
-                    gradientAnimationDelay = 400,
-                    drawStyle = DrawStyle.Stroke(width = 2.5.dp),
-                    curvedEdges = true,
-                    dotProperties = DotProperties(enabled = false)
-                ),
-                Line(
-                    label = "Invested",
-                    values = trend.map { it.invested.toDouble() },
-                    color = SolidColor(investedColor),
-                    strokeAnimationSpec = tween(1000),
-                    gradientAnimationDelay = 400,
-                    drawStyle = DrawStyle.Stroke(width = 1.75.dp),
-                    curvedEdges = true,
-                    dotProperties = DotProperties(enabled = false)
-                ),
-                Line(
-                    label = "Budget",
-                    values = trend.map { it.budget.toDouble() },
-                    color = SolidColor(budgetLineColor),
-                    drawStyle = DrawStyle.Stroke(width = 1.5.dp),
-                    strokeAnimationSpec = tween(1000),
-                    curvedEdges = false,
-                    dotProperties = DotProperties(enabled = false)
-                )
-            ),
-            dividerProperties = DividerProperties(enabled = false),
-            indicatorProperties = HorizontalIndicatorProperties(
-                enabled = true,
-                textStyle = MaterialTheme.typography.labelSmall.copy(
-                    color = themeColors.onSurfaceVariant.copy(0.7f)
-                ),
-                contentBuilder = { value ->
-                    CurrencyFormatter.formatAbbreviated(value, currency)
-                }
-            ),
-            labelHelperProperties = LabelHelperProperties(enabled = false),
-            labelProperties = LabelProperties(enabled = false),
-            gridProperties = GridProperties(
-                enabled = true,
-                xAxisProperties = GridProperties.AxisProperties(
-                    enabled = false
-                ),
-                yAxisProperties = GridProperties.AxisProperties(
-                    enabled = true,
-                    style = StrokeStyle.Dashed(),
-                    color = SolidColor(themeColors.onSurface.copy(alpha = 0.08f))
-                )
-            ),
-            animationMode = AnimationMode.Together(delayBuilder = { it * 100L })
+        val indicatorStyle = MaterialTheme.typography.labelSmall.copy(
+            color = themeColors.onSurfaceVariant.copy(0.7f)
         )
+        // Same maximum the chart library derives from the data (its default maxValue).
+        val chartMax = trend.maxOf { maxOf(it.spent, it.budget).toDouble() }
+        val yLabels = rememberTrendYAxisLabels(
+            maxValue = chartMax,
+            currency = currency,
+            textStyle = indicatorStyle
+        )
+        Box(modifier = Modifier.fillMaxWidth().height(130.dp)) {
+            Row(modifier = Modifier.matchParentSize()) {
+                if (yLabels != null) {
+                    Spacer(modifier = Modifier.width(yLabels.gutterWidth))
+                }
+                LineChart(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(1f),
+                    data = listOf(
+                        Line(
+                            label = "Spending",
+                            values = trend.map { it.spent.toDouble() },
+                            color = SolidColor(spentColor),
+                            firstGradientFillColor = spentColor.copy(alpha = 0.18f),
+                            secondGradientFillColor = Color.Transparent,
+                            strokeAnimationSpec = tween(1000),
+                            gradientAnimationDelay = 400,
+                            drawStyle = DrawStyle.Stroke(width = 2.5.dp),
+                            curvedEdges = true,
+                            dotProperties = DotProperties(enabled = false)
+                        ),
+                        Line(
+                            label = "Budget",
+                            values = trend.map { it.budget.toDouble() },
+                            color = SolidColor(budgetLineColor),
+                            drawStyle = DrawStyle.Stroke(width = 1.5.dp),
+                            strokeAnimationSpec = tween(1000),
+                            curvedEdges = false,
+                            dotProperties = DotProperties(enabled = false)
+                        )
+                    ),
+                    dividerProperties = DividerProperties(enabled = false),
+                    indicatorProperties = HorizontalIndicatorProperties(
+                        // Y-axis labels are drawn by TrendYAxisLabelsOverlay below: the
+                        // library spaces its indicator text boxes with SpaceBetween,
+                        // which leaves the first/last label half a text height away
+                        // from the value it names.
+                        enabled = false,
+                        textStyle = indicatorStyle,
+                        contentBuilder = { value ->
+                            CurrencyFormatter.formatAbbreviated(value, currency)
+                        }
+                    ),
+                    labelHelperProperties = LabelHelperProperties(enabled = false),
+                    labelProperties = LabelProperties(enabled = false),
+                    gridProperties = GridProperties(
+                        enabled = true,
+                        xAxisProperties = GridProperties.AxisProperties(
+                            enabled = false
+                        ),
+                        yAxisProperties = GridProperties.AxisProperties(
+                            enabled = true,
+                            style = StrokeStyle.Dashed(),
+                            color = SolidColor(themeColors.onSurface.copy(alpha = 0.08f))
+                        )
+                    ),
+                    animationMode = AnimationMode.Together(delayBuilder = { it * 100L })
+                )
+            }
+            yLabels?.let { labels ->
+                TrendYAxisLabelsOverlay(
+                    labels = labels,
+                    modifier = Modifier.matchParentSize()
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(Spacing.sm))
 
@@ -1159,19 +1282,6 @@ private fun BudgetTrendCard(
             Spacer(modifier = Modifier.width(Spacing.xs))
             Text(
                 text = "Spending",
-                style = MaterialTheme.typography.labelSmall,
-                color = themeColors.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.width(Spacing.md))
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(investedColor)
-            )
-            Spacer(modifier = Modifier.width(Spacing.xs))
-            Text(
-                text = "Invested",
                 style = MaterialTheme.typography.labelSmall,
                 color = themeColors.onSurfaceVariant
             )
@@ -1218,61 +1328,87 @@ private fun SpendingPaceChart(
     } ?: false
     val spendingColor = if (isOverPace) themeColors.error else themeColors.primary
 
+    val indicatorStyle = MaterialTheme.typography.labelSmall.copy(
+        color = themeColors.onSurfaceVariant.copy(0.7f)
+    )
+    // Same maximum the chart library derives from the data (its default maxValue).
+    val chartMax = maxOf(cumulativeSpending.maxOrNull() ?: 0.0, budgetPace.maxOrNull() ?: 0.0)
+    val yLabels = rememberTrendYAxisLabels(
+        maxValue = chartMax,
+        currency = currency,
+        textStyle = indicatorStyle
+    )
+
     Column(modifier = modifier.fillMaxWidth()) {
-            LineChart(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp),
-                data = listOf(
-                    Line(
-                        label = "Actual",
-                        values = cumulativeSpending,
-                        color = SolidColor(spendingColor),
-                        firstGradientFillColor = spendingColor.copy(alpha = 0.2f),
-                        secondGradientFillColor = Color.Transparent,
-                        strokeAnimationSpec = tween(1200),
-                        gradientAnimationDelay = 600,
-                        drawStyle = DrawStyle.Stroke(width = 2.5.dp),
-                        curvedEdges = true,
-                        dotProperties = DotProperties(
-                            enabled = false
+        Box(modifier = Modifier.fillMaxWidth().height(120.dp)) {
+            Row(modifier = Modifier.matchParentSize()) {
+                if (yLabels != null) {
+                    Spacer(modifier = Modifier.width(yLabels.gutterWidth))
+                }
+                LineChart(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(1f),
+                    data = listOf(
+                        Line(
+                            label = "Actual",
+                            values = cumulativeSpending,
+                            color = SolidColor(spendingColor),
+                            firstGradientFillColor = spendingColor.copy(alpha = 0.2f),
+                            secondGradientFillColor = Color.Transparent,
+                            strokeAnimationSpec = tween(1200),
+                            gradientAnimationDelay = 600,
+                            drawStyle = DrawStyle.Stroke(width = 2.5.dp),
+                            curvedEdges = true,
+                            dotProperties = DotProperties(
+                                enabled = false
+                            )
+                        ),
+                        Line(
+                            label = "Budget Pace",
+                            values = budgetPace,
+                            color = SolidColor(themeColors.onSurfaceVariant.copy(alpha = 0.4f)),
+                            drawStyle = DrawStyle.Stroke(width = 1.5.dp),
+                            strokeAnimationSpec = tween(1200),
+                            curvedEdges = false,
+                            dotProperties = DotProperties(enabled = false)
                         )
                     ),
-                    Line(
-                        label = "Budget Pace",
-                        values = budgetPace,
-                        color = SolidColor(themeColors.onSurfaceVariant.copy(alpha = 0.4f)),
-                        drawStyle = DrawStyle.Stroke(width = 1.5.dp),
-                        strokeAnimationSpec = tween(1200),
-                        curvedEdges = false,
-                        dotProperties = DotProperties(enabled = false)
-                    )
-                ),
-                dividerProperties = DividerProperties(enabled = false),
-                indicatorProperties = HorizontalIndicatorProperties(
-                    enabled = true,
-                    textStyle = MaterialTheme.typography.labelSmall.copy(
-                        color = themeColors.onSurfaceVariant.copy(0.7f)
+                    dividerProperties = DividerProperties(enabled = false),
+                    indicatorProperties = HorizontalIndicatorProperties(
+                        // Y-axis labels are drawn by TrendYAxisLabelsOverlay below: the
+                        // library spaces its indicator text boxes with SpaceBetween,
+                        // which leaves the first/last label half a text height away
+                        // from the value it names.
+                        enabled = false,
+                        textStyle = indicatorStyle,
+                        contentBuilder = { value ->
+                            CurrencyFormatter.formatAbbreviated(value, currency)
+                        }
                     ),
-                    contentBuilder = { value ->
-                        CurrencyFormatter.formatAbbreviated(value, currency)
-                    }
-                ),
-                labelHelperProperties = LabelHelperProperties(enabled = false),
-                labelProperties = LabelProperties(enabled = false),
-                gridProperties = GridProperties(
-                    enabled = true,
-                    xAxisProperties = GridProperties.AxisProperties(
-                        enabled = false
-                    ),
-                    yAxisProperties = GridProperties.AxisProperties(
+                    labelHelperProperties = LabelHelperProperties(enabled = false),
+                    labelProperties = LabelProperties(enabled = false),
+                    gridProperties = GridProperties(
                         enabled = true,
-                        style = StrokeStyle.Dashed(),
-                        color = SolidColor(themeColors.onSurface.copy(alpha = 0.08f))
-                    )
-                ),
-                animationMode = AnimationMode.Together(delayBuilder = { it * 100L }),
-            )
+                        xAxisProperties = GridProperties.AxisProperties(
+                            enabled = false
+                        ),
+                        yAxisProperties = GridProperties.AxisProperties(
+                            enabled = true,
+                            style = StrokeStyle.Dashed(),
+                            color = SolidColor(themeColors.onSurface.copy(alpha = 0.08f))
+                        )
+                    ),
+                    animationMode = AnimationMode.Together(delayBuilder = { it * 100L }),
+                )
+            }
+            yLabels?.let { labels ->
+                TrendYAxisLabelsOverlay(
+                    labels = labels,
+                    modifier = Modifier.matchParentSize()
+                )
+            }
+        }
 
             Spacer(modifier = Modifier.height(Spacing.xs))
 

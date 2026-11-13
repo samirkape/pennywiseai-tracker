@@ -254,6 +254,10 @@ class SmsTransactionProcessor @Inject constructor(
                     currency = finalEntity.currency
                 )
 
+                // Re-evaluate savings pace/milestones after the new transaction lands.
+                com.spendly.tracker.worker.SavingsPaceCheckWorker.enqueueOneShot(appContext)
+                com.spendly.tracker.widget.SavingsWidgetUpdateWorker.enqueueOneShot(appContext)
+
                 return ProcessingResult(true, transactionId = rowId)
             } else {
                 Log.d(TAG, "Transaction already exists (duplicate): ${entity.transactionHash}")

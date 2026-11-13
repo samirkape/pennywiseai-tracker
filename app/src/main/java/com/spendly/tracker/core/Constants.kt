@@ -16,6 +16,12 @@ object Constants {
 
         /** Alert the user when a new transaction pushes a budget bucket over its limit. */
         const val BUDGET_BREACH_ALERTS_ENABLED = true
+
+        /**
+         * Savings goal enhancements: forecast chart, what-if simulator, calculation details,
+         * and pace/milestone alerts. Flip to false to ship the base Savings page only.
+         */
+        const val SAVINGS_GOAL_ENHANCEMENTS_ENABLED = true
     }
     
     /**
@@ -75,6 +81,7 @@ object Constants {
         const val BUDGETS = "budgets"
         const val TRANSACTIONS = "transactions"
         const val ANALYTICS = "analytics"
+        const val SAVINGS = "savings"
         const val ANALYTICS_BREAKDOWN = "analytics_breakdown/{tileKey}"
         const val INSIGHTS = "insights"
         const val QUICK_CATEGORIZE = "quick_categorize"

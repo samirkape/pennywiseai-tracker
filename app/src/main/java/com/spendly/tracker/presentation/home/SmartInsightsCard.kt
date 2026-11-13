@@ -1,5 +1,10 @@
 package com.spendly.tracker.presentation.home
 
+import com.spendly.tracker.ui.theme.Dimensions
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -118,14 +124,28 @@ fun SmartInsightsCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     repeat(insights.size) { index ->
                         val isActive = pagerState.currentPage == index
+                        val dotSize by animateDpAsState(
+                            targetValue = if (isActive) 6.dp else 4.dp,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMedium,
+                            ),
+                            label = "insightDotSize",
+                        )
+                        val dotColor by animateColorAsState(
+                            targetValue = if (isActive) {
+                                MaterialTheme.colorScheme.spendPurple
+                            } else {
+                                MaterialTheme.colorScheme.spendPurple.copy(alpha = 0.3f)
+                            },
+                            animationSpec = tween(Dimensions.Animation.quick),
+                            label = "insightDotColor",
+                        )
                         Box(
                             modifier = Modifier
-                                .size(if (isActive) 6.dp else 4.dp)
+                                .size(dotSize)
                                 .clip(CircleShape)
-                                .background(
-                                    if (isActive) MaterialTheme.colorScheme.spendPurple
-                                    else MaterialTheme.colorScheme.spendPurple.copy(alpha = 0.3f)
-                                )
+                                .background(dotColor)
                         )
                     }
                 }

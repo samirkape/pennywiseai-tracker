@@ -29,7 +29,7 @@ import java.time.LocalTime
 import java.util.concurrent.TimeUnit
 
 /**
- * Fires once a day around 22:00 to nudge the user to review the day's transactions.
+ * Fires once a day around 22:00 (EOD) to nudge the user to review the day's transactions.
  */
 @HiltWorker
 class DailyReminderWorker @AssistedInject constructor(
@@ -39,20 +39,41 @@ class DailyReminderWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
-        private const val WORK_NAME_PERIODIC = "daily_reminder_periodic"
+        /**
+         * v2 of the unique work name. The original "daily_reminder_periodic" work was created
+         * without a flex window, so WorkManager could (and did) run it at any time of the day.
+         * The 22:00 initial delay only positioned the 24h period, not the run itself. Bumping
+         * the unique name lets this re-anchored schedule take effect for existing installs;
+         * canceling the legacy name stops the old, un-anchored work.
+         */
+        private const val WORK_NAME_PERIODIC = "daily_reminder_periodic_v2"
+        private const val WORK_NAME_LEGACY = "daily_reminder_periodic"
         private const val CHANNEL_ID = "daily_reminder_channel"
         private const val CHANNEL_NAME = "Daily Reminder"
         private const val REMINDER_HOUR = 22
 
+        /**
+         * Flex window (in minutes) for the periodic run. WorkManager runs periodic work inside
+         * the flex window at the END of each period; with no flex set, that window is the entire
+         * 24h period — the reason the notification fired at seemingly random times. Pinning the
+         * window to the last [FLEX_MINUTES] keeps each run inside [21:30, 22:00] local time.
+         */
+        private const val FLEX_MINUTES = 30L
+
         fun enqueuePeriodic(context: Context) {
+            val workManager = WorkManager.getInstance(context)
+            // One-time migration: drop the legacy un-anchored schedule if it is still around.
+            workManager.cancelUniqueWork(WORK_NAME_LEGACY)
+
             val now = LocalDateTime.now()
-            var nextRun = now.toLocalDate().atTime(LocalTime.of(REMINDER_HOUR, 0))
-            if (!nextRun.isAfter(now)) {
-                nextRun = nextRun.plusDays(1)
-            }
+            val nextRun = now.toLocalDate().atTime(LocalTime.of(REMINDER_HOUR, 0))
+                .let { if (it.isAfter(now)) it else it.plusDays(1) }
             val initialDelay = Duration.between(now, nextRun).toMillis()
 
-            val request = PeriodicWorkRequestBuilder<DailyReminderWorker>(24, TimeUnit.HOURS)
+            val request = PeriodicWorkRequestBuilder<DailyReminderWorker>(
+                24, TimeUnit.HOURS,
+                FLEX_MINUTES, TimeUnit.MINUTES
+            )
                 .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
                 .setConstraints(
                     Constraints.Builder()
@@ -61,12 +82,13 @@ class DailyReminderWorker @AssistedInject constructor(
                 )
                 .build()
 
-            WorkManager.getInstance(context)
+            workManager
                 .enqueueUniquePeriodicWork(
                     WORK_NAME_PERIODIC,
                     ExistingPeriodicWorkPolicy.KEEP,
                     request
                 )
+
         }
 
         fun cancelPeriodic(context: Context) {

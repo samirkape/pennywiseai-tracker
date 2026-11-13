@@ -6,6 +6,7 @@ import com.spendly.tracker.core.Constants
 import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.database.entity.TransactionType
 import com.spendly.shared.domain.mapping.SharedCategoryMapping
+import com.spendly.tracker.utils.MerchantNameNormalizer
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -67,26 +68,10 @@ fun ParsedTransaction.toEntity(): TransactionEntity {
 
 /**
  * Normalizes merchant name to consistent format.
- * Converts all-caps words to proper case, but preserves short all-letter tokens
- * as acronyms (e.g. ICCL, HDFC, NSE stay uppercased).
- * Already mixed-case names are kept as-is.
+ * See [MerchantNameNormalizer] — shared with the detail-screen save path and the
+ * one-time backfill pass over already-stored transactions.
  */
-private fun normalizeMerchantName(name: String): String {
-    val trimmed = name.trim()
-
-    // If already mixed case, keep as-is
-    if (trimmed != trimmed.uppercase()) return trimmed
-
-    // All-uppercase: convert word by word, preserving short all-letter tokens as acronyms
-    return trimmed.split(" ").joinToString(" ") { word ->
-        when {
-            word.isEmpty() -> word
-            // Short all-letter tokens (≤5 chars) are likely acronyms — keep them uppercased
-            word.length <= 5 && word.all { it.isLetter() } -> word
-            else -> word.lowercase().replaceFirstChar { it.uppercase() }
-        }
-    }
-}
+private fun normalizeMerchantName(name: String): String = MerchantNameNormalizer.normalize(name)
 
 /**
  * Determines the category based on merchant name and transaction type.
