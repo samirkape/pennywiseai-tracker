@@ -30,6 +30,7 @@ import androidx.navigation.toRoute
 import com.spendly.tracker.ui.LocalNavAnimatedVisibilityScope
 import com.spendly.tracker.ui.LocalSharedTransitionScope
 import com.spendly.tracker.ui.MainScreen
+import com.spendly.tracker.core.Constants
 import com.spendly.tracker.ui.utils.adaptiveMaxWidth
 import com.spendly.tracker.ui.viewmodel.ThemeViewModel
 
@@ -159,6 +160,12 @@ fun SpendlyNavHost(
                 },
                 onNavigateToPayPeriodSettings = {
                     navController.navigate(PayPeriodSettings) { launchSingleTop = true }
+                },
+                onNavigateToConnectorSettings = {
+                    navController.navigate(ConnectorSettings) { launchSingleTop = true }
+                },
+                onNavigateToConnectorAnalysis = {
+                    navController.navigate(ConnectorAnalysis) { launchSingleTop = true }
                 }
             )
         }
@@ -694,6 +701,33 @@ fun SpendlyNavHost(
                     navController.navigate(TransactionDetail(transactionId)) { launchSingleTop = true }
                 }
             )
+        }
+
+        if (Constants.Features.AI_CONNECTOR_ENABLED) {
+            composable<ConnectorSettings>(
+                enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+                exitTransition = { fadeOut(tween(200)) },
+                popEnterTransition = { fadeIn(tween(300)) },
+                popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+            ) {
+                com.spendly.tracker.ui.screens.connector.ConnectorSettingsScreen(
+                    onNavigateBack = { navController.safePopBackStack() }
+                )
+            }
+
+            composable<ConnectorAnalysis>(
+                enterTransition = { fadeIn(tween(300)) + slideInVertically { it / 4 } },
+                exitTransition = { fadeOut(tween(200)) },
+                popEnterTransition = { fadeIn(tween(300)) },
+                popExitTransition = { fadeOut(tween(200)) + slideOutVertically { it / 4 } }
+            ) {
+                com.spendly.tracker.ui.screens.connector.ConnectorAnalysisScreen(
+                    onNavigateBack = { navController.safePopBackStack() },
+                    onNavigateToConnectorSettings = {
+                        navController.navigate(ConnectorSettings) { launchSingleTop = true }
+                    }
+                )
+            }
         }
 
         composable<BehavioralStats>(

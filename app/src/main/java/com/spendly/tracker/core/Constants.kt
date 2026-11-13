@@ -16,8 +16,15 @@ object Constants {
 
         /** Alert the user when a new transaction pushes a budget bucket over its limit. */
         const val BUDGET_BREACH_ALERTS_ENABLED = true
+
+        /**
+         * ChatGPT / Claude connector. When false the connector routes are not
+         * registered and no UI may navigate to them. Users additionally toggle the
+         * connector on/off at runtime from Settings.
+         */
+        const val AI_CONNECTOR_ENABLED = true
     }
-    
+
     /**
      * SMS Processing Configuration
      */

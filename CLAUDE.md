@@ -13,6 +13,7 @@ Please reference these documents when working on this project:
 
 ## Key Technical Decisions
 - **AI chat (optional)**: `Constants.Features.AI_CHAT_ENABLED` gates the inner-shell chat route (`Routes.CHAT`). When `false`, the chat composable is not registered and there is no in-app navigation to it (LLM / chat UI code may remain for future enablement).
+- **AI connector (ChatGPT / Claude)**: `Constants.Features.AI_CONNECTOR_ENABLED` gates the connector routes (`ConnectorSettings`, `ConnectorAnalysis`); at runtime the user also toggles it on/off in Settings -> AI Connector. The connector lives in `com.spendly.tracker.connector` (domain / data / di packages) inside the `app` module and talks to the OpenAI Responses API and the Anthropic Messages API through protocol adapters. The user supplies their own API key, which is encrypted with the Android Keystore and never shipped in the APK. Only aggregated spend totals leave the device - never descriptions, SMS bodies, account numbers or bank names.
 
 ## Design Principles
 - **Material You**: Dynamic color from wallpaper (Android 12+)
