@@ -4,6 +4,7 @@ import com.spendly.tracker.connector.domain.AnalysisWindow
 import com.spendly.tracker.connector.domain.WindowUnit
 import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.database.entity.TransactionType
+import com.spendly.tracker.data.database.entity.TransferKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -26,7 +27,10 @@ class SpendAnalysisBuilderTest {
         merchant: String = "Store",
         category: String = "Shopping",
         date: LocalDateTime = LocalDateTime.of(2026, 3, 10, 12, 0),
-        tags: String = ""
+        tags: String = "",
+        loanId: Long? = null,
+        transferKind: String? = null,
+        excluded: Boolean = false
     ) = TransactionEntity(
         id = id,
         amount = BigDecimal(amount),
@@ -35,12 +39,16 @@ class SpendAnalysisBuilderTest {
         transactionType = type,
         dateTime = date,
         transactionHash = "h$id",
-        tags = tags
+        tags = tags,
+        loanId = loanId,
+        transferKind = transferKind,
+        isExcludedFromTracking = excluded
     )
 
     private fun build(
         transactions: List<TransactionEntity>,
-        previous: List<TransactionEntity> = emptyList()
+        previous: List<TransactionEntity> = emptyList(),
+        splits: Map<Long, Map<String, BigDecimal>> = emptyMap()
     ) = SpendAnalysisBuilder.build(
         transactions = transactions,
         previousTransactions = previous,
@@ -48,7 +56,7 @@ class SpendAnalysisBuilderTest {
         startDate = window.startDate(today),
         endDate = today,
         currency = "INR",
-        today = today
+        categorySplits = splits
     )
 
     @Test
@@ -71,6 +79,96 @@ class SpendAnalysisBuilderTest {
     }
 
     @Test
+    fun loanLinkedRowsAreNeverSpendingOrIncome() {
+        val analysis = build(
+            listOf(
+                tx(1, "100.00"),
+                tx(2, "5000.00", loanId = 7),
+                tx(3, "2000.00", type = TransactionType.INCOME, loanId = 7),
+                tx(4, "1200.00", type = TransactionType.INCOME)
+            )
+        )
+
+        assertEquals(BigDecimal("100.00"), analysis.totalExpense)
+        assertEquals(1, analysis.expenseCount)
+        assertEquals(BigDecimal("1200.00"), analysis.totalIncome)
+        assertEquals(1, analysis.incomeCount)
+        assertEquals(BigDecimal("100.00"), analysis.monthlyTrend.single().expense)
+        assertEquals(BigDecimal("1200.00"), analysis.monthlyTrend.single().income)
+    }
+
+    @Test
+    fun excludedRowsDoNotCount() {
+        val analysis = build(
+            listOf(
+                tx(1, "100.00"),
+                tx(2, "900.00", excluded = true)
+            )
+        )
+
+        assertEquals(BigDecimal("100.00"), analysis.totalExpense)
+        assertEquals(1, analysis.expenseCount)
+    }
+
+    @Test
+    fun moneyMovedIsReportedSeparately() {
+        val analysis = build(
+            listOf(
+                tx(1, "100.00"),
+                tx(
+                    2,
+                    "4000.00",
+                    type = TransactionType.TRANSFER,
+                    transferKind = TransferKind.CC_BILL_PAYMENT
+                ),
+                tx(
+                    3,
+                    "500.00",
+                    type = TransactionType.TRANSFER,
+                    transferKind = TransferKind.SELF_TRANSFER
+                ),
+                tx(
+                    4,
+                    "300.00",
+                    type = TransactionType.TRANSFER,
+                    transferKind = TransferKind.OTHERS_TRANSFER
+                ),
+                tx(5, "2000.00", type = TransactionType.INVESTMENT),
+                tx(6, "1500.00", loanId = 9)
+            )
+        )
+
+        val moved = analysis.moneyMoved!!
+        assertEquals(BigDecimal("4000.00"), moved.creditCardBillPayments.amount)
+        assertEquals(1, moved.creditCardBillPayments.transactionCount)
+        assertEquals(BigDecimal("500.00"), moved.selfTransfers.amount)
+        assertEquals(BigDecimal("300.00"), moved.transfersToOthers.amount)
+        assertEquals(BigDecimal("2000.00"), moved.investments.amount)
+        assertEquals(BigDecimal("1500.00"), moved.loanLinkedOutflow.amount)
+        assertEquals(BigDecimal("8300.00"), moved.outflowTotal)
+        assertTrue(analysis.renderPromptPayload().contains("MONEY_MOVED_NOT_COUNTED_AS_SPENDING"))
+    }
+
+    @Test
+    fun splitCategoriesAreUsedForTheBreakdown() {
+        val analysis = build(
+            transactions = listOf(
+                tx(1, "1000.00", category = "Shopping"),
+                tx(2, "400.00", category = "Food")
+            ),
+            splits = mapOf(
+                1L to mapOf("Electronics" to BigDecimal("600.00"), "Clothing" to BigDecimal("400.00"))
+            )
+        )
+
+        val electronics = analysis.categories.first { it.category == "Electronics" }
+        val clothing = analysis.categories.first { it.category == "Clothing" }
+        assertEquals(BigDecimal("600.00"), electronics.amount)
+        assertEquals(BigDecimal("400.00"), clothing.amount)
+        assertEquals(1, electronics.transactionCount)
+    }
+
+    @Test
     fun categorySharesAddUpToOneHundredPercent() {
         val analysis = build(
             listOf(
@@ -87,6 +185,16 @@ class SpendAnalysisBuilderTest {
 
         val transport = analysis.categories.first { it.category == "Transport" }
         assertEquals(60.0, transport.sharePercent, 0.01)
+    }
+
+    @Test
+    fun merchantAggregatesMaskUpiHandles() {
+        val analysis = build(
+            listOf(tx(1, "100.00", merchant = "9876543210@paytm"))
+        )
+
+        assertEquals("UPI contact", analysis.merchants.single().merchantName)
+        assertEquals("UPI contact", analysis.largestExpenses.single().name)
     }
 
     @Test

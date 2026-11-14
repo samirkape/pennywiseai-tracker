@@ -488,7 +488,7 @@ val displayCurrency by settingsViewModel.displayCurrency.collectAsStateWithLifec
                                 iconBgColor = indigo_light,
                                 iconTint = indigo_dark,
                                 title = "Analyse Spending",
-                                subtitle = "Find patterns in the last days, months or year",
+                                subtitle = "Analyse here or share the brief with any AI app",
                                 onClick = onNavigateToConnectorAnalysis,
                                 position = ItemPosition.BOTTOM
                             )

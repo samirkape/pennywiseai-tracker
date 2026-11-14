@@ -31,7 +31,13 @@ data class SpendAnalysis(
     val weekdaySpend: List<WeekdaySpend>,
     val previousExpense: BigDecimal?,
     val previousExpenseChangePercent: Double?,
-    val tags: List<TagSpend>
+    val tags: List<TagSpend>,
+    /**
+     * Money that left the account without being spending: credit card bill
+     * payments, transfers, investments and loan-linked rows. Reported separately
+     * so the model knows the totals above deliberately exclude them.
+     */
+    val moneyMoved: MoneyMovedSummary? = null
 ) {
     val netCashFlow: BigDecimal get() = totalIncome.subtract(totalExpense)
 
@@ -122,6 +128,18 @@ data class SpendAnalysis(
                 appendLine("- ${it.tag} | ${plain(it.amount)} | ${it.transactionCount}")
             }
         }
+
+        moneyMoved?.takeIf { !it.isEmpty }?.let { moved ->
+            appendLine()
+            appendLine("MONEY_MOVED_NOT_COUNTED_AS_SPENDING")
+            appendLine("total_outflow: ${plain(moved.outflowTotal)}")
+            appendLine("credit_card_bill_payments: ${plain(moved.creditCardBillPayments.amount)} (${moved.creditCardBillPayments.transactionCount})")
+            appendLine("transfers_to_own_accounts: ${plain(moved.selfTransfers.amount)} (${moved.selfTransfers.transactionCount})")
+            appendLine("transfers_to_others: ${plain(moved.transfersToOthers.amount)} (${moved.transfersToOthers.transactionCount})")
+            appendLine("investments: ${plain(moved.investments.amount)} (${moved.investments.transactionCount})")
+            appendLine("loan_linked_outflow: ${plain(moved.loanLinkedOutflow.amount)} (${moved.loanLinkedOutflow.transactionCount})")
+            appendLine("loan_linked_inflow: ${plain(moved.loanLinkedInflow.amount)} (${moved.loanLinkedInflow.transactionCount})")
+        }
     }
 
     private fun plain(value: BigDecimal): String =
@@ -176,3 +194,41 @@ data class TagSpend(
     val amount: BigDecimal,
     val transactionCount: Int
 )
+
+/** Aggregate of rows that are deliberately not treated as spending. */
+data class FlowSummary(
+    val amount: BigDecimal,
+    val transactionCount: Int
+) {
+    companion object {
+        val EMPTY = FlowSummary(BigDecimal.ZERO, 0)
+    }
+}
+
+/**
+ * Outflow that is not spending. Kept apart from the spend totals so the model can
+ * tell a transfer or a credit card bill payment from real expenditure.
+ */
+data class MoneyMovedSummary(
+    val creditCardBillPayments: FlowSummary = FlowSummary.EMPTY,
+    val selfTransfers: FlowSummary = FlowSummary.EMPTY,
+    val transfersToOthers: FlowSummary = FlowSummary.EMPTY,
+    val investments: FlowSummary = FlowSummary.EMPTY,
+    val loanLinkedOutflow: FlowSummary = FlowSummary.EMPTY,
+    val loanLinkedInflow: FlowSummary = FlowSummary.EMPTY
+) {
+    val outflowTotal: BigDecimal
+        get() = creditCardBillPayments.amount +
+            selfTransfers.amount +
+            transfersToOthers.amount +
+            investments.amount +
+            loanLinkedOutflow.amount
+
+    val isEmpty: Boolean
+        get() = creditCardBillPayments.transactionCount == 0 &&
+            selfTransfers.transactionCount == 0 &&
+            transfersToOthers.transactionCount == 0 &&
+            investments.transactionCount == 0 &&
+            loanLinkedOutflow.transactionCount == 0 &&
+            loanLinkedInflow.transactionCount == 0
+}

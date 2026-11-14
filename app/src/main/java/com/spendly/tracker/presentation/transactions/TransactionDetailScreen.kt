@@ -1,6 +1,9 @@
 package com.spendly.tracker.presentation.transactions
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -47,7 +50,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalResources
@@ -1056,6 +1058,11 @@ private fun PrepaidPlanProgressCard(plan: PrepaidExpenseEntity) {
         plan.totalAmount.divide(BigDecimal(totalMonths), 2, RoundingMode.HALF_UP)
     }
     val monthFormatter = remember { DateTimeFormatter.ofPattern("MMM yyyy") }
+    val progress by animateFloatAsState(
+        targetValue = (elapsedMonths.toFloat() / totalMonths).coerceIn(0f, 1f),
+        animationSpec = tween(durationMillis = 700, easing = FastOutSlowInEasing),
+        label = "prepaidProgress",
+    )
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -1067,19 +1074,30 @@ private fun PrepaidPlanProgressCard(plan: PrepaidExpenseEntity) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(Spacing.md),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
-                Icon(
-                    imageVector = Icons.Default.CalendarMonth,
-                    contentDescription = null,
-                    modifier = Modifier.size(Dimensions.Icon.medium),
-                    tint = accentColor,
-                )
-                Column(modifier = Modifier.weight(1f)) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(accentColor.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CalendarMonth,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = accentColor,
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(1.dp),
+                ) {
                     Text(
                         text = "Prepaid plan",
                         style = MaterialTheme.typography.titleSmall,
@@ -1106,32 +1124,37 @@ private fun PrepaidPlanProgressCard(plan: PrepaidExpenseEntity) {
                 }
             }
 
-            LinearProgressIndicator(
-                progress = { (elapsedMonths.toFloat() / totalMonths).coerceIn(0f, 1f) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = accentColor,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                strokeCap = StrokeCap.Round,
-                drawStopIndicator = {},
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = "$elapsedMonths of $totalMonths months",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = "${CurrencyFormatter.formatCurrency(monthlyAmount, plan.currency)}/mo",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(progress)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(accentColor),
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "$elapsedMonths of $totalMonths months",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "${CurrencyFormatter.formatCurrency(monthlyAmount, plan.currency)}/mo",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
@@ -1484,9 +1507,6 @@ private fun TransactionReceipt(
                                         )
                                     }
                                 }
-                            }
-                            repeat(columns - rowActions.size) {
-                                Spacer(modifier = Modifier.weight(1f))
                             }
                         }
                     }

@@ -891,6 +891,16 @@ fun MainScreen(
                         navController.navigate(Constants.Routes.SMS_PARSER_DEBUG) {
                             launchSingleTop = true
                         }
+                    },
+                    onNavigateToConnectorSettings = {
+                        rootNavController?.navigate(
+                            com.spendly.tracker.navigation.ConnectorSettings
+                        ) { launchSingleTop = true }
+                    },
+                    onNavigateToConnectorAnalysis = {
+                        rootNavController?.navigate(
+                            com.spendly.tracker.navigation.ConnectorAnalysis
+                        ) { launchSingleTop = true }
                     }
                 )
             }

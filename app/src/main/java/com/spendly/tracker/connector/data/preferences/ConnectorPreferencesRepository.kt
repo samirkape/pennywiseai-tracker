@@ -35,6 +35,7 @@ class ConnectorPreferencesRepository @Inject constructor(
         val MODEL = stringPreferencesKey("connector_model")
         val WINDOW_UNIT = stringPreferencesKey("connector_window_unit")
         val WINDOW_COUNT = intPreferencesKey("connector_window_count")
+        val MONTHS_ALIGNMENT = stringPreferencesKey("connector_months_alignment")
     }
 
     val isEnabled: Flow<Boolean> = context.connectorDataStore.data
@@ -77,6 +78,19 @@ class ConnectorPreferencesRepository @Inject constructor(
         context.connectorDataStore.edit {
             it[Keys.WINDOW_UNIT] = window.unit.name
             it[Keys.WINDOW_COUNT] = window.count
+        }
+    }
+
+    /**
+     * Whether month windows snap to calendar months ("calendar") or follow the
+     * user's pay cycle ("pay_cycle", the default).
+     */
+    val monthsUseCalendar: Flow<Boolean> = context.connectorDataStore.data
+        .map { it[Keys.MONTHS_ALIGNMENT] == "calendar" }
+
+    suspend fun setMonthsUseCalendar(useCalendar: Boolean) {
+        context.connectorDataStore.edit {
+            it[Keys.MONTHS_ALIGNMENT] = if (useCalendar) "calendar" else "pay_cycle"
         }
     }
 }

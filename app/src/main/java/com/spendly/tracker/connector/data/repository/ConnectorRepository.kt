@@ -60,8 +60,23 @@ class ConnectorRepository @Inject constructor(
     suspend fun currentConfig(): ConnectorConfig = config.first()
 
     /** Builds the brief without calling any provider — used for the local preview. */
-    suspend fun buildAnalysis(window: AnalysisWindow): SpendAnalysis =
-        analysisRepository.buildAnalysis(window)
+    suspend fun buildAnalysis(
+        window: AnalysisWindow,
+        useCalendarMonths: Boolean = false
+    ): SpendAnalysis =
+        analysisRepository.buildAnalysis(window, useCalendarMonths = useCalendarMonths)
+
+    /** Brief plus the optional per-transaction rows used by the share sheet. */
+    suspend fun buildBrief(
+        window: AnalysisWindow,
+        includeTransactions: Boolean = false,
+        useCalendarMonths: Boolean = false
+    ): SpendAnalysisRepository.SpendBrief =
+        analysisRepository.buildBrief(
+            window,
+            includeTransactions = includeTransactions,
+            useCalendarMonths = useCalendarMonths
+        )
 
     /**
      * Runs an analysis against the configured provider.
@@ -69,7 +84,11 @@ class ConnectorRepository @Inject constructor(
      * The stream falls back to a single non-streaming request when the provider
      * refuses to stream, so the user always gets an answer.
      */
-    fun analyze(window: AnalysisWindow, question: String): Flow<AiStreamEvent> = flow {
+    fun analyze(
+        window: AnalysisWindow,
+        question: String,
+        useCalendarMonths: Boolean = false
+    ): Flow<AiStreamEvent> = flow {
         val config = currentConfig()
         if (!config.enabled) {
             throw ConnectorException(ConnectorError.Disabled)
@@ -79,7 +98,7 @@ class ConnectorRepository @Inject constructor(
             throw ConnectorException(ConnectorError.MissingApiKey)
         }
 
-        val analysis = analysisRepository.buildAnalysis(window)
+        val analysis = analysisRepository.buildAnalysis(window, useCalendarMonths = useCalendarMonths)
         val request = AiRequest(
             systemPrompt = SYSTEM_PROMPT,
             userPrompt = buildUserPrompt(analysis, question),

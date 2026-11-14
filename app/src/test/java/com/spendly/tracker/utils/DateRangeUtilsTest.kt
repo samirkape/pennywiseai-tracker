@@ -137,6 +137,31 @@ class DateRangeUtilsTest {
         assertEquals(LocalDate.of(2026, 1, 31), start)
     }
 
+    @Test
+    fun rollingCalendarMonthRangeStartsOnMonthBoundary() {
+        val end = LocalDate.of(2026, 11, 14)
+        assertEquals(
+            LocalDate.of(2026, 9, 1) to end,
+            DateRangeUtils.rollingCalendarMonthRange(3, end),
+        )
+    }
+
+    @Test
+    fun rollingPayPeriodRangeFollowsThePayCycle() {
+        // Pay period starts on the 23rd: Oct 23 – Nov 22, Sep 23 – Oct 22, Aug 23 – Sep 22.
+        val end = LocalDate.of(2026, 11, 14)
+        assertEquals(
+            LocalDate.of(2026, 8, 23) to end,
+            DateRangeUtils.rollingPayPeriodRange(
+                periods = 3,
+                endDate = end,
+                startDay = 23,
+                useFixedEndDay = false,
+                fixedEndDayOfMonth = 31,
+            ),
+        )
+    }
+
     private fun expectedPayday(
         month: YearMonth,
         day: Int,

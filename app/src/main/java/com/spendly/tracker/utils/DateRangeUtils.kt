@@ -215,6 +215,49 @@ object DateRangeUtils {
     }
 
     /**
+     * The last [periods] pay periods ending on [endDate].
+     *
+     * Matches the "Last 3 / 6 months" ranges on the Analytics screen, which follow the
+     * user's pay cycle rather than plain calendar months.
+     */
+    fun rollingPayPeriodRange(
+        periods: Int,
+        endDate: LocalDate,
+        startDay: Int,
+        useFixedEndDay: Boolean,
+        fixedEndDayOfMonth: Int,
+        overrides: Map<String, Int> = emptyMap(),
+        adjustment: SalaryDayAdjustment = SalaryDayAdjustment.EXACT
+    ): Pair<LocalDate, LocalDate> {
+        require(periods > 0) { "periods must be positive" }
+        var start = calculateBudgetPeriodRange(
+            endDate,
+            startDay,
+            useFixedEndDay,
+            fixedEndDayOfMonth,
+            overrides,
+            adjustment,
+        ).first
+        repeat(periods - 1) {
+            start = calculateBudgetPeriodRange(
+                start.minusDays(1),
+                startDay,
+                useFixedEndDay,
+                fixedEndDayOfMonth,
+                overrides,
+                adjustment,
+            ).first
+        }
+        return start to endDate
+    }
+
+    /** The last [months] calendar months ending on [endDate], starting on a month boundary. */
+    fun rollingCalendarMonthRange(months: Long, endDate: LocalDate): Pair<LocalDate, LocalDate> {
+        require(months > 0) { "months must be positive" }
+        return endDate.minusMonths(months - 1).withDayOfMonth(1) to endDate
+    }
+
+    /**
      * One cycle starting in [anchorMonth]: [startDay] … [endDay] (see [calculateBudgetPeriodRange]).
      */
     fun customDomPeriodStartingInMonth(

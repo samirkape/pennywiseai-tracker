@@ -18,6 +18,7 @@ import com.spendly.tracker.presentation.common.TransactionTypeFilter
 import com.spendly.tracker.presentation.common.defaultTimePeriod
 import com.spendly.tracker.presentation.common.PaymentMode
 import com.spendly.tracker.presentation.common.matchesAnalyticsSpendingFilter
+import com.spendly.tracker.presentation.common.matchesAnalyticsIncomeFilter
 import com.spendly.tracker.presentation.common.paymentMode
 import com.spendly.tracker.presentation.common.getDateRangeForPeriod
 import com.spendly.tracker.presentation.common.getDateRangeForYearMonthNavigation
@@ -546,6 +547,15 @@ class AnalyticsViewModel @Inject constructor(
                     )
                 }
 
+                // One set of buckets feeds every series, so spending, income and outflow
+                // always line up on the same axis.
+                val trendBuckets = trendBuckets(
+                    transactions = filteredTransactions,
+                    startDate = dateRange.first,
+                    endDate = dateRange.second,
+                )
+                val allPeriodTransactions = allTransactionsWithSplits.map { it.transaction }
+
                 AnalyticsUiState(
                     transactions = filteredTransactions,
                     totalExpense = totalSpending,
@@ -555,6 +565,18 @@ class AnalyticsViewModel @Inject constructor(
                     topMerchants = merchantBreakdown,
                     amountBuckets = amountBuckets,
                     spendingTrend = calculateSpendingTrend(filteredTransactions, dateRange.first, dateRange.second),
+                    incomeTrend = calculateIncomeTrend(
+                        transactions = allPeriodTransactions,
+                        buckets = trendBuckets,
+                        isUnified = isUnified,
+                        displayCurrency = displayCurrency,
+                    ),
+                    outflowTrend = calculateOutflowTrend(
+                        transactions = allPeriodTransactions,
+                        buckets = trendBuckets,
+                        isUnified = isUnified,
+                        displayCurrency = displayCurrency,
+                    ),
                     isLoading = false,
                     error = null,
                     dateRange = dateRange,
@@ -700,14 +722,25 @@ class AnalyticsViewModel @Inject constructor(
         }
     }
 
-    private fun calculateSpendingTrend(
+    /**
+     * One bucket of the trend axis.
+     *
+     * Every series (spending, income, outflow) is bucketed with the same boundaries so the
+     * lines can be compared directly without one of them drifting out of alignment.
+     */
+    private data class TrendBucket(
+        val start: LocalDate,
+        val end: LocalDate,
+        val timestamp: LocalDate,
+    )
+
+    private fun trendBuckets(
         transactions: List<com.spendly.tracker.data.database.entity.TransactionEntity>,
         startDate: LocalDate,
         endDate: LocalDate
-    ): List<BalancePoint> {
+    ): List<TrendBucket> {
         val selectedPeriod = _selectedPeriod.value
-        val trend = mutableListOf<BalancePoint>()
-        val currency = transactions.firstOrNull()?.currency ?: _selectedCurrency.value
+        val buckets = mutableListOf<TrendBucket>()
 
         when {
             selectedPeriod == TimePeriod.ALL || selectedPeriod == TimePeriod.CURRENT_FY -> {
@@ -726,10 +759,13 @@ class AnalyticsViewModel @Inject constructor(
                     val lastYear = endDate.withDayOfYear(1)
                     while (!currentYear.isAfter(lastYear) && !currentYear.isAfter(LocalDate.now().withDayOfYear(1))) {
                         val endOfYear = currentYear.withDayOfYear(currentYear.lengthOfYear())
-                        val totalAmount = transactions.filter {
-                            !it.dateTime.toLocalDate().isBefore(currentYear) && !it.dateTime.toLocalDate().isAfter(endOfYear)
-                        }.sumOf { it.amount.toDouble() }.toBigDecimal()
-                        trend.add(BalancePoint(timestamp = currentYear.atStartOfDay(), balance = totalAmount, currency = currency))
+                        buckets.add(
+                            TrendBucket(
+                                start = currentYear,
+                                end = endOfYear,
+                                timestamp = currentYear,
+                            )
+                        )
                         currentYear = currentYear.plusYears(1)
                     }
                 } else {
@@ -737,10 +773,13 @@ class AnalyticsViewModel @Inject constructor(
                     val lastMonth = endDate.withDayOfMonth(1)
                     while (!currentMonth.isAfter(lastMonth) && !currentMonth.isAfter(LocalDate.now().withDayOfMonth(1))) {
                         val endOfMonth = currentMonth.withDayOfMonth(currentMonth.lengthOfMonth())
-                        val totalAmount = transactions.filter {
-                            !it.dateTime.toLocalDate().isBefore(currentMonth) && !it.dateTime.toLocalDate().isAfter(endOfMonth)
-                        }.sumOf { it.amount.toDouble() }.toBigDecimal()
-                        trend.add(BalancePoint(timestamp = currentMonth.atStartOfDay(), balance = totalAmount, currency = currency))
+                        buckets.add(
+                            TrendBucket(
+                                start = currentMonth,
+                                end = endOfMonth,
+                                timestamp = currentMonth,
+                            )
+                        )
                         currentMonth = currentMonth.plusMonths(1)
                     }
                 }
@@ -754,42 +793,120 @@ class AnalyticsViewModel @Inject constructor(
                 val lastMonth = endDate.withDayOfMonth(1)
                 while (!currentMonth.isAfter(lastMonth) && !currentMonth.isAfter(LocalDate.now().withDayOfMonth(1))) {
                     val endOfMonth = currentMonth.withDayOfMonth(currentMonth.lengthOfMonth())
-                    val totalAmount = transactions.filter {
-                        !it.dateTime.toLocalDate().isBefore(currentMonth) && !it.dateTime.toLocalDate().isAfter(endOfMonth)
-                    }.sumOf { it.amount.toDouble() }.toBigDecimal()
-                    trend.add(BalancePoint(timestamp = currentMonth.atStartOfDay(), balance = totalAmount, currency = currency))
+                    buckets.add(
+                        TrendBucket(
+                            start = currentMonth,
+                            end = endOfMonth,
+                            timestamp = currentMonth,
+                        )
+                    )
                     currentMonth = currentMonth.plusMonths(1)
                 }
             }
             else -> {
                 val rangeDays = ChronoUnit.DAYS.between(startDate, endDate).toInt() + 1
-                val transactionsByDate = transactions.groupBy { it.dateTime.toLocalDate() }
                 if (rangeDays > 90) {
                     // Aggregate into weekly buckets when range exceeds 3 months
                     val weekStart = startDate.minusDays(startDate.dayOfWeek.value.toLong() - 1)
                     var currentWeek = weekStart
                     while (!currentWeek.isAfter(endDate) && !currentWeek.isAfter(LocalDate.now())) {
                         val weekEnd = currentWeek.plusDays(6).coerceAtMost(endDate).coerceAtMost(LocalDate.now())
-                        var d = currentWeek.coerceAtLeast(startDate)
-                        var weekTotal = java.math.BigDecimal.ZERO
-                        while (!d.isAfter(weekEnd)) {
-                            weekTotal += (transactionsByDate[d] ?: emptyList()).sumOf { it.amount.toDouble() }.toBigDecimal()
-                            d = d.plusDays(1)
-                        }
-                        trend.add(BalancePoint(timestamp = currentWeek.coerceAtLeast(startDate).atStartOfDay(), balance = weekTotal, currency = currency))
+                        val bucketStart = currentWeek.coerceAtLeast(startDate)
+                        buckets.add(
+                            TrendBucket(
+                                start = bucketStart,
+                                end = weekEnd,
+                                timestamp = bucketStart,
+                            )
+                        )
                         currentWeek = currentWeek.plusWeeks(1)
                     }
                 } else {
                     var currentDate = startDate
                     while (!currentDate.isAfter(endDate) && !currentDate.isAfter(LocalDate.now())) {
-                        val totalAmount = (transactionsByDate[currentDate] ?: emptyList()).sumOf { it.amount.toDouble() }.toBigDecimal()
-                        trend.add(BalancePoint(timestamp = currentDate.atStartOfDay(), balance = totalAmount, currency = currency))
+                        buckets.add(
+                            TrendBucket(
+                                start = currentDate,
+                                end = currentDate,
+                                timestamp = currentDate,
+                            )
+                        )
                         currentDate = currentDate.plusDays(1)
                     }
                 }
             }
         }
-        return trend
+        return buckets
+    }
+
+    private fun calculateSpendingTrend(
+        transactions: List<com.spendly.tracker.data.database.entity.TransactionEntity>,
+        startDate: LocalDate,
+        endDate: LocalDate
+    ): List<BalancePoint> {
+        val currency = transactions.firstOrNull()?.currency ?: _selectedCurrency.value
+        return trendBuckets(transactions, startDate, endDate).map { bucket ->
+            val totalAmount = transactions
+                .filter { it.dateTime.toLocalDate() in bucket.start..bucket.end }
+                .sumOf { it.amount.toDouble() }
+                .toBigDecimal()
+            BalancePoint(
+                timestamp = bucket.timestamp.atStartOfDay(),
+                balance = totalAmount,
+                currency = currency,
+            )
+        }
+    }
+
+    /**
+     * Income per bucket, using the same rules as [computeIncomeSummary] so the trend and the
+     * summary card can never disagree.
+     */
+    private suspend fun calculateIncomeTrend(
+        transactions: List<com.spendly.tracker.data.database.entity.TransactionEntity>,
+        buckets: List<TrendBucket>,
+        isUnified: Boolean,
+        displayCurrency: String,
+    ): List<BalancePoint> = buckets.map { bucket ->
+        var total = BigDecimal.ZERO
+        for (tx in transactions) {
+            if (tx.isExcludedFromTracking) continue
+            if (!tx.matchesAnalyticsIncomeFilter()) continue
+            if (tx.dateTime.toLocalDate() !in bucket.start..bucket.end) continue
+            total += convertAmount(tx.amount, tx.currency, displayCurrency, isUnified)
+        }
+        BalancePoint(
+            timestamp = bucket.timestamp.atStartOfDay(),
+            balance = total,
+            currency = displayCurrency,
+        )
+    }
+
+    /**
+     * Outflow per bucket: spending plus investments plus card bill payments, matching
+     * [computePeriodOutflow] so "net flow" on the trend means the same thing as the hero card.
+     */
+    private suspend fun calculateOutflowTrend(
+        transactions: List<com.spendly.tracker.data.database.entity.TransactionEntity>,
+        buckets: List<TrendBucket>,
+        isUnified: Boolean,
+        displayCurrency: String,
+    ): List<BalancePoint> = buckets.map { bucket ->
+        var total = BigDecimal.ZERO
+        for (tx in transactions) {
+            if (tx.isExcludedFromTracking) continue
+            val counts = tx.matchesAnalyticsSpendingFilter() ||
+                tx.transactionType == TransactionType.INVESTMENT ||
+                tx.countsOnceTowardCcBillPaymentTotal()
+            if (!counts) continue
+            if (tx.dateTime.toLocalDate() !in bucket.start..bucket.end) continue
+            total += convertAmount(tx.amount, tx.currency, displayCurrency, isUnified)
+        }
+        BalancePoint(
+            timestamp = bucket.timestamp.atStartOfDay(),
+            balance = total,
+            currency = displayCurrency,
+        )
     }
 
     private suspend fun convertAmount(
@@ -1234,6 +1351,10 @@ data class AnalyticsUiState(
     val topMerchants: List<MerchantData> = emptyList(),
     val amountBuckets: List<AmountBucketData> = emptyList(),
     val spendingTrend: List<BalancePoint> = emptyList(),
+    /** Income per trend bucket — same rules as [PeriodIncomeSummary]. */
+    val incomeTrend: List<BalancePoint> = emptyList(),
+    /** Spending + investments + card bill payments per trend bucket. */
+    val outflowTrend: List<BalancePoint> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
     val dateRange: Pair<LocalDate, LocalDate>? = null,

@@ -5,6 +5,7 @@ import com.spendly.tracker.data.database.entity.ProfileEntity
 import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.database.entity.TransactionType
 import com.spendly.tracker.data.database.entity.TransferKind
+import com.spendly.tracker.domain.analytics.SpendingFilters
 import com.spendly.tracker.utils.DateRangeUtils
 import java.time.LocalDate
 import java.time.YearMonth
@@ -99,8 +100,7 @@ const val MANUAL_ENTRY_BANK_NAME = "Manual Entry"
 
 /** Matches Analytics "Expense" filter: debit spend plus card spend, excluding loan repayments. */
 fun TransactionEntity.matchesAnalyticsSpendingFilter(): Boolean =
-    (transactionType == TransactionType.EXPENSE || transactionType == TransactionType.CREDIT) &&
-        loanId == null
+    SpendingFilters.countsAsSpending(this)
 
 /**
  * Matches the "real income" filter: income rows that are not linked to a loan.
@@ -109,7 +109,7 @@ fun TransactionEntity.matchesAnalyticsSpendingFilter(): Boolean =
  * savings calculations, and income-driven actions.
  */
 fun TransactionEntity.matchesAnalyticsIncomeFilter(): Boolean =
-    transactionType == TransactionType.INCOME && loanId == null
+    SpendingFilters.countsAsIncome(this)
 
 /**
  * Rows that feed the Transactions breakdown charts and the category → merchant drill-down.
@@ -363,11 +363,8 @@ fun filterAccountsByProfile(
     }
 }
 
-private fun rollingCalendarRangeForLastMonths(months: Long): Pair<LocalDate, LocalDate> {
-    val today = LocalDate.now()
-    val start = today.minusMonths(months - 1).withDayOfMonth(1)
-    return start to today
-}
+private fun rollingCalendarRangeForLastMonths(months: Long): Pair<LocalDate, LocalDate> =
+    DateRangeUtils.rollingCalendarMonthRange(months, LocalDate.now())
 
 private fun rollingPayPeriodRangeForLastPeriods(
     periods: Int,
@@ -376,29 +373,15 @@ private fun rollingPayPeriodRangeForLastPeriods(
     budgetPeriodEndDay: Int,
     monthStartOverrides: Map<String, Int>,
     salaryDayAdjustment: DateRangeUtils.SalaryDayAdjustment = DateRangeUtils.SalaryDayAdjustment.EXACT,
-): Pair<LocalDate, LocalDate> {
-    val today = LocalDate.now()
-    var start = DateRangeUtils.calculateBudgetPeriodRange(
-        today,
-        monthStartDay,
-        useFixedBudgetPeriodEnd,
-        budgetPeriodEndDay,
-        monthStartOverrides,
-        salaryDayAdjustment,
-    ).first
-    repeat(periods - 1) {
-        val previousPeriodEnd = start.minusDays(1)
-        start = DateRangeUtils.calculateBudgetPeriodRange(
-            previousPeriodEnd,
-            monthStartDay,
-            useFixedBudgetPeriodEnd,
-            budgetPeriodEndDay,
-            monthStartOverrides,
-            salaryDayAdjustment,
-        ).first
-    }
-    return start to today
-}
+): Pair<LocalDate, LocalDate> = DateRangeUtils.rollingPayPeriodRange(
+    periods = periods,
+    endDate = LocalDate.now(),
+    startDay = monthStartDay,
+    useFixedEndDay = useFixedBudgetPeriodEnd,
+    fixedEndDayOfMonth = budgetPeriodEndDay,
+    overrides = monthStartOverrides,
+    adjustment = salaryDayAdjustment,
+)
 
 private fun currentFinancialYearRange(): Pair<LocalDate, LocalDate> {
     val today = LocalDate.now()

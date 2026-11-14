@@ -58,6 +58,27 @@ import com.spendly.tracker.presentation.common.TimePeriod
 import com.spendly.tracker.presentation.common.TransactionTypeFilter
 import com.spendly.tracker.ui.components.PeriodRangeNavigator
 import com.spendly.tracker.ui.components.*
+import com.spendly.tracker.ui.components.charts.CategoryBreakdown
+import com.spendly.tracker.ui.components.charts.CategorySlice
+import com.spendly.tracker.ui.components.charts.CategoryView
+import com.spendly.tracker.ui.components.charts.ChartCard
+import com.spendly.tracker.ui.components.charts.ChartSegmentedControl
+import com.spendly.tracker.ui.components.charts.ChartTone
+import com.spendly.tracker.ui.components.charts.ComparisonMetric
+import com.spendly.tracker.ui.components.charts.DistributionBucket
+import com.spendly.tracker.ui.components.charts.FinancialComparison
+import com.spendly.tracker.ui.components.charts.MetricCard
+import com.spendly.tracker.ui.components.charts.MetricDelta
+import com.spendly.tracker.ui.components.charts.MetricEmphasis
+import com.spendly.tracker.ui.components.charts.MetricStrip
+import com.spendly.tracker.ui.components.charts.RankedBarChart
+import com.spendly.tracker.ui.components.charts.RankedItem
+import com.spendly.tracker.ui.components.charts.TimePoint
+import com.spendly.tracker.ui.components.charts.TimeSeriesChart
+import com.spendly.tracker.ui.components.charts.TimeSeriesSeries
+import com.spendly.tracker.ui.components.charts.TimeSeriesStyle
+import com.spendly.tracker.ui.components.charts.TransactionDistribution
+import com.spendly.tracker.ui.components.charts.chartPalette
 import com.spendly.tracker.ui.components.cards.ListItemCardV2
 import com.spendly.tracker.ui.components.cards.SectionHeaderV2
 import com.spendly.tracker.ui.components.cards.SectionLinkAction
@@ -74,6 +95,7 @@ import androidx.compose.ui.graphics.luminance
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
@@ -129,7 +151,7 @@ fun AnalyticsScreen(
     // Use rememberSaveable to preserve UI state across navigation
     var showDateRangePicker by rememberSaveable { mutableStateOf(false) }
     var showChartTypeSelector by remember { mutableStateOf(false) }
-    var showCategoryPie by rememberSaveable { mutableStateOf(true) }
+    var categoryView by rememberSaveable { mutableStateOf(CategoryView.BARS) }
     var selectedOverviewTab by rememberSaveable { mutableStateOf(AnalyticsOverviewTab.SPENDING) }
 
     val tabs = AnalyticsOverviewTab.entries
@@ -192,6 +214,58 @@ fun AnalyticsScreen(
             0
         }
     }
+
+    // ── Dashboard figures ───────────────────────────────────────────────────
+    // Every visual below reads the same UiState values, so the charts, the metrics and the
+    // drill-downs can never disagree with one another.
+    val palette = chartPalette()
+    val spendingTotal = uiState.periodOutflow?.spending ?: uiState.totalExpense
+    val spendingCount = uiState.periodOutflow?.spendingTransactionCount ?: 0
+    val incomeTotal = uiState.incomeSummary?.total ?: uiState.totalIncome
+    val incomeCount = uiState.incomeSummary?.transactionCount ?: 0
+    val netCashFlow = uiState.incomeSummary?.net
+        ?: incomeTotal.subtract(uiState.periodOutflow?.total ?: BigDecimal.ZERO)
+    val averageTransaction = if (spendingCount > 0) {
+        spendingTotal.divide(BigDecimal(spendingCount), 2, RoundingMode.HALF_UP)
+    } else {
+        BigDecimal.ZERO
+    }
+    val previousSpending = spendingTotal.previousFrom(uiState.periodOutflow?.spendingDeltaPercent)
+    val previousIncome = incomeTotal.previousFrom(uiState.incomeSummary?.deltaPercent)
+
+    val categorySlices = remember(uiState.categoryBreakdown, palette) {
+        uiState.categoryBreakdown.mapIndexed { index, category ->
+            CategorySlice(
+                name = category.name,
+                amount = category.amount,
+                count = category.transactionCount,
+                share = (category.percentage / 100f).coerceIn(0f, 1f),
+                color = palette.seriesColor(index),
+                icon = CategoryMapping.categories[category.name]?.icon,
+            )
+        }
+    }
+    val merchantRows = remember(uiState.topMerchants, palette) {
+        uiState.topMerchants.mapIndexed { index, merchant ->
+            RankedItem(
+                name = merchant.name,
+                value = merchant.amount,
+                count = merchant.transactionCount,
+                caption = if (merchant.isSubscription) "Recurring subscription" else null,
+                color = palette.seriesColor(index),
+            )
+        }
+    }
+    val distributionBuckets = remember(uiState.amountBuckets) {
+        uiState.amountBuckets.map { bucket ->
+            DistributionBucket(
+                label = bucket.rangeLabel.ifBlank { bucket.label },
+                amount = bucket.amount,
+                count = bucket.transactionCount,
+            )
+        }
+    }
+    val trendPoints = remember(uiState.spendingTrend) { uiState.spendingTrend.toTimePoints() }
 
     fun drillDownToTransactions(
         category: String? = null,
@@ -334,6 +408,72 @@ fun AnalyticsScreen(
             }
         }
 
+        item {
+            MetricStrip {
+                MetricCard(
+                    label = "Income",
+                    value = CurrencyFormatter.formatCurrencyWhole(incomeTotal, selectedCurrency),
+                    modifier = Modifier.weight(1f),
+                    emphasis = MetricEmphasis.COMPACT,
+                    fillHeight = true,
+                    delta = uiState.incomeSummary?.deltaPercent?.let { delta ->
+                        MetricDelta(
+                            text = signedPercent(delta),
+                            tone = if (delta >= 0f) ChartTone.POSITIVE else ChartTone.NEGATIVE,
+                            increasing = delta >= 0f,
+                        )
+                    },
+                    caption = "$incomeCount ${if (incomeCount == 1) "credit" else "credits"}",
+                )
+                MetricCard(
+                    label = "Net flow",
+                    value = CurrencyFormatter.formatCurrencyWhole(netCashFlow, selectedCurrency),
+                    modifier = Modifier.weight(1f),
+                    emphasis = MetricEmphasis.COMPACT,
+                    fillHeight = true,
+                    caption = "income − outflow",
+                )
+                MetricCard(
+                    label = "Average",
+                    value = CurrencyFormatter.formatCurrencyWhole(averageTransaction, selectedCurrency),
+                    modifier = Modifier.weight(1f),
+                    emphasis = MetricEmphasis.COMPACT,
+                    fillHeight = true,
+                    caption = "per transaction",
+                )
+            }
+        }
+
+        if (previousSpending != null || previousIncome != null) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    SectionHeaderV2(title = "How this period compares")
+                    ChartCard {
+                        FinancialComparison(
+                            metrics = listOf(
+                                ComparisonMetric(
+                                    label = "Spending",
+                                    current = spendingTotal,
+                                    previous = previousSpending,
+                                    currency = selectedCurrency,
+                                    positiveIsGood = false,
+                                    caption = "$spendingCount txns",
+                                ),
+                                ComparisonMetric(
+                                    label = "Income",
+                                    current = incomeTotal,
+                                    previous = previousIncome,
+                                    currency = selectedCurrency,
+                                    positiveIsGood = true,
+                                    caption = "$incomeCount credits",
+                                ),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+
         if (uiState.spendingTrend.size >= 2) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
@@ -410,26 +550,69 @@ fun AnalyticsScreen(
                         }
                     )
 
+                    @Composable
+                    fun LineOrBarChart(type: ChartType) {
+                        var trendSeries by rememberSaveable { mutableStateOf(0) } // 0 = Spending, 1 = Income, 2 = Outflow
+
+                        val palette = chartPalette()
+                        // Build trend series from ViewModel state
+                        val trendSeriesList = remember(uiState.spendingTrend, uiState.incomeTrend, uiState.outflowTrend, selectedCurrency) {
+                            listOf(
+                                TimeSeriesSeries(
+                                    name = "Spending",
+                                    points = uiState.spendingTrend.toTimePoints(),
+                                    color = palette.accent,
+                                    style = TimeSeriesStyle.LINE,
+                                    filled = true,
+                                ),
+                                TimeSeriesSeries(
+                                    name = "Income",
+                                    points = uiState.incomeTrend.toTimePoints(),
+                                    color = palette.positive,
+                                    style = TimeSeriesStyle.LINE,
+                                    filled = false,
+                                ),
+                                TimeSeriesSeries(
+                                    name = "Outflow",
+                                    points = uiState.outflowTrend.toTimePoints(),
+                                    color = palette.negative,
+                                    style = TimeSeriesStyle.LINE,
+                                    filled = false,
+                                ),
+                            )
+                        }
+
+                        SectionHeaderV2(
+                            title = "Spend trend",
+                            action = {
+                                ChartSegmentedControl(
+                                    options = listOf("Spending", "Income", "Outflow"),
+                                    selectedIndex = trendSeries,
+                                    onSelect = { trendSeries = it },
+                                    modifier = Modifier.widthIn(max = 240.dp),
+                                )
+                            },
+                        )
+
+                        ChartCard {
+                            TimeSeriesChart(
+                                series = trendSeriesList.take(trendSeries + 1).reversed(),
+                                currency = selectedCurrency,
+                                height = 190.dp,
+                            )
+                        }
+                    }
+
+                    @Composable
+                    fun HeatmapChart() {
+                        SpendingHeatmap(data = uiState.spendingTrend)
+                    }
+
                     Crossfade(
                         targetState = chartType,
                         label = "chart_transition"
                     ) { type ->
-                        when (type) {
-                            ChartType.LINE -> BalanceChart(
-                                primaryCurrency = selectedCurrency,
-                                balanceHistory = uiState.spendingTrend,
-                                height = 180,
-                                smooth = false
-                            )
-                            ChartType.BAR -> SpendingBarChart(
-                                primaryCurrency = selectedCurrency,
-                                data = uiState.spendingTrend,
-                                height = 180
-                            )
-                            ChartType.HEATMAP -> SpendingHeatmap(
-                                data = uiState.spendingTrend
-                            )
-                        }
+                        if (type == ChartType.HEATMAP) HeatmapChart() else LineOrBarChart(type)
                     }
                 }
             }
@@ -441,30 +624,24 @@ fun AnalyticsScreen(
                     SectionHeaderV2(
                         title = "Spending by category",
                         action = {
-                            CategoryViewToggle(
-                                showPie = showCategoryPie,
-                                onShowPieChange = { showCategoryPie = it },
+                            SectionLinkAction(
+                                text = if (categoryView == CategoryView.BARS) "Table" else "Bars",
+                                onClick = {
+                                    categoryView = if (categoryView == CategoryView.BARS) {
+                                        CategoryView.TABLE
+                                    } else {
+                                        CategoryView.BARS
+                                    }
+                                },
                             )
                         },
                     )
-                    if (showCategoryPie) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-                        ) {
-                            CategoryPieChart(
-                                categories = uiState.categoryBreakdown,
-                                currency = selectedCurrency,
-                                onCategoryClick = { category -> drillDownToTransactions(category = category.name) },
-                            )
-                        }
-                    } else {
-                        AnalyticsCategoryCard(
-                            categories = uiState.categoryBreakdown,
+                    ChartCard(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 14.dp)) {
+                        CategoryBreakdown(
+                            slices = categorySlices,
                             currency = selectedCurrency,
-                            onCategoryClick = { category -> drillDownToTransactions(category = category.name) },
+                            view = categoryView,
+                            onSelect = { slice -> drillDownToTransactions(category = slice.name) },
                         )
                     }
                 }
@@ -480,11 +657,15 @@ fun AnalyticsScreen(
                             SectionLinkAction(text = "View all", onClick = { drillDownToTransactions() })
                         },
                     )
-                    AnalyticsReferenceMerchantCard(
-                        merchants = uiState.topMerchants,
-                        currency = selectedCurrency,
-                        onMerchantClick = { merchant -> drillDownToTransactions(merchant = merchant.name) },
-                    )
+                    ChartCard(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)) {
+                        RankedBarChart(
+                            items = merchantRows,
+                            currency = selectedCurrency,
+                            onSelect = { merchant ->
+                                drillDownToTransactions(merchant = merchant.name)
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -493,20 +674,23 @@ fun AnalyticsScreen(
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     SectionHeaderV2(title = "Spending by size")
-                    SpendBySizeCard(
-                        buckets = uiState.amountBuckets,
-                        currency = selectedCurrency,
-                        onBucketClick = { bucket ->
-                            onNavigateToTransactionsByAmount(
-                                bucket.minAmount,
-                                bucket.maxAmount,
-                                selectedCurrency,
-                                transactionTypeFilter.name,
-                                drillDownPeriodEpochs.first,
-                                drillDownPeriodEpochs.second,
-                            )
-                        },
-                    )
+                    ChartCard {
+                        TransactionDistribution(
+                            buckets = distributionBuckets,
+                            currency = selectedCurrency,
+                            onSelect = { index ->
+                                val bucket = uiState.amountBuckets.getOrNull(index) ?: return@TransactionDistribution
+                                onNavigateToTransactionsByAmount(
+                                    bucket.minAmount,
+                                    bucket.maxAmount,
+                                    selectedCurrency,
+                                    transactionTypeFilter.name,
+                                    drillDownPeriodEpochs.first,
+                                    drillDownPeriodEpochs.second,
+                                )
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -909,5 +1093,45 @@ private fun CategoryViewToggle(
                 )
             }
         }
+    }
+}
+
+/** "+59.9%" / "−12%" / "0%" with a real minus sign so the direction reads at a glance. */
+private fun signedPercent(deltaPercent: Float): String {
+    val rounded = kotlin.math.round(deltaPercent * 10f) / 10f
+    val prefix = when {
+        rounded > 0f -> "+"
+        rounded < 0f -> "−"
+        else -> ""
+    }
+    return "$prefix${kotlin.math.abs(rounded)}%"
+}
+
+/**
+ * Reconstructs the reference-period total from a delta percentage, so the comparison
+ * chart can render the previous bar without a second query.
+ */
+private fun BigDecimal.previousFrom(deltaPercent: Float?): BigDecimal? {
+    val delta = deltaPercent ?: return null
+    val factor = 1.0 + delta / 100.0
+    if (factor <= 0.0) return null
+    return divide(BigDecimal.valueOf(factor), 2, RoundingMode.HALF_UP)
+}
+
+/** Maps the analytics trend buckets onto the chart's label/value pairs. */
+private fun List<BalancePoint>.toTimePoints(): List<TimePoint> {
+    if (isEmpty()) return emptyList()
+    val sorted = sortedBy { it.timestamp }
+    val isYearly = sorted.size > 1 && sorted.all { it.timestamp.dayOfYear == 1 }
+    val isMonthly = !isYearly && sorted.all { it.timestamp.dayOfMonth == 1 }
+    val spansYears = sorted.first().timestamp.year != sorted.last().timestamp.year
+    return sorted.map { point ->
+        val label = when {
+            isYearly -> point.timestamp.format(DateTimeFormatter.ofPattern("yyyy"))
+            isMonthly && spansYears -> point.timestamp.format(DateTimeFormatter.ofPattern("MMM yy"))
+            isMonthly -> point.timestamp.format(DateTimeFormatter.ofPattern("MMM"))
+            else -> point.timestamp.format(DateTimeFormatter.ofPattern("dd MMM"))
+        }
+        TimePoint(label = label, value = point.balance.toDouble(), tooltipLabel = label)
     }
 }
