@@ -5,9 +5,12 @@ import com.spendly.tracker.connector.domain.SpendAnalysis
 import com.spendly.tracker.connector.domain.TransactionBrief
 import com.spendly.tracker.connector.domain.WindowUnit
 import com.spendly.tracker.data.currency.CurrencyConversionService
+import com.spendly.tracker.data.database.entity.LoanDirection
+import com.spendly.tracker.data.database.entity.LoanEntity
 import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.database.entity.TransactionWithSplits
 import com.spendly.tracker.data.preferences.UserPreferencesRepository
+import com.spendly.tracker.data.repository.LoanRepository
 import com.spendly.tracker.data.repository.SalaryMonthOverrideRepository
 import com.spendly.tracker.data.repository.TransactionRepository
 import com.spendly.tracker.utils.DateRangeUtils
@@ -24,13 +27,18 @@ import javax.inject.Singleton
  * user-excluded rows, loan-linked rows, transfers, credit card bill payments and
  * investments never reach the aggregator as spending. Only aggregate figures leave
  * this class — descriptions, SMS bodies, account numbers and bank names are never read.
+ *
+ * Unlike the Analytics screen the rows are read *gross*: refunds are not netted
+ * out of their original expense here, because the brief has to show the gross
+ * spend, the refund and the net spend side by side.
  */
 @Singleton
 class SpendAnalysisRepository @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val salaryMonthOverrideRepository: SalaryMonthOverrideRepository,
-    private val currencyConversionService: CurrencyConversionService
+    private val currencyConversionService: CurrencyConversionService,
+    private val loanRepository: LoanRepository
 ) {
 
     suspend fun buildAnalysis(
@@ -62,6 +70,7 @@ class SpendAnalysisRepository @Inject constructor(
 
         val current = loadWindow(currentRange, isUnified, currency)
         val previous = loadWindow(previousRange, isUnified, currency)
+        val loanDirections = loadLoanDirections()
 
         val analysis = SpendAnalysisBuilder.build(
             transactions = current.transactions,
@@ -70,12 +79,13 @@ class SpendAnalysisRepository @Inject constructor(
             startDate = currentRange.first,
             endDate = currentRange.second,
             currency = currency,
-            categorySplits = current.splitsByTransaction
+            categorySplits = current.splitsByTransaction,
+            loanDirections = loanDirections
         )
         return SpendBrief(
             analysis = analysis,
             transactions = if (includeTransactions) {
-                TransactionBriefMapper.from(current.transactions)
+                TransactionBriefMapper.from(current.transactions, loanDirections)
             } else {
                 emptyList()
             }
@@ -132,8 +142,10 @@ class SpendAnalysisRepository @Inject constructor(
 
     /**
      * Loads the window the way Analytics does: filtered by the display currency, or
-     * converted into it when Unified Currency Mode is on. Linked refunds are already
-     * netted out by the repository.
+     * converted into it when Unified Currency Mode is on.
+     *
+     * Rows are read gross — refunds are not netted against their original expense —
+     * so the brief can report gross spend, refunds and net spend separately.
      */
     private suspend fun loadWindow(
         range: Pair<LocalDate, LocalDate>,
@@ -141,9 +153,16 @@ class SpendAnalysisRepository @Inject constructor(
         currency: String
     ): WindowRows {
         val rows = if (isUnified) {
-            transactionRepository.getTransactionsWithSplitsFiltered(range.first, range.second).first()
+            transactionRepository.getTransactionsWithSplitsAllCurrenciesIncludingExcluded(
+                range.first,
+                range.second
+            ).first()
         } else {
-            transactionRepository.getTransactionsWithSplitsFiltered(range.first, range.second, currency).first()
+            transactionRepository.getTransactionsWithSplitsFilteredIncludingExcluded(
+                range.first,
+                range.second,
+                currency
+            ).first()
         }
         val normalized = if (isUnified) convertTo(rows, currency) else rows
         return WindowRows(
@@ -153,6 +172,14 @@ class SpendAnalysisRepository @Inject constructor(
                 .associate { it.transaction.id to it.getAmountByCategory() }
         )
     }
+
+    /**
+     * Direction of every loan, so a loan-linked row can be told apart as either a
+     * disbursement (the loan itself) or a payment (the repayment).
+     */
+    private suspend fun loadLoanDirections(): Map<Long, LoanDirection> =
+        loanRepository.getAllLoans().first()
+            .associate { loan: LoanEntity -> loan.id to loan.direction }
 
     private suspend fun convertTo(
         rows: List<TransactionWithSplits>,

@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.math.BigDecimal
+import com.spendly.tracker.connector.data.export.SpendBriefExporter
 import com.spendly.tracker.connector.domain.AnalysisWindow
 import com.spendly.tracker.connector.domain.MoneyMovedSummary
 import com.spendly.tracker.connector.domain.WindowUnit
@@ -104,7 +105,7 @@ fun ConnectorAnalysisScreen(
         mutableStateOf<ConnectorAnalysisViewModel.BriefDownload?>(null)
     }
     val createDocumentLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/plain")
+        ActivityResultContracts.CreateDocument("*/*")
     ) { uri ->
         val payload = pendingDownload
         pendingDownload = null
@@ -294,9 +295,29 @@ fun ConnectorAnalysisScreen(
                 SectionHeaderV2(title = "On-device summary")
                 SpendlyCardV2 {
                     SummaryRow(
-                        label = "Total spend",
-                        value = CurrencyFormatter.formatCurrency(preview.totalExpense, preview.currency)
+                        label = "Net spend",
+                        value = CurrencyFormatter.formatCurrency(preview.netExpense, preview.currency)
                     )
+                    SummaryRow(
+                        label = "Gross spend",
+                        value = CurrencyFormatter.formatCurrency(preview.grossExpense, preview.currency)
+                    )
+                    if (preview.refundsReceived.signum() > 0) {
+                        SummaryRow(
+                            label = "Refunds received",
+                            value = CurrencyFormatter.formatCurrency(
+                                preview.refundsReceived,
+                                preview.currency
+                            )
+                        )
+                    }
+                    SummaryRow(
+                        label = "Income",
+                        value = CurrencyFormatter.formatCurrency(preview.totalIncome, preview.currency)
+                    )
+                    preview.savingsRatePercent?.let { rate ->
+                        SummaryRow(label = "Savings rate", value = "${"%.1f".format(rate)}%")
+                    }
                     SummaryRow(
                         label = "Transactions",
                         value = preview.expenseCount.toString()
@@ -321,7 +342,10 @@ fun ConnectorAnalysisScreen(
                         preview.categories.take(5).forEach { category ->
                             SummaryRow(
                                 label = category.category,
-                                value = CurrencyFormatter.formatCurrency(category.amount, preview.currency)
+                                value = CurrencyFormatter.formatCurrency(
+                                    category.netExpense,
+                                    preview.currency
+                                )
                             )
                         }
                     }
@@ -342,7 +366,8 @@ fun ConnectorAnalysisScreen(
                     Spacer(modifier = Modifier.height(Spacing.xs))
                     Text(
                         text = "Same rules as Analytics: transfers, CC bill payments, investments " +
-                            "and loan-linked rows are excluded.",
+                            "and loan-linked rows are excluded. Refunds are reported separately " +
+                            "and reduce the cost of the category they belong to.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -374,8 +399,8 @@ fun ConnectorAnalysisScreen(
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Text(
-                            text = "Date, amount, type, category and merchant for each spend " +
-                                "and income row.",
+                            text = "Date, amount, type, category, merchant and payment method " +
+                                "for every row in the period.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -385,6 +410,25 @@ fun ConnectorAnalysisScreen(
                         checked = uiState.includeTransactions,
                         onCheckedChange = viewModel::setIncludeTransactions
                     )
+                }
+                Spacer(modifier = Modifier.height(Spacing.sm))
+                Text(
+                    text = "File format",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    SpendBriefExporter.BriefFormat.entries.forEach { format ->
+                        FilterChip(
+                            selected = uiState.exportFormat == format,
+                            onClick = { viewModel.setExportFormat(format) },
+                            label = { Text(format.label) }
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.height(Spacing.sm))
                 Row(

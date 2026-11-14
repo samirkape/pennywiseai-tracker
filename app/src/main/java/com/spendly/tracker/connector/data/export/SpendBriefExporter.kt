@@ -25,8 +25,8 @@ class SpendBriefExporter @Inject constructor(
 ) {
 
     /** File name suggested to the system save dialog. */
-    fun suggestedFileName(): String =
-        "$FILE_PREFIX${LocalDate.now().format(DATE_STAMP)}$FILE_EXTENSION"
+    fun suggestedFileName(format: BriefFormat = BriefFormat.TEXT): String =
+        "$FILE_PREFIX${LocalDate.now().format(DATE_STAMP)}${format.extension}"
 
     /** Writes [text] to a user-picked destination (Downloads, Drive, …). */
     fun writeTo(uri: Uri, text: String) {
@@ -38,16 +38,14 @@ class SpendBriefExporter @Inject constructor(
     fun write(
         analysis: SpendAnalysis,
         question: String,
-        transactions: List<TransactionBrief> = emptyList()
+        transactions: List<TransactionBrief> = emptyList(),
+        format: BriefFormat = BriefFormat.TEXT
     ): Uri {
         val directory = File(context.cacheDir, DIRECTORY).apply { mkdirs() }
         directory.listFiles { file -> file.name.startsWith(FILE_PREFIX) }?.forEach { it.delete() }
 
-        val file = File(directory, suggestedFileName())
-        file.writeText(
-            SpendBriefFormatter.format(analysis, question, transactions),
-            Charsets.UTF_8
-        )
+        val file = File(directory, suggestedFileName(format))
+        file.writeText(render(analysis, question, transactions, format), Charsets.UTF_8)
 
         return FileProvider.getUriForFile(
             context,
@@ -56,10 +54,28 @@ class SpendBriefExporter @Inject constructor(
         )
     }
 
+    /** The brief in the requested shape. */
+    fun render(
+        analysis: SpendAnalysis,
+        question: String,
+        transactions: List<TransactionBrief> = emptyList(),
+        format: BriefFormat = BriefFormat.TEXT
+    ): String = when (format) {
+        BriefFormat.TEXT -> SpendBriefFormatter.format(analysis, question, transactions)
+        BriefFormat.JSON -> SpendBriefJsonFormatter.format(analysis, transactions)
+        BriefFormat.CSV -> SpendBriefCsvFormatter.format(transactions)
+    }
+
+    /** Shapes the brief can be shared in. */
+    enum class BriefFormat(val extension: String, val mimeType: String, val label: String) {
+        TEXT(".txt", "text/plain", "Text"),
+        JSON(".json", "application/json", "JSON"),
+        CSV(".csv", "text/csv", "CSV")
+    }
+
     private companion object {
         const val DIRECTORY = "exports"
         const val FILE_PREFIX = "spendly-brief-"
-        const val FILE_EXTENSION = ".txt"
         val DATE_STAMP: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
     }
 }

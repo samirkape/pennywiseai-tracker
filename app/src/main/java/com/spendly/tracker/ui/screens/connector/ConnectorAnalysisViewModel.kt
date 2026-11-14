@@ -33,7 +33,9 @@ data class ConnectorAnalysisUiState(
     val provider: AiProvider = AiProvider.GEMINI,
     val model: String = "",
     /** Adds the optional per-transaction list to the shared file. */
-    val includeTransactions: Boolean = true
+    val includeTransactions: Boolean = true,
+    /** Shape the brief is shared in. */
+    val exportFormat: SpendBriefExporter.BriefFormat = SpendBriefExporter.BriefFormat.TEXT
 )
 
 /**
@@ -124,6 +126,10 @@ class ConnectorAnalysisViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(includeTransactions = value)
     }
 
+    fun setExportFormat(format: SpendBriefExporter.BriefFormat) {
+        _uiState.value = _uiState.value.copy(exportFormat = format)
+    }
+
     /** Recomputes the on-device summary shown above the provider answer. */
     private suspend fun loadPreview(targetWindow: AnalysisWindow) {
         val useCalendar = _useCalendarMonths.value
@@ -193,6 +199,7 @@ class ConnectorAnalysisViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val includeTransactions = _uiState.value.includeTransactions
+                val format = _uiState.value.exportFormat
                 val brief = withContext(Dispatchers.IO) {
                     connectorRepository.buildBrief(
                         window = _window.value,
@@ -201,7 +208,7 @@ class ConnectorAnalysisViewModel @Inject constructor(
                     )
                 }
                 _shareFile.value = withContext(Dispatchers.IO) {
-                    briefExporter.write(brief.analysis, _question.value, brief.transactions)
+                    briefExporter.write(brief.analysis, _question.value, brief.transactions, format)
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
@@ -223,6 +230,7 @@ class ConnectorAnalysisViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val includeTransactions = _uiState.value.includeTransactions
+                val format = _uiState.value.exportFormat
                 val brief = withContext(Dispatchers.IO) {
                     connectorRepository.buildBrief(
                         window = _window.value,
@@ -231,11 +239,12 @@ class ConnectorAnalysisViewModel @Inject constructor(
                     )
                 }
                 _download.value = BriefDownload(
-                    fileName = briefExporter.suggestedFileName(),
-                    text = SpendBriefFormatter.format(
+                    fileName = briefExporter.suggestedFileName(format),
+                    text = briefExporter.render(
                         brief.analysis,
                         _question.value,
-                        brief.transactions
+                        brief.transactions,
+                        format
                     )
                 )
             } catch (e: Exception) {
