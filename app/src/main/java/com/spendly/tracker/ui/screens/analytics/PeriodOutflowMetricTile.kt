@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.spendly.tracker.presentation.common.TransactionTypeFilter
+import com.spendly.tracker.presentation.common.perDayAverage
 import com.spendly.tracker.ui.components.AnimatedCurrencyText
 import com.spendly.tracker.ui.components.currencyAnnotated
 import com.spendly.tracker.ui.components.headlineMoneySize
@@ -63,6 +64,8 @@ fun PeriodOutflowMetricTile(
     showMetricFilter: Boolean = true,
     onDetailNavigate: (() -> Unit)? = null,
     onBreakdownRowClick: ((TransactionTypeFilter) -> Unit)? = null,
+    /** Length of the period the outflow covers, used for the per-day figure. 0 = unknown. */
+    periodDays: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     val metricRows = buildList {
@@ -82,6 +85,7 @@ fun PeriodOutflowMetricTile(
     val average = if (outflow.transactionCount > 0) {
         outflow.total.divide(BigDecimal(outflow.transactionCount), 2, RoundingMode.HALF_UP)
     } else BigDecimal.ZERO
+    val perDay = perDayAverage(outflow.total, periodDays)
 
     val cardClick: (() -> Unit)? = onClick?.let { handler ->
         {
@@ -162,6 +166,9 @@ fun PeriodOutflowMetricTile(
                     append("${outflow.transactionCount} transaction${if (outflow.transactionCount != 1) "s" else ""}")
                     if (outflow.transactionCount > 0) {
                         append(" · ${CurrencyFormatter.formatCurrency(average, currency)} average")
+                    }
+                    if (perDay != null) {
+                        append(" · ${CurrencyFormatter.formatCurrency(perDay, currency)}/day")
                     }
                 }
                 Text(

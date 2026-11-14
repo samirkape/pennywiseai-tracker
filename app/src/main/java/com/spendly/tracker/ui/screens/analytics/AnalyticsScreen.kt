@@ -182,6 +182,17 @@ fun AnalyticsScreen(
         if (range == null) null to null else range.first.toEpochDay() to range.second.toEpochDay()
     }
 
+    // Length of the period the hero card covers — the denominator for the per-day figure.
+    val periodDays = remember(uiState.periodStart, uiState.periodEnd) {
+        val start = uiState.periodStart
+        val end = uiState.periodEnd
+        if (start != null && end != null) {
+            (java.time.temporal.ChronoUnit.DAYS.between(start, end).toInt() + 1).coerceAtLeast(1)
+        } else {
+            0
+        }
+    }
+
     fun drillDownToTransactions(
         category: String? = null,
         merchant: String? = null,
@@ -285,6 +296,7 @@ fun AnalyticsScreen(
                         paymentModeBreakdown = uiState.paymentModeBreakdown,
                         incomeSummary = uiState.incomeSummary,
                         currency = selectedCurrency,
+                        periodDays = periodDays,
                         onTotalClick = {
                             when (tab) {
                                 AnalyticsOverviewTab.OUTFLOW -> drillDownToTransactions(transactionType = null)

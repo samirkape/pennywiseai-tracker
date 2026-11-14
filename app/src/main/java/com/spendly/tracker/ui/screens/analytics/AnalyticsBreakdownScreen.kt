@@ -26,6 +26,7 @@ import com.spendly.tracker.presentation.common.PaymentMode
 import com.spendly.tracker.presentation.common.PaymentModeGroup
 import com.spendly.tracker.presentation.common.TimePeriod
 import com.spendly.tracker.presentation.common.TransactionTypeFilter
+import com.spendly.tracker.presentation.common.perDayAverage
 import com.spendly.tracker.ui.components.SpendlyStandardScaffold
 import com.spendly.tracker.ui.components.cards.SpendingBreakdownData
 import com.spendly.tracker.ui.components.cards.SpendingBreakdownTile
@@ -79,6 +80,17 @@ fun AnalyticsBreakdownScreen(
     val drillDownPeriodEpochs = remember(activePeriodRange) {
         val range = activePeriodRange
         if (range == null) null to null else range.first.toEpochDay() to range.second.toEpochDay()
+    }
+
+    // Number of days the drilled-into period covers — the denominator for the per-day figure.
+    val periodDays = remember(uiState.periodStart, uiState.periodEnd) {
+        val start = uiState.periodStart
+        val end = uiState.periodEnd
+        if (start != null && end != null) {
+            (java.time.temporal.ChronoUnit.DAYS.between(start, end).toInt() + 1).coerceAtLeast(1)
+        } else {
+            0
+        }
     }
 
     fun drillDownToTransactions(
@@ -148,6 +160,7 @@ fun AnalyticsBreakdownScreen(
                 BreakdownMetricSection(
                     tileKey = tileKey,
                     uiState = uiState,
+                    periodDays = periodDays,
                     onOutflowClick = { selectedTypes ->
                         val typeName = if (selectedTypes.size == 1) {
                             selectedTypes.first().name
@@ -218,6 +231,8 @@ private fun BreakdownMetricSection(
     onInvestmentClick: () -> Unit,
     onSpendingBreakdownClick: () -> Unit,
     onSpendingCardClick: (() -> Unit)? = null,
+    /** Length of the period being drilled into, used for the per-day figure. */
+    periodDays: Int = 0,
 ) {
     when (tileKey) {
         "outflow" -> uiState.periodOutflow?.let { outflow ->
@@ -228,6 +243,7 @@ private fun BreakdownMetricSection(
                 compactMode = false,
                 showInlineBreakdown = true,
                 onBreakdownRowClick = onOutflowBreakdownRowClick,
+                periodDays = periodDays,
             )
         }
         "spending" -> {
@@ -238,6 +254,8 @@ private fun BreakdownMetricSection(
             } else {
                 BigDecimal.ZERO
             }
+            // Per-day spend across the period the drill-down covers.
+            val perDay = perDayAverage(uiState.totalExpense, periodDays)
             val topCategory = uiState.categoryBreakdown.firstOrNull()
             AnalyticsMetricTile(
                 content = AnalyticsMetricTileContent(
@@ -245,12 +263,20 @@ private fun BreakdownMetricSection(
                     primaryValue = CurrencyFormatter.formatCurrency(uiState.totalExpense, uiState.currency),
                     transactionCount = transactionCount,
                     countBadgeIcon = Icons.Default.Receipt,
-                    bottomLeftLabel = "AVERAGE",
-                    bottomLeftValue = CurrencyFormatter.formatCurrency(
-                        averageAmount,
-                        uiState.currency,
-                    ),
-                    bottomLeftSuffix = " /day",
+                    txnCountSuffix = if (transactionCount > 0) {
+                        " · ${CurrencyFormatter.formatCurrency(averageAmount, uiState.currency)} avg"
+                    } else {
+                        null
+                    },
+                    bottomLeftLabel = "PER DAY",
+                    bottomLeftValue = perDay?.let {
+                        CurrencyFormatter.formatCurrency(it, uiState.currency)
+                    } ?: "—",
+                    bottomLeftSuffix = if (periodDays > 0) {
+                        "over $periodDays ${if (periodDays == 1) "day" else "days"}"
+                    } else {
+                        null
+                    },
                     bottomRightCaption = if (topCategory != null && topCategory.percentage > 0) {
                         "${topCategory.percentage.toInt()}% of total"
                     } else {

@@ -65,6 +65,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.spendly.tracker.presentation.common.TimePeriod
+import com.spendly.tracker.presentation.common.perDayAverage
 import com.spendly.tracker.ui.components.BalancePoint
 import com.spendly.tracker.ui.components.currencyAnnotated
 import com.spendly.tracker.ui.components.headlineMoneySize
@@ -278,11 +279,13 @@ fun AnalyticsReferenceHeroCard(
     paymentModeBreakdown: PaymentModeBreakdown?,
     incomeSummary: PeriodIncomeSummary?,
     currency: String,
+    /** Length of the period the hero covers, used for the per-day figure. 0 = unknown. */
+    periodDays: Int = 0,
     onMetricClick: ((metricIndex: Int) -> Unit)? = null,
     onTotalClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val hero = remember(selectedTab, periodOutflow, investmentInsights, paymentModeBreakdown, incomeSummary, currency) {
+    val hero = remember(selectedTab, periodOutflow, investmentInsights, paymentModeBreakdown, incomeSummary, currency, periodDays) {
         // Outflow mixes spending (up = bad) with investing (up = good), so the aggregate is reported
         // neutrally; only segment-level moves earn a good/bad colour. Flat deltas are neutral too.
         fun tone(delta: Float?, invert: Boolean): HeroDeltaTone {
@@ -306,6 +309,7 @@ fun AnalyticsReferenceHeroCard(
             AnalyticsOverviewTab.OUTFLOW -> {
                 val s = periodOutflow ?: return@remember null
                 val segments = s.spending + s.invested + s.ccBillPayment
+                val outflowPerDay = perDayAverage(s.total, periodDays)
                 AnalyticsHeroState(
                     label = "TOTAL OUTFLOW",
                     amount = CurrencyFormatter.formatCurrencyWhole(s.total, currency),
@@ -317,6 +321,9 @@ fun AnalyticsReferenceHeroCard(
                         if (s.invested > BigDecimal.ZERO) {
                             append(" · ${CurrencyFormatter.formatCurrencyWhole(s.invested, currency)} invested")
                             append(" (${pct(s.invested, segments)}% of outflow)")
+                        }
+                        if (outflowPerDay != null) {
+                            append(" · ${CurrencyFormatter.formatCurrencyWhole(outflowPerDay, currency)}/day")
                         }
                     },
                     metrics = listOf(
@@ -362,14 +369,22 @@ fun AnalyticsReferenceHeroCard(
                 val average = if (s.spendingTransactionCount > 0)
                     s.spending.divide(BigDecimal(s.spendingTransactionCount), 2, RoundingMode.HALF_UP)
                 else BigDecimal.ZERO
+                val spendPerDay = perDayAverage(s.spending, periodDays)
                 AnalyticsHeroState(
                     label = "TOTAL SPENDING",
                     amount = CurrencyFormatter.formatCurrencyWhole(s.spending, currency),
                     delta = s.spendingDeltaPercent?.let { formatDelta(it) },
                     deltaIncreasing = (s.spendingDeltaPercent ?: 0f) >= 0f,
                     deltaTone = tone(s.spendingDeltaPercent, invert = true),
-                    insight = "${txns(s.spendingTransactionCount)} · " +
-                        CurrencyFormatter.formatCurrencyWhole(average, currency) + " average",
+                    insight = buildString {
+                        append(txns(s.spendingTransactionCount))
+                        append(" · ")
+                        append(CurrencyFormatter.formatCurrencyWhole(average, currency))
+                        append(" average")
+                        if (spendPerDay != null) {
+                            append(" · ${CurrencyFormatter.formatCurrencyWhole(spendPerDay, currency)}/day")
+                        }
+                    },
                     metrics = listOf(
                         AnalyticsHeroMetric(
                             label = "Card",
