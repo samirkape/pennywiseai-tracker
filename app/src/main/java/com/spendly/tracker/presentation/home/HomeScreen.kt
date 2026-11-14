@@ -70,6 +70,8 @@ import kotlinx.coroutines.delay
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.spendly.tracker.R
+import com.spendly.tracker.data.database.entity.LoanEntity
+import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.database.entity.TransactionType
 import com.spendly.tracker.ui.components.SpendlyCard
 import com.spendly.tracker.ui.components.cards.SpendlyCardV2
@@ -87,6 +89,7 @@ import com.spendly.tracker.ui.components.skeleton.TransactionItemSkeleton
 import com.spendly.tracker.ui.components.spotlightTarget
 import com.spendly.tracker.presentation.common.buildProfileAccountKeys
 import com.spendly.tracker.presentation.common.defaultTimePeriodNavParam
+import com.spendly.tracker.presentation.common.loanLabelFor
 import com.spendly.tracker.ui.components.ProfileFilterDropdown
 import com.spendly.tracker.ui.components.profileFilterIcon
 import com.spendly.tracker.ui.components.CustomTitleTopAppBar
@@ -146,6 +149,7 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val isPremium by viewModel.isPremium.collectAsState()
+    val loansById by viewModel.loansById.collectAsState()
     val transactionsPeriod = defaultTimePeriodNavParam(uiState.useFinancialMonth)
     val deletedTransaction by viewModel.deletedTransaction.collectAsState()
     val smsScanWorkInfo by viewModel.smsScanWorkInfo.collectAsState()
@@ -630,6 +634,7 @@ fun HomeScreen(
                                             flat = true,
                                             categoryForIconFallback = item.transaction.category,
                                             categoryIconKey = item.categoryIconKey,
+                                            loanLabel = item.transaction.loanLabel(loansById),
                                             onClick = { onTransactionClick(item.transaction.id) },
                                             onExcludeToggle = {
                                                 viewModel.toggleExcludedFromTracking(item.transaction)
@@ -1032,6 +1037,16 @@ private fun BreakdownRow(
 }
 
 private enum class ListItemPosition { Top, Middle, Bottom, Single }
+
+/**
+ * Label for a loan-linked row ("Lent to Asha"), or null when the row is not part of a loan.
+ * Loan-linked rows are neither income nor spend, so they must not read as a plain debit.
+ */
+private fun TransactionEntity.loanLabel(loansById: Map<Long, LoanEntity>): String? {
+    val loanId = loanId ?: return null
+    val loan = loansById[loanId] ?: return null
+    return loanLabelFor(this, loan)
+}
 
 @Composable
 private fun ListItemPosition.toShape(): RoundedCornerShape = when (this) {

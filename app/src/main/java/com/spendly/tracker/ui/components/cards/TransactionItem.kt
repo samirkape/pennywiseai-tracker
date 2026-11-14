@@ -64,18 +64,28 @@ fun TransactionItem(
     categoryIconKey: String? = null,
     /** Refund context shown in the subtitle, e.g. "₹200 refunded · net ₹300". */
     refundNote: String? = null,
+    /**
+     * Loan context for rows linked to a loan, e.g. "Lent to Asha". Loan-linked rows move
+     * money between parties, so they are shown in the loan colour without a spend sign.
+     */
+    loanLabel: String? = null,
     modifier: Modifier = Modifier,
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val view = LocalView.current
     val isDark = isSystemInDarkTheme()
-    val amountColor = remember(transaction.transactionType, isDark) {
-        when (transaction.transactionType) {
-            TransactionType.INCOME -> if (!isDark) income_light else income_dark
-            TransactionType.EXPENSE -> if (!isDark) expense_light else expense_dark
-            TransactionType.CREDIT -> if (!isDark) credit_light else credit_dark
-            TransactionType.TRANSFER -> if (!isDark) transfer_light else transfer_dark
-            TransactionType.INVESTMENT -> if (!isDark) investment_light else investment_dark
+    val loanColor = if (isDark) loan_dark else loan_light
+    val amountColor = remember(transaction.transactionType, isDark, loanLabel != null) {
+        if (loanLabel != null) {
+            loanColor
+        } else {
+            when (transaction.transactionType) {
+                TransactionType.INCOME -> if (!isDark) income_light else income_dark
+                TransactionType.EXPENSE -> if (!isDark) expense_light else expense_dark
+                TransactionType.CREDIT -> if (!isDark) credit_light else credit_dark
+                TransactionType.TRANSFER -> if (!isDark) transfer_light else transfer_dark
+                TransactionType.INVESTMENT -> if (!isDark) investment_light else investment_dark
+            }
         }
     }
 
@@ -101,7 +111,7 @@ fun TransactionItem(
 
     val isCcBillPayment = transaction.transferKind == TransferKind.CC_BILL_PAYMENT
 
-    val subtitle = remember(transaction, dateTimeText, isEffectivelyBusiness, showSplitPortion, isCcBillPayment, refundNote) {
+    val subtitle = remember(transaction, dateTimeText, isEffectivelyBusiness, showSplitPortion, isCcBillPayment, refundNote, loanLabel) {
         buildList {
             add(dateTimeText)
             when {
@@ -116,14 +126,20 @@ fun TransactionItem(
             if (isEffectivelyBusiness) add("Business")
             if (transaction.isExcludedFromTracking) add("Excluded")
             if (refundNote != null) add(refundNote)
+            if (loanLabel != null) add(loanLabel)
         }.joinToString(" \u00B7 ")
     }
 
-    val amountPrefix = remember(transaction.transactionType) {
-        when (transaction.transactionType) {
-            TransactionType.INCOME -> "+"
-            TransactionType.EXPENSE, TransactionType.CREDIT, TransactionType.INVESTMENT -> "-"
-            TransactionType.TRANSFER -> ""
+    val amountPrefix = remember(transaction.transactionType, loanLabel != null) {
+        if (loanLabel != null) {
+            // Loan-linked rows are neither income nor spend, so they carry no +/- sign.
+            ""
+        } else {
+            when (transaction.transactionType) {
+                TransactionType.INCOME -> "+"
+                TransactionType.EXPENSE, TransactionType.CREDIT, TransactionType.INVESTMENT -> "-"
+                TransactionType.TRANSFER -> ""
+            }
         }
     }
 

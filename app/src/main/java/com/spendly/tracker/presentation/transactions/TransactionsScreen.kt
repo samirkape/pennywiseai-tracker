@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -150,6 +151,7 @@ fun TransactionsScreen(
     val selfTransferReview by viewModel.selfTransferReview.collectAsState()
 
     val filterVisualizationData by viewModel.filterVisualizationData.collectAsState()
+    val loanLabels by viewModel.loanLabels.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -865,6 +867,7 @@ fun TransactionsScreen(
                                         categoryForIconFallback = transaction.category,
                                         categoryIconKey = categoriesMap[transaction.category]?.icon,
                                         refundNote = refundNotes[transaction.id],
+                                        loanLabel = loanLabels[transaction.id],
                                         onClick = { onTransactionClick(transaction.id) },
                                         onExcludeToggle = { viewModel.toggleExcludedFromTracking(transaction) },
                                         onDelete = { viewModel.deleteTransaction(transaction) }
@@ -901,6 +904,7 @@ fun TransactionsScreen(
                                 categoryForIconFallback = transaction.category,
                                 categoryIconKey = categoriesMap[transaction.category]?.icon,
                                 refundNote = refundNotes[transaction.id],
+                                loanLabel = loanLabels[transaction.id],
                                 onClick = { onTransactionClick(transaction.id) },
                                 onExcludeToggle = { viewModel.toggleExcludedFromTracking(transaction) },
                                 onDelete = { viewModel.deleteTransaction(transaction) }

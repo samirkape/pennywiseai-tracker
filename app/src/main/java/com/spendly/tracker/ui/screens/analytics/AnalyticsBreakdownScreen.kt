@@ -162,7 +162,12 @@ fun AnalyticsBreakdownScreen(
                         drillDownToTransactions(transactionType = type.name)
                     },
                     onSpendingClick = {
-                        drillDownToTransactions(category = categoryFilter)
+                        // Drill into real spend only — loan-linked rows (lent money and its
+                        // repayment) are neither income nor spend, so they stay out of the list.
+                        drillDownToTransactions(
+                            category = categoryFilter,
+                            transactionType = TransactionTypeFilter.EXPENSE.name,
+                        )
                     },
                     onInvestmentClick = {
                         drillDownToTransactions(transactionType = TransactionTypeFilter.INVESTMENT.name)

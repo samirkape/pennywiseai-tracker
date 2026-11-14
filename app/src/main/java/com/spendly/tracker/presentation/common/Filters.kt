@@ -111,6 +111,30 @@ fun TransactionEntity.matchesAnalyticsSpendingFilter(): Boolean =
 fun TransactionEntity.matchesAnalyticsIncomeFilter(): Boolean =
     transactionType == TransactionType.INCOME && loanId == null
 
+/**
+ * Rows that feed the Transactions breakdown charts and the category → merchant drill-down.
+ *
+ * The active [typeFilter] decides which transaction types count. Loan-linked rows (money
+ * lent out, or its repayment coming back) only move money between parties, so they never
+ * count as spend — the same rule as [matchesAnalyticsSpendingFilter].
+ */
+fun List<TransactionEntity>.breakdownRowsFor(typeFilter: TransactionTypeFilter): List<TransactionEntity> =
+    when (typeFilter) {
+        TransactionTypeFilter.INCOME -> filter { it.matchesAnalyticsIncomeFilter() }
+        TransactionTypeFilter.EXPENSE -> filter {
+            it.transactionType == TransactionType.EXPENSE && it.loanId == null
+        }
+        TransactionTypeFilter.CREDIT -> filter {
+            it.transactionType == TransactionType.CREDIT && it.loanId == null
+        }
+        TransactionTypeFilter.INVESTMENT -> filter { it.transactionType == TransactionType.INVESTMENT }
+        TransactionTypeFilter.TRANSFER, TransactionTypeFilter.CC_BILL_PAYMENT ->
+            filter { it.transactionType == TransactionType.TRANSFER }
+        TransactionTypeFilter.EXCLUDED -> filter { it.isExcludedFromTracking }
+        // "Any type" still reports a spending overview, so only real spend counts here.
+        TransactionTypeFilter.ALL -> filter { it.matchesAnalyticsSpendingFilter() }
+    }
+
 enum class PaymentMode(val label: String) {
     CREDIT_CARD("Credit Card"),
     BANK_ACCOUNT("Bank Account"),

@@ -5,16 +5,20 @@ import androidx.lifecycle.viewModelScope
 import com.spendly.tracker.data.database.dao.TransactionSplitDao
 import com.spendly.tracker.data.database.entity.AccountBalanceEntity
 import com.spendly.tracker.data.database.entity.CategoryEntity
+import com.spendly.tracker.data.database.entity.LoanEntity
 import com.spendly.tracker.data.database.entity.TransactionEntity
 import com.spendly.tracker.data.database.entity.TransactionSplitEntity
 import com.spendly.tracker.data.database.entity.TransactionType
 import com.spendly.tracker.data.repository.CategoryRepository
+import com.spendly.tracker.data.repository.LoanRepository
 import com.spendly.tracker.data.repository.SalaryMonthOverrideRepository
 import com.spendly.tracker.data.repository.TransactionRepository
 import com.spendly.tracker.presentation.common.PaymentMode
 import com.spendly.tracker.presentation.common.PaymentModeGroup
 import com.spendly.tracker.presentation.common.matchesPaymentModeGroup
 import com.spendly.tracker.presentation.common.TimePeriod
+import com.spendly.tracker.presentation.common.breakdownRowsFor
+import com.spendly.tracker.presentation.common.loanLabelFor
 import com.spendly.tracker.presentation.common.matchesAnalyticsIncomeFilter
 import com.spendly.tracker.presentation.common.matchesAnalyticsSpendingFilter
 import com.spendly.tracker.presentation.common.paymentMode
@@ -54,6 +58,7 @@ class TransactionsViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val categoryRepository: CategoryRepository,
     private val transactionSplitDao: TransactionSplitDao,
+    private val loanRepository: LoanRepository,
     private val userPreferencesRepository: com.spendly.tracker.data.preferences.UserPreferencesRepository,
     private val salaryMonthOverrideRepository: SalaryMonthOverrideRepository,
     private val currencyConversionService: CurrencyConversionService,
@@ -164,6 +169,23 @@ class TransactionsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(TransactionsUiState())
     val uiState: StateFlow<TransactionsUiState> = _uiState.asStateFlow()
+
+    /** Loans by id, used to label loan-linked rows ("Lent to …", "Repayment from …"). */
+    val loansById: StateFlow<Map<Long, LoanEntity>> = loanRepository.getAllLoans()
+        .map { loans -> loans.associateBy { it.id } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    /**
+     * Loan label per transaction id. Loan-linked rows are neither income nor spend, so the
+     * label keeps them from being read as a plain debit/credit in the list.
+     */
+    val loanLabels: StateFlow<Map<Long, String>> = combine(uiState, loansById) { state, loans ->
+        state.transactions.mapNotNull { tx ->
+            val loanId = tx.loanId ?: return@mapNotNull null
+            val loan = loans[loanId] ?: return@mapNotNull null
+            tx.id to loanLabelFor(tx, loan)
+        }.toMap()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     /** Refunded amount per original expense id, used to net totals and annotate rows. */
     val refundedByOriginal: StateFlow<Map<Long, BigDecimal>> = transactionRepository
@@ -338,18 +360,9 @@ class TransactionsViewModel @Inject constructor(
         if (transactions.size < 2) return null
 
         // Determine which transaction types count towards the category breakdown.
-        val breakdownTransactions = when (typeFilter) {
-            TransactionTypeFilter.INCOME -> transactions.filter { it.matchesAnalyticsIncomeFilter() }
-            TransactionTypeFilter.EXPENSE -> transactions.filter { it.transactionType == TransactionType.EXPENSE }
-            TransactionTypeFilter.CREDIT -> transactions.filter { it.transactionType == TransactionType.CREDIT }
-            TransactionTypeFilter.INVESTMENT -> transactions.filter { it.transactionType == TransactionType.INVESTMENT }
-            TransactionTypeFilter.TRANSFER, TransactionTypeFilter.CC_BILL_PAYMENT ->
-                transactions.filter { it.transactionType == TransactionType.TRANSFER }
-            TransactionTypeFilter.EXCLUDED -> transactions
-            TransactionTypeFilter.ALL -> transactions.filter {
-                it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.CREDIT
-            }
-        }
+        // Loan-linked rows (lent money / repayments) are not real spend, so they never
+        // reach the breakdown or the category → merchant drill-down.
+        val breakdownTransactions = transactions.breakdownRowsFor(typeFilter)
 
         val totalAmount = breakdownTransactions.fold(java.math.BigDecimal.ZERO) { acc, tx -> acc + tx.amount }
 
@@ -404,13 +417,21 @@ class TransactionsViewModel @Inject constructor(
             } else emptyList()
         } else emptyList()
 
-        // Build time-series trend from all visible transactions (amount summed per bucket).
-        val sortedTx = transactions.sortedBy { it.dateTime }
-        val minDate = sortedTx.first().dateTime.toLocalDate()
-        val maxDate = sortedTx.last().dateTime.toLocalDate()
-        val daysBetween = java.time.temporal.ChronoUnit.DAYS.between(minDate, maxDate)
+        // Build time-series trend from the visible transactions (amount summed per bucket).
+        // Loan-linked rows are dropped: money lent out (and the repayment coming back) is not
+        // spend, so it must not push the trend up.
+        val trendTransactions = transactions.filter { it.loanId == null }
+        val sortedTx = trendTransactions.sortedBy { it.dateTime }
+        val minDate = sortedTx.firstOrNull()?.dateTime?.toLocalDate()
+        val maxDate = sortedTx.lastOrNull()?.dateTime?.toLocalDate()
+        val daysBetween = if (minDate != null && maxDate != null) {
+            java.time.temporal.ChronoUnit.DAYS.between(minDate, maxDate)
+        } else {
+            0L
+        }
 
         val trendPoints: List<FilterTrendPoint> = when {
+            sortedTx.isEmpty() -> emptyList()
             daysBetween <= 31 -> groupTrendByDay(sortedTx)
             daysBetween <= 90 -> groupTrendByWeek(sortedTx)
             else -> groupTrendByMonth(sortedTx)

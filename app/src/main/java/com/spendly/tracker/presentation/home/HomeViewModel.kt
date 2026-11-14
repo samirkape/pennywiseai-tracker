@@ -56,6 +56,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import com.spendly.tracker.R
 import com.spendly.tracker.domain.service.SalaryPayPeriodDetector
@@ -100,6 +102,11 @@ class HomeViewModel @Inject constructor(
     }
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
     val isPremium: StateFlow<Boolean> = premiumManager.isPremium
+
+    /** Loans by id, used to label loan-linked rows ("Lent to …", "Repayment from …"). */
+    val loansById: StateFlow<Map<Long, LoanEntity>> = loanRepository.getAllLoans()
+        .map { loans -> loans.associateBy { it.id } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     // Selected date for the "daily spends" section — defaults to today
     private val _selectedDate = MutableStateFlow(LocalDate.now())
