@@ -21,7 +21,9 @@ import com.spendly.tracker.presentation.common.breakdownRowsFor
 import com.spendly.tracker.presentation.common.loanLabelFor
 import com.spendly.tracker.presentation.common.matchesAnalyticsIncomeFilter
 import com.spendly.tracker.presentation.common.matchesAnalyticsSpendingFilter
+import com.spendly.tracker.presentation.common.perDayAverage
 import com.spendly.tracker.presentation.common.paymentMode
+import com.spendly.tracker.presentation.common.spanDays
 import com.spendly.tracker.presentation.common.TransactionTypeFilter
 import com.spendly.tracker.presentation.common.defaultTimePeriod
 import com.spendly.tracker.presentation.common.getDateRangeForPeriod
@@ -328,12 +330,69 @@ class TransactionsViewModel @Inject constructor(
     // Derived from the currently visible filtered transactions. Used to render
     // the inline chart panel in TransactionsScreen.
     // ---------------------------------------------------------------------------
+
+    /**
+     * Number of days in the window the visible transactions are filtered to. Used to spread
+     * the spend over the window for the "per day" figure in the breakdown drill-down.
+     *
+     * "All time" has no meaningful window length, so it resolves to 0 and the caller falls
+     * back to the span of the matching transactions.
+     */
+    val periodDayCount: StateFlow<Int> = combine(
+        selectedPeriod,
+        customDateRange,
+        userPreferencesRepository.monthStartDay,
+        userPreferencesRepository.useFinancialMonth,
+        salaryMonthOverrideRepository.overridesMap,
+        userPreferencesRepository.useFixedBudgetPeriodEnd,
+        userPreferencesRepository.budgetPeriodEndDay,
+        userPreferencesRepository.salaryDayAdjustment
+    ) { args ->
+        @Suppress("UNCHECKED_CAST")
+        val period = args[0] as TimePeriod
+        @Suppress("UNCHECKED_CAST")
+        val customRange = args[1] as? Pair<LocalDate, LocalDate>
+        val monthStartDay = args[2] as Int
+        val useFinancialMonth = args[3] as Boolean
+        @Suppress("UNCHECKED_CAST")
+        val overrides = args[4] as Map<String, Int>
+        val useFixedEnd = args[5] as Boolean
+        val endDom = args[6] as Int
+        val adjustment = args[7] as DateRangeUtils.SalaryDayAdjustment
+
+        if (period == TimePeriod.ALL) {
+            0
+        } else {
+            val range = if (period == TimePeriod.CUSTOM) {
+                customRange
+            } else {
+                getDateRangeForPeriod(
+                    period,
+                    monthStartDay,
+                    useFinancialMonth,
+                    overrides,
+                    useFixedEnd,
+                    endDom,
+                    adjustment
+                )
+            }
+            range?.let { (start, end) ->
+                java.time.temporal.ChronoUnit.DAYS.between(start, end).toInt() + 1
+            } ?: 0
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 0
+    )
+
     val filterVisualizationData: StateFlow<FilterVisualizationData?> = combine(
         uiState,
         selectedCurrency,
         transactionTypeFilter,
         selectedPeriod,
-        customDateRange
+        customDateRange,
+        periodDayCount
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val state     = values[0] as TransactionsUiState
@@ -345,7 +404,9 @@ class TransactionsViewModel @Inject constructor(
         val period    = values[3] as TimePeriod
         @Suppress("UNCHECKED_CAST")
         val dateRange = values[4] as? Pair<*, *>
-        computeVisualizationData(state.transactions, currency, typeFilter)
+        @Suppress("UNCHECKED_CAST")
+        val dayCount  = values[5] as Int
+        computeVisualizationData(state.transactions, currency, typeFilter, period, dayCount)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -355,7 +416,9 @@ class TransactionsViewModel @Inject constructor(
     private fun computeVisualizationData(
         transactions: List<TransactionEntity>,
         currency: String,
-        typeFilter: TransactionTypeFilter
+        typeFilter: TransactionTypeFilter,
+        period: TimePeriod = TimePeriod.ALL,
+        periodDayCount: Int = 0
     ): FilterVisualizationData? {
         if (transactions.size < 2) return null
 
@@ -447,12 +510,22 @@ class TransactionsViewModel @Inject constructor(
             TransactionTypeFilter.ALL -> "Spending"
         }
 
+        // Average spend per day over the window. "All time" has no window length, so the
+        // span of the matching transactions is used instead.
+        val perDayDays = when {
+            period != TimePeriod.ALL && periodDayCount > 0 -> periodDayCount
+            else -> spanDays(breakdownTransactions)
+        }
+        val perDaySpend = perDayAverage(totalAmount, perDayDays)
+
         return FilterVisualizationData(
             categoryItems = categoryItems,
             merchantItems = merchantItems,
             trendPoints = trendPoints,
             currency = currency,
-            dominantTypeLabel = dominantTypeLabel
+            dominantTypeLabel = dominantTypeLabel,
+            perDaySpend = perDaySpend,
+            perDaySpendDays = if (perDaySpend != null) perDayDays else 0
         )
     }
 

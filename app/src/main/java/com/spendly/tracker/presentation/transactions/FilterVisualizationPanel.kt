@@ -148,6 +148,33 @@ fun FilterVisualizationPanel(
 
             Spacer(modifier = Modifier.height(Spacing.sm))
 
+            // ── Per-day average ─────────────────────────────────────────────
+            // In the drill-down this is the per-day spend of the category being
+            // drilled into; above it, the per-day spend of the whole filter.
+            data.perDaySpend?.let { perDay ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    Text(
+                        text = "${CurrencyFormatter.formatCurrency(perDay, data.currency)}/day",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (data.perDaySpendDays > 0) {
+                        Text(
+                            text = "avg over ${data.perDaySpendDays} " +
+                                if (data.perDaySpendDays == 1) "day" else "days",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(Spacing.sm))
+            }
+
             AnimatedContent(
                 targetState = selectedTab,
                 transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },

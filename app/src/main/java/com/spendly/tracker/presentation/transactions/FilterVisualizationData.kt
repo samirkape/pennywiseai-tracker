@@ -46,6 +46,13 @@ data class FilterVisualizationData(
     val trendPoints: List<FilterTrendPoint>,
     val currency: String,
     /** Human-readable label describing what kind of data is shown, e.g. "Spending", "Income". */
-    val dominantTypeLabel: String
+    val dominantTypeLabel: String,
+    /**
+     * Average spend per day across the filtered window. Null when it cannot be computed
+     * (no spend, or a window of unknown length).
+     */
+    val perDaySpend: BigDecimal? = null,
+    /** Number of days the [perDaySpend] average is spread over. */
+    val perDaySpendDays: Int = 0
 )
 
